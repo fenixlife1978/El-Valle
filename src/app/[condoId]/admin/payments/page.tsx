@@ -125,7 +125,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             setIsVerifying(true);
             try {
                 const method = (payment.paymentMethod || "").toLowerCase().trim();
-                // REGLA DE ORO: SI ES DIGITAL (MOVIL O TRANSFERENCIA), VA EXCLUSIVAMENTE AL BDV (ID ACTUALIZADO)
                 const isDigital = method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil');
                 const targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
                 const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";

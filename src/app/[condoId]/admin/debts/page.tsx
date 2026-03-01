@@ -32,8 +32,6 @@ const months = [
     { value: 10, label: 'Octubre' }, { value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' }
 ];
 
-const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + 5 - i);
-
 const formatToTwoDecimals = (num: number) => {
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -61,17 +59,6 @@ export default function DebtManagementPage() {
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedOwnerDebts, setSelectedOwnerDebts] = useState<Debt[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(false);
-    
-    const [isMassDebtDialogOpen, setIsMassDebtDialogOpen] = useState(false);
-    const [currentMassDebt, setCurrentMassDebt] = useState({ description: 'Cuota de Condominio', amountUSD: 25, fromMonth: new Date().getMonth() + 1, fromYear: new Date().getFullYear(), toMonth: new Date().getMonth() + 1, toYear: new Date().getFullYear() });
-    const [propertyForMassDebt, setPropertyForMassDebt] = useState<Property | null>(null);
-    
-    const [isEditDebtDialogOpen, setIsEditDebtDialogOpen] = useState(false);
-    const [debtToEdit, setDebtToEdit] = useState<Debt | null>(null);
-    const [currentDebtData, setCurrentDebtData] = useState<{description: string, amountUSD: number | string}>({ description: '', amountUSD: '' });
-
-    const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null);
     
     const { toast } = useToast();
 
@@ -188,34 +175,47 @@ export default function DebtManagementPage() {
     const debtsByProp = useMemo(() => {
         const map = new Map<string, { pending: Debt[], paid: Debt[] }>();
         selectedOwner?.properties?.forEach(p => map.set(`${p.street}-${p.house}`, { pending: [], paid: [] }));
+        
         selectedOwnerDebts.forEach(d => {
-            const key = `${d.property.street}-${d.property.house}`;
+            const prop = d.property || (selectedOwner?.properties && selectedOwner.properties[0]) || { street: 'S/D', house: 'S/D' };
+            const key = `${prop.street}-${prop.house}`;
+            
             if (!map.has(key)) map.set(key, { pending: [], paid: [] });
+            
             if (d.status === 'paid') map.get(key)!.paid.push(d);
             else map.get(key)!.pending.push(d);
         });
-        map.forEach(v => { v.pending.sort((a,b) => a.year - b.year || a.month - b.month); v.paid.sort((a,b) => b.year - a.year || b.month - a.month); });
+        
+        map.forEach(v => { 
+            v.pending.sort((a,b) => a.year - b.year || a.month - b.month); 
+            v.paid.sort((a,b) => b.year - a.year || b.month - a.month); 
+        });
         return map;
     }, [selectedOwner, selectedOwnerDebts]);
 
-    if (loading) return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
+    if (loading) return (
+        <div className="flex flex-col h-[70vh] items-center justify-center gap-4 bg-[#1A1D23]">
+            <Loader2 className="animate-spin h-12 w-12 text-primary" />
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30 animate-pulse italic">Sincronizando Deudas...</p>
+        </div>
+    );
 
     if (view === 'list') return (
-        <div className="space-y-8 font-montserrat">
+        <div className="space-y-8 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8 italic text-white">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Deudas</span></h2>
+                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Deudas</span></h2>
                 <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">Control de saldos y liquidación cronológica estricta.</p>
+                <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">Control de saldos y liquidación cronológica estricta.</p>
             </div>
-            <Card className="bg-slate-900 border-none shadow-2xl">
-                <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-white/5 pb-6">
-                    <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500"/><Input placeholder="Buscar residente..." className="pl-9 bg-slate-800 border-none text-white font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
-                    <div className="flex gap-2"><Button variant="outline" onClick={handleReconcileAll} disabled={isReconciling} className="font-black text-[10px] uppercase border-primary text-primary bg-transparent">{isReconciling ? <Loader2 className="animate-spin mr-2"/> : <RefreshCw className="mr-2 h-4 w-4"/>} Conciliar Todo</Button><Button onClick={handleGenerateMonthlyDebt} disabled={isGeneratingMonthlyDebt} className="font-black text-[10px] uppercase bg-primary text-slate-900 italic">{isGeneratingMonthlyDebt ? <Loader2 className="animate-spin mr-2"/> : <CalendarPlus className="mr-2 h-4 w-4"/>} Generar Mes</Button></div>
+            <Card className="bg-slate-900 border-none shadow-2xl border border-white/5">
+                <CardHeader className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-white/5 pb-6">
+                    <div className="flex-1 relative w-full"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500"/><Input placeholder="Buscar residente..." className="pl-9 bg-slate-800 border-none text-white font-bold h-12 rounded-xl" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
+                    <div className="flex gap-2 w-full md:w-auto"><Button variant="outline" onClick={handleReconcileAll} disabled={isReconciling} className="flex-1 md:flex-none font-black text-[10px] uppercase border-primary text-primary bg-transparent h-12 rounded-xl">{isReconciling ? <Loader2 className="animate-spin mr-2"/> : <RefreshCw className="mr-2 h-4 w-4"/>} Conciliar Todo</Button><Button onClick={handleGenerateMonthlyDebt} disabled={isGeneratingMonthlyDebt} className="flex-1 md:flex-none font-black text-[10px] uppercase bg-primary text-slate-900 h-12 rounded-xl italic">{isGeneratingMonthlyDebt ? <Loader2 className="animate-spin mr-2"/> : <CalendarPlus className="mr-2 h-4 w-4"/>} Generar Mes</Button></div>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <Table><TableHeader className="bg-slate-800/20"><TableRow className="border-white/5"><TableHead className="px-8 text-[10px] font-black uppercase text-slate-400">Propietario</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Ubicación</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Deuda Bs.</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Saldo Bs.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead></TableRow></TableHeader>
+                    <Table><TableHeader className="bg-slate-950/50"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-white/40 italic">Propietario</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Ubicación</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Deuda Bs.</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Saldo Bs.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-white/40 italic">Acción</TableHead></TableRow></TableHeader>
                     <TableBody>
-                        {filteredOwners.map(o => (<TableRow key={o.id} className="hover:bg-white/5 border-white/5 transition-colors"><TableCell className="px-8 font-black text-white text-xs uppercase italic">{o.name}</TableCell><TableCell className="text-slate-400 font-bold text-[10px] uppercase">{o.properties?.map(p => `${p.street}-${p.house}`).join('; ')}</TableCell><TableCell><Badge variant="destructive" className="font-black">Bs. {formatToTwoDecimals(o.pendingDebtUSD * activeRate)}</Badge></TableCell><TableCell><Badge variant="success" className="font-black">Bs. {formatToTwoDecimals(o.balance)}</Badge></TableCell><TableCell className="text-right pr-8"><Button variant="ghost" size="sm" onClick={() => { setSelectedOwner(o); setView('detail'); }} className="text-primary font-black uppercase text-[10px]">Gestionar <WalletCards className="ml-2 h-4 w-4"/></Button></TableCell></TableRow>))}
+                        {filteredOwners.map(o => (<TableRow key={o.id} className="hover:bg-white/5 border-white/5 transition-colors"><TableCell className="px-8 font-black text-white text-xs uppercase italic">{o.name}</TableCell><TableCell className="text-slate-400 font-bold text-[10px] uppercase italic">{o.properties?.map(p => `${p.street}-${p.house}`).join('; ')}</TableCell><TableCell><Badge variant="destructive" className="font-black italic">Bs. {formatToTwoDecimals(o.pendingDebtUSD * activeRate)}</Badge></TableCell><TableCell><Badge variant="success" className="font-black italic bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Bs. {formatToTwoDecimals(o.balance)}</Badge></TableCell><TableCell className="text-right pr-8"><Button variant="ghost" size="sm" onClick={() => { setSelectedOwner(o); setView('detail'); }} className="text-primary font-black uppercase text-[10px] hover:bg-primary/10 italic">Gestionar <WalletCards className="ml-2 h-4 w-4"/></Button></TableCell></TableRow>))}
                     </TableBody></Table>
                 </CardContent>
             </Card>
@@ -223,22 +223,22 @@ export default function DebtManagementPage() {
     );
 
     return (
-        <div className="space-y-8 font-montserrat">
-            <Button variant="ghost" onClick={() => setView('list')} className="text-white font-black uppercase text-[10px]"><ArrowLeft className="mr-2 h-4 w-4"/> Volver</Button>
+        <div className="space-y-8 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8 italic text-white">
+            <Button variant="ghost" onClick={() => setView('list')} className="text-white font-black uppercase text-[10px] h-10 hover:bg-white/5"><ArrowLeft className="mr-2 h-4 w-4"/> Volver</Button>
             <div className="mb-6"><h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">Deudas de <span className="text-primary">{selectedOwner?.name}</span></h2></div>
             <Accordion type="multiple" className="space-y-4">
                 {selectedOwner?.properties?.map((p, i) => {
                     const key = `${p.street}-${p.house}`;
                     const { pending, paid } = debtsByProp.get(key) || { pending: [], paid: [] };
                     return (
-                        <Card key={i} className="bg-slate-900 border-none shadow-xl overflow-hidden">
+                        <Card key={i} className="bg-slate-900 border-none shadow-xl overflow-hidden border border-white/5">
                             <AccordionItem value={key} className="border-none">
-                                <AccordionTrigger className="px-8 py-6 hover:no-underline"><div className="flex items-center gap-4 text-left"><div className="p-3 bg-slate-800 rounded-2xl"><Building className="text-primary"/></div><div><h3 className="text-lg font-black text-white uppercase italic">{p.street} - {p.house}</h3><p className="text-[10px] font-bold text-slate-500 uppercase">{pending.length} Pendientes</p></div></div></AccordionTrigger>
+                                <AccordionTrigger className="px-8 py-6 hover:no-underline"><div className="flex items-center gap-4 text-left"><div className="p-3 bg-slate-800 rounded-2xl"><Building className="text-primary"/></div><div><h3 className="text-lg font-black text-white uppercase italic">{p.street} - {p.house}</h3><p className="text-[10px] font-bold text-slate-500 uppercase italic">{pending.length} Pendientes</p></div></div></AccordionTrigger>
                                 <AccordionContent className="px-8 pb-8 pt-4 border-t border-white/5">
-                                    <Table><TableHeader><TableRow className="border-white/5"><TableHead className="text-[10px] font-black uppercase text-slate-500">Período</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Descripción</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Monto Bs.</TableHead><TableHead className="text-right pr-4 text-[10px] font-black uppercase text-slate-500">Estado</TableHead></TableRow></TableHeader>
+                                    <Table><TableHeader><TableRow className="border-white/5"><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Período</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Monto Bs.</TableHead><TableHead className="text-right pr-4 text-[10px] font-black uppercase text-white/40 italic">Estado</TableHead></TableRow></TableHeader>
                                     <TableBody>
-                                        {pending.map(d => (<TableRow key={d.id} className="border-white/5"><TableCell className="font-black text-white text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell><TableCell className="text-slate-400 font-bold text-xs">{d.description}</TableCell><TableCell className="font-black text-white">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell><TableCell className="text-right"><Badge variant="destructive">PENDIENTE</Badge></TableCell></TableRow>))}
-                                        {paid.map(d => (<TableRow key={d.id} className="border-white/5 opacity-50"><TableCell className="font-bold text-slate-500 text-xs uppercase">{months[d.month-1].label} {d.year}</TableCell><TableCell className="text-slate-600 font-medium text-xs">{d.description}</TableCell><TableCell className="font-bold text-slate-500">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell><TableCell className="text-right"><Badge variant="outline" className="text-emerald-500 border-emerald-500">PAGADA</Badge></TableCell></TableRow>))}
+                                        {pending.map(d => (<TableRow key={d.id} className="border-white/5"><TableCell className="font-black text-white text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell><TableCell className="text-slate-400 font-bold text-xs uppercase italic">{d.description}</TableCell><TableCell className="font-black text-white italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell><TableCell className="text-right"><Badge variant="destructive" className="italic text-[9px]">PENDIENTE</Badge></TableCell></TableRow>))}
+                                        {paid.map(d => (<TableRow key={d.id} className="border-white/5 opacity-50"><TableCell className="font-bold text-slate-500 text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell><TableCell className="text-slate-600 font-medium text-xs uppercase italic">{d.description}</TableCell><TableCell className="font-bold text-slate-500 italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell><TableCell className="text-right"><Badge variant="outline" className="text-emerald-500 border-emerald-500 italic text-[9px]">PAGADA</Badge></TableCell></TableRow>))}
                                     </TableBody></Table>
                                 </AccordionContent>
                             </AccordionItem>
