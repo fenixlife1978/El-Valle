@@ -63,12 +63,12 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     useEffect(() => {
         if (!workingCondoId) return;
 
-        // ESCUCHA DE SALDOS REALES ATÓMICOS POR ID FIJO
+        // ESCUCHA DE SALDOS REALES ATÓMICOS POR ID FIJO ACTUALIZADO
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const accounts = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
             
-            // BANCO DE VENEZUELA (RdiTtY9ojCuYPRNvB7C3)
-            const bdv = accounts.find(a => a.id === 'RdiTtY9ojCuYPRNvB7C3');
+            // BANCO DE VENEZUELA (ID NUEVO: 3PBNZdNqO6jbHRJfadT3)
+            const bdv = accounts.find(a => a.id === '3PBNZdNqO6jbHRJfadT3');
             const cp = accounts.find(a => a.id === 'CAJA_PRINCIPAL_ID' || a.nombre?.toUpperCase().trim() === 'CAJA PRINCIPAL');
             const cc = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA CHICA');
             

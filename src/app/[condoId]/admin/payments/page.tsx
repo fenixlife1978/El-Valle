@@ -70,8 +70,8 @@ type Payment = {
     receiptNumbers?: { [ownerId: string]: string }; 
 };
 
-// ID EXCLUSIVO BANCO DE VENEZUELA
-const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
+// ID ACTUALIZADO BANCO DE VENEZUELA
+const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 const monthsLocale: { [key: number]: string } = {

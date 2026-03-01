@@ -121,7 +121,7 @@ const AccountingPage = () => {
             const to = endOfMonth(from);
             const monthId = format(from, 'yyyy-MM');
 
-            const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
+            const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
             const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
             const paySnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'payments'), where('status', '==', 'aprobado'), where('paymentDate', '>=', from), where('paymentDate', '<=', to)));
