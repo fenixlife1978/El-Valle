@@ -54,6 +54,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const [realBalances, setRealBalances] = useState({ banco: 0, cajaPrincipal: 0, cajaChica: 0 });
 
+    // ESCUCHA DE SALDOS REALES DE TESORERÍA (Fuente de Verdad)
     useEffect(() => {
         if (!workingCondoId) return;
         return onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
@@ -120,22 +121,20 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    const totalDisponible = totalIngresos - totalEgresos;
+    
+    // Sincronización Total: El Disponible ahora es la suma de los saldos reales de tesorería
+    const totalDisponible = useMemo(() => realBalances.banco + realBalances.cajaPrincipal + realBalances.cajaChica, [realBalances]);
 
-    // Desglose Final de Tesorería
+    // Desglose Final de Tesorería SINCRONIZADO con Saldos Reales
     const finalBreakdown = useMemo(() => {
-        const egresosBDV = egresosTesorería.filter(e => e.cuenta?.toUpperCase().includes('BANCO')).reduce((sum, e) => sum + e.monto, 0);
-        const egresosCaja = egresosTesorería.filter(e => e.cuenta?.toUpperCase().includes('PRINCIPAL')).reduce((sum, e) => sum + e.monto, 0);
-        const egresosChica = egresosTesorería.filter(e => e.cuenta?.toUpperCase().includes('CHICA')).reduce((sum, e) => sum + e.monto, 0);
-
         return {
-            bdv: saldoInicBDV + ingresosMesBDV - egresosBDV,
-            caja: saldoInicCaja + ingresosMesCaja - egresosCaja,
-            chica: saldoInicChica - egresosChica
+            bdv: realBalances.banco,
+            caja: realBalances.cajaPrincipal,
+            chica: realBalances.cajaChica
         };
-    }, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja, egresosTesorería]);
+    }, [realBalances]);
 
-    const generatePdfBlob = async () => {
+    const generatePdfBlob = async (output: 'download' | 'share' = 'download') => {
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
@@ -147,8 +146,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         // Branding Superior
         doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 30, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), margin, 15);
-        doc.setFontSize(8).text(`SISTEMA DE GESTIÓN EFASCONDOSYS | RIF: ${info.rif}`, margin, 22);
+        if (info.logo) {
+            try { doc.addImage(info.logo, 'PNG', margin, 5, 15, 15); } catch(e){}
+        }
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 35 : margin, 15);
+        doc.setFontSize(8).text(`SISTEMA DE GESTIÓN EFAS CONDOSYS | RIF: ${info.rif}`, info.logo ? 35 : margin, 22);
         doc.setFontSize(10).text("BALANCE GENERAL", 196, 18, { align: 'right' });
         
         doc.setTextColor(0, 0, 0);
@@ -201,7 +203,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         doc.setTextColor(30, 80, 180).setFontSize(11);
         doc.text('TOTAL DISPONIBLE:', 140, finalY + 15); doc.text(formatCurrency(totalDisponible), 196, finalY + 15, { align: 'right' });
 
-        // SALDOS FINALES DE TESORERÍA
+        // SALDOS FINALES DE TESORERÍA (Sincronizados con Real)
         doc.setTextColor(0, 0, 0).setFontSize(10).text('SALDOS FINALES DE TESORERÍA (CONCILIADOS):', margin, finalY + 25);
         autoTable(doc, {
             startY: finalY + 28,
@@ -216,7 +218,21 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             styles: { fontSize: 9 }
         });
 
-        doc.save(`Balance_General_ElValle_Feb2026.pdf`);
+        if (output === 'share') {
+            const blob = doc.output('blob');
+            const file = new File([blob], `Balance_General_ElValle_Feb2026.pdf`, { type: 'application/pdf' });
+            if (navigator.share) {
+                await navigator.share({
+                    files: [file],
+                    title: 'Balance General - El Valle',
+                    text: 'Balance Financiero correspondiente a Febrero 2026'
+                });
+            } else {
+                toast({ title: "Compartir no disponible", description: "Su navegador no soporta la función de compartir archivos." });
+            }
+        } else {
+            doc.save(`Balance_General_ElValle_Feb2026.pdf`);
+        }
     };
 
     const handleSave = async () => {
@@ -230,6 +246,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 ingresosMesBDV, ingresosMesCaja,
                 egresos: egresosTesorería, 
                 totalIngresos, totalEgresos, totalDisponible,
+                finalBreakdown, // Guardamos la disponibilidad real sincronizada
                 notas, 
                 updatedAt: serverTimestamp()
             });
@@ -239,7 +256,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-8 bg-[#1A1D23] min-h-screen font-montserrat text-white italic">
-            <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-10">
+            <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-10 border-b border-white/5 pb-6">
                 <div>
                     <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Balance <span className="text-primary">General</span></h1>
                     <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">Contabilidad EFAS - {authCompanyInfo?.name?.toUpperCase() || "EL VALLE"}</p>
@@ -247,17 +264,20 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 <div className="flex flex-wrap gap-2">
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 bg-slate-900 border-white/5 font-black uppercase text-[10px] rounded-xl"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{months.map(m => (<SelectItem key={m.value} value={m.value} className="font-black uppercase text-[10px]">{m.label}</SelectItem>))}</SelectContent></Select>
                     <Input className="w-24 bg-slate-900 border-white/5 font-black rounded-xl" type="number" value={selectedYear} onChange={e => setSelectedYear(e.target.value)} />
-                    <Button onClick={generatePdfBlob} variant="outline" className="rounded-xl border-white/10 text-white h-10 font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
+                    <Button onClick={() => generatePdfBlob('download')} variant="outline" className="rounded-xl border-white/10 text-white h-10 font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
                         <Download className="mr-2 h-4 w-4" /> Exportar PDF
+                    </Button>
+                    <Button onClick={() => generatePdfBlob('share')} variant="secondary" className="rounded-xl bg-primary text-slate-900 h-10 font-black uppercase text-[10px] italic">
+                        <Share2 className="mr-2 h-4 w-4" /> Compartir
                     </Button>
                 </div>
             </div>
 
             {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div> : <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">Banco BDV (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p></div><Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Caja Principal (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p></div><Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-slate-500 italic">Caja Chica (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaChica)}</p></div><Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">Banco BDV (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p></div><Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Caja Principal (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p></div><Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-[#F28705] italic">Caja Chica (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaChica)}</p></div><Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
@@ -285,10 +305,10 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     <TableFooter className="bg-red-500/10 border-none"><TableRow className="border-none"><TableCell className="font-black text-red-400 text-[10px] uppercase italic">Total Egresos</TableCell><TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresos)}</TableCell></TableRow></TableFooter></Table></CardContent></Card>
                 </div>
 
-                <Card className="rounded-[2rem] bg-slate-950 border border-primary/20 mt-8">
+                <Card className="rounded-[2rem] bg-slate-950 border border-primary/20 mt-8 shadow-xl">
                     <CardContent className="p-8 flex flex-col md:flex-row justify-between items-center gap-6">
                         <div>
-                            <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión</p>
+                            <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión (Disponibilidad Real)</p>
                             <h3 className="text-4xl font-black italic text-white tracking-tighter">Bs. {formatCurrency(totalDisponible)}</h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -299,8 +319,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     </CardContent>
                 </Card>
 
-                <div className="pt-10"><Label className="text-[10px] font-black uppercase text-white/40 ml-4 italic">Notas y Observaciones del Balance</Label><Textarea className="rounded-[2rem] bg-slate-900 border-white/5 text-white font-bold p-6 min-h-[120px] shadow-2xl italic mt-2 uppercase text-xs" value={notas} onChange={e => setNotas(e.target.value)} placeholder="Escriba aquí los detalles relevantes..." /></div>
-                <div className="flex justify-end pt-6"><Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 h-14 rounded-2xl font-black uppercase px-12 shadow-2xl shadow-primary/20 italic">{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance Oficial</Button></div>
+                <div className="pt-10"><Label className="text-[10px] font-black uppercase text-white/40 ml-4 italic">Notas y Observaciones del Balance</Label><Textarea className="rounded-[2rem] bg-slate-900 border-white/5 text-white font-bold p-6 min-h-[120px] shadow-2xl italic mt-2 uppercase text-xs focus-visible:ring-primary" value={notas} onChange={e => setNotas(e.target.value)} placeholder="Escriba aquí los detalles relevantes..." /></div>
+                <div className="flex justify-end pt-6"><Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 h-14 rounded-2xl font-black uppercase px-12 shadow-2xl shadow-primary/20 italic">{saving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance Oficial</Button></div>
             </> }
         </div>
     );
