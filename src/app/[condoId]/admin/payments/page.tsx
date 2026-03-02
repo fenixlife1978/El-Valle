@@ -84,7 +84,7 @@ const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 function VerificationComponent({ condoId }: { condoId: string }) {
-    const { user, companyInfo } = useAuth();
+    const { user } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
 
@@ -96,8 +96,20 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     const [isVerifying, setIsVerifying] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
     const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
+    const [localCompanyInfo, setLocalCompanyInfo] = useState<any>(null);
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
+    // Recuperar información de la empresa directamente para evitar errores de sincronización de contexto
+    useEffect(() => {
+        if (!condoId) return;
+        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+        return onSnapshot(settingsRef, (snap) => {
+            if (snap.exists()) {
+                setLocalCompanyInfo(snap.data().companyInfo);
+            }
+        });
+    }, [condoId]);
 
     useEffect(() => {
         if (!condoId) return;
@@ -299,7 +311,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
     const handleExportPDF = async (payment: Payment, ownerId: string) => {
         try {
-            if (!companyInfo) {
+            if (!localCompanyInfo) {
                 toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no disponible.' });
                 return;
             }
@@ -310,8 +322,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
 
             const data = {
-                condoName: companyInfo.name || 'CONDOMINIO',
-                rif: companyInfo.rif || 'J-40587208-0',
+                condoName: localCompanyInfo.name || 'CONDOMINIO',
+                rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
                 method: payment.paymentMethod?.toUpperCase() || 'N/A',
@@ -329,7 +341,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     : [[format(pDate, 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
             };
 
-            await generatePaymentReceipt(data, companyInfo.logo, 'download');
+            await generatePaymentReceipt(data, localCompanyInfo.logo, 'download');
             toast({ title: "Recibo descargado" });
         } catch (error) {
             console.error("PDF Export Error:", error);
@@ -339,7 +351,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
     const handleSharePDF = async (payment: Payment, ownerId: string) => {
         try {
-            if (!companyInfo) {
+            if (!localCompanyInfo) {
                 toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no disponible.' });
                 return;
             }
@@ -350,8 +362,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
 
             const data = {
-                condoName: companyInfo.name || 'CONDOMINIO',
-                rif: companyInfo.rif || 'J-40587208-0',
+                condoName: localCompanyInfo.name || 'CONDOMINIO',
+                rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
                 method: payment.paymentMethod?.toUpperCase() || 'N/A',
@@ -369,7 +381,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     : [[format(pDate, 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
             };
 
-            const blob = await generatePaymentReceipt(data, companyInfo.logo, 'blob');
+            const blob = await generatePaymentReceipt(data, localCompanyInfo.logo, 'blob');
             if (blob && navigator.share) {
                 const file = new File([blob as Blob], `Recibo_${beneficiary.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
                 await navigator.share({ files: [file], title: 'Recibo de Pago', text: `Comprobante para ${beneficiary.ownerName}` });
