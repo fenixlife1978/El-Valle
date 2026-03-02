@@ -395,7 +395,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10" align="end">
-                                    <Calendar initialFocus mode="range" selected={{ from: dateRange.from, to: dateRange.to }} onSelect={(range: any) => range && setDateRange({ from: range.from, to: range.to || range.from })} locale={es}/>
+                                    <Calendar initialFocus mode="range" selected={{ from: dateRange.from, to: dateRange.to }} onSelect={(range: any) => range && setDateRange({ from: range.from, to: range.to || range.from })} locale={es} captionLayout="dropdown-buttons" fromYear={2020} toYear={2030} />
                                 </PopoverContent>
                             </Popover>
                         </div>
@@ -444,7 +444,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Card>
 
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Nueva <span className="text-primary">Cuenta</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Nombre</Label><Input placeholder="BANCO DE VENEZUELA" value={accountForm.nombre} onChange={e => setAccountForm({...accountForm, nombre: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
@@ -458,7 +458,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Dialog>
 
             <Dialog open={isEditAccountDialogOpen} onOpenChange={setIsEditAccountDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Editar <span className="text-primary">Cuenta</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="space-y-2">
@@ -492,7 +492,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Dialog>
 
             <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Registrar <span className="text-primary">Movimiento</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -501,7 +501,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto Bs.</Label><Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-white italic" /></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Fecha</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl justify-start font-black bg-white/5 border-none text-white italic"><CalendarIcon className="mr-2 h-4 w-4 text-primary" /> {format(transForm.fecha, 'dd/MM/yyyy')}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl"><Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es}/></PopoverContent></Popover></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Fecha</Label><Popover>
+                                <PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl justify-start font-black bg-white/5 border-none text-white italic"><CalendarIcon className="mr-2 h-4 w-4 text-primary" /> {format(transForm.fecha, 'dd/MM/yyyy')}</Button></PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl">
+                                    <Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es} captionLayout="dropdown-buttons" fromYear={2024} toYear={2026} />
+                                </PopoverContent></Popover>
+                            </div>
                         </div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Descripción</Label><Input placeholder="EJ: PAGO DE SERVICIOS" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Referencia (Opcional)</Label><Input placeholder="EJ: 123456" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
@@ -511,7 +516,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Dialog>
 
             <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Trasladar <span className="text-primary">Fondos</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -532,12 +537,15 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                             {format(transferForm.fecha, 'dd/MM/yyyy')}
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl">
+                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl" align="start">
                                         <Calendar 
                                             mode="single" 
                                             selected={transferForm.fecha} 
                                             onSelect={(d: any) => d && setTransferForm({...transferForm, fecha: d})} 
                                             locale={es}
+                                            captionLayout="dropdown-buttons"
+                                            fromYear={2024}
+                                            toYear={2026}
                                         />
                                     </PopoverContent>
                                 </Popover>
@@ -564,7 +572,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
             {/* DIALOGO PARA EDITAR MOVIMIENTO DEL HISTORIAL */}
             <Dialog open={isEditTxDialogOpen} onOpenChange={setIsEditTxDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Editar <span className="text-primary">Movimiento</span></DialogTitle>
                         <DialogDescription className="text-white/40 font-bold text-xs uppercase">Actualización de glosa y referencia del asiento contable.</DialogDescription>
