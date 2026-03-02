@@ -194,14 +194,14 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' }
         });
 
-        // RESULTADOS Y DISPONIBILIDAD
+        // RESULTADOS Y DISPONIBILIDAD (Corregido: X=130 y Bs. explícito para evitar superposición)
         let finalY = (doc as any).lastAutoTable.finalY + 10;
         doc.setFontSize(10).setFont('helvetica', 'bold');
-        doc.text('TOTAL INGRESOS:', 140, finalY); doc.text(formatCurrency(totalIngresos), 196, finalY, { align: 'right' });
-        doc.text('(-) TOTAL EGRESOS:', 140, finalY + 6); doc.text(formatCurrency(totalEgresos), 196, finalY + 6, { align: 'right' });
-        doc.setFillColor(241, 245, 249); doc.rect(135, finalY + 8, 65, 10, 'F');
+        doc.text('TOTAL INGRESOS:', 130, finalY); doc.text(`Bs. ${formatCurrency(totalIngresos)}`, 196, finalY, { align: 'right' });
+        doc.text('(-) TOTAL EGRESOS:', 130, finalY + 6); doc.text(`Bs. ${formatCurrency(totalEgresos)}`, 196, finalY + 6, { align: 'right' });
+        doc.setFillColor(241, 245, 249); doc.rect(125, finalY + 8, 75, 10, 'F');
         doc.setTextColor(30, 80, 180).setFontSize(11);
-        doc.text('TOTAL DISPONIBLE:', 140, finalY + 15); doc.text(formatCurrency(totalDisponible), 196, finalY + 15, { align: 'right' });
+        doc.text('TOTAL DISPONIBLE:', 130, finalY + 15); doc.text(`Bs. ${formatCurrency(totalDisponible)}`, 196, finalY + 15, { align: 'right' });
 
         // SALDOS FINALES DE TESORERÍA (Sincronizados con Real)
         doc.setTextColor(0, 0, 0).setFontSize(10).text('SALDOS FINALES DE TESORERÍA (CONCILIADOS):', margin, finalY + 25);
@@ -210,7 +210,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             head: [['CUENTA', 'SALDO FINAL (BS.)']],
             body: [
                 ['BANCO DE VENEZUELA', formatCurrency(finalBreakdown.bdv)],
-                ['CAJA PRINCIPAL', formatCurrency(finalBreakdown.caja)],
+                ['CAJA PRINCIPAL ( EFECTIVO)', formatCurrency(finalBreakdown.caja)],
                 ['CAJA CHICA', formatCurrency(finalBreakdown.chica)]
             ],
             theme: 'grid',
