@@ -108,7 +108,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [accountForm, setAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoInicial: '0' });
     const [editAccountForm, setEditAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoActual: '0' });
     const [transForm, setTransactionForm] = useState({ monto: '', tipo: 'egreso' as 'ingreso' | 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date() });
-    const [transferForm, setTransferForm] = useState({ origenId: '', destinoId: '', monto: '', descripcion: 'Transferencia entre cuentas' });
+    const [transferForm, setTransferForm] = useState({ origenId: '', destinoId: '', monto: '', descripcion: 'Transferencia entre cuentas', fecha: new Date() });
     const [editTxData, setEditTxData] = useState({ descripcion: '', referencia: '' });
 
     const [dateRange, setDateRange] = useState({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
@@ -253,6 +253,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         if (!transferForm.origenId || !transferForm.destinoId || !transferForm.monto) return;
         setIsSubmitting(true);
         const montoNum = parseFloat(transferForm.monto);
+        const transferDate = Timestamp.fromDate(transferForm.fecha);
         try {
             await runTransaction(db, async (transaction) => {
                 const srcRef = doc(db, 'condominios', condoId, 'cuentas', transferForm.origenId);
@@ -269,12 +270,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 transaction.set(transferRef1, {
                     monto: montoNum, tipo: 'egreso', cuentaId: transferForm.origenId,
                     nombreCuenta: srcSnap.data().nombre, descripcion: `TRASLADO A ${destSnap.data().nombre}: ${transferForm.descripcion.toUpperCase()}`,
-                    fecha: Timestamp.now(), createdAt: serverTimestamp(), createdBy: user?.email
+                    fecha: transferDate, createdAt: serverTimestamp(), createdBy: user?.email
                 });
                 transaction.set(transferRef2, {
                     monto: montoNum, tipo: 'ingreso', cuentaId: transferForm.destinoId,
                     nombreCuenta: destSnap.data().nombre, descripcion: `RECEPCIÓN DESDE ${srcSnap.data().nombre}: ${transferForm.descripcion.toUpperCase()}`,
-                    fecha: Timestamp.now(), createdAt: serverTimestamp(), createdBy: user?.email
+                    fecha: transferDate, createdAt: serverTimestamp(), createdBy: user?.email
                 });
 
                 transaction.update(srcRef, { saldoActual: increment(-montoNum) });
@@ -282,7 +283,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             });
             toast({ title: "Traslado completado" });
             setIsTransferDialogOpen(false);
-            setTransferForm({ origenId: '', destinoId: '', monto: '', descripcion: 'Transferencia entre cuentas' });
+            setTransferForm({ origenId: '', destinoId: '', monto: '', descripcion: 'Transferencia entre cuentas', fecha: new Date() });
         } catch (error: any) { toast({ variant: 'destructive', title: "Error", description: error.message }); }
         finally { setIsSubmitting(false); }
     };
@@ -517,7 +518,31 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta Origen</Label><Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue placeholder="Desde..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-white font-black italic">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta Destino</Label><Select value={transferForm.destinoId} onValueChange={v => setTransferForm({...transferForm, destinoId: v})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue placeholder="Hacia..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} disabled={acc.id === transferForm.origenId} className="text-white font-black italic">{acc.nombre}</SelectItem>))}</SelectContent></Select></div>
                         </div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto del Traslado (Bs.)</Label><Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-white italic" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto (Bs.)</Label>
+                                <Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-white italic" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Fecha del Traslado</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" className="w-full h-12 rounded-xl justify-start font-black bg-white/5 border-none text-white italic">
+                                            <CalendarIcon className="mr-2 h-4 w-4 text-primary" /> 
+                                            {format(transferForm.fecha, 'dd/MM/yyyy')}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl">
+                                        <Calendar 
+                                            mode="single" 
+                                            selected={transferForm.fecha} 
+                                            onSelect={(d: any) => d && setTransferForm({...transferForm, fecha: d})} 
+                                            locale={es}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Motivo / Notas</Label><Input placeholder="EJ: FONDEO DE CAJA CHICA" value={transferForm.descripcion} onChange={e => setTransferForm({...transferForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                     </div>
                     <DialogFooter><Button onClick={handleTransfer} disabled={isSubmitting} className="w-full bg-white text-slate-900 hover:bg-slate-200 font-black uppercase h-14 rounded-2xl shadow-xl italic">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Ejecutar Traslado"}</Button></DialogFooter>
