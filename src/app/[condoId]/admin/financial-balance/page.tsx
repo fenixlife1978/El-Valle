@@ -15,6 +15,7 @@ import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText, Sca
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
+import JsBarcode from 'jsbarcode';
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -139,22 +140,42 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
         const info = authCompanyInfo || { name: 'CONJUNTO RESIDENCIAL EL VALLE', rif: 'J-00000000-0', logo: '' };
-        const period = `FEBRERO 2026`;
+        const period = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
         const margin = 14;
         const pageWidth = doc.internal.pageSize.getWidth();
 
-        // Branding Superior
-        doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 30, 'F');
-        doc.setTextColor(255, 255, 255);
-        if (info.logo) {
-            try { doc.addImage(info.logo, 'PNG', margin, 5, 15, 15); } catch(e){}
-        }
-        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 35 : margin, 15);
-        doc.setFontSize(8).text(`SISTEMA DE GESTIÓN EFAS CONDOSYS | RIF: ${info.rif}`, info.logo ? 35 : margin, 22);
-        doc.setFontSize(10).text("BALANCE GENERAL", 196, 18, { align: 'right' });
+        // Código de Barras (Generación en canvas oculto)
+        const canvas = document.createElement('canvas');
+        const barcodeValue = `BAL-${selectedYear}${selectedMonth.padStart(2, '0')}-${workingCondoId.substring(0, 6).toUpperCase()}`;
+        try {
+            JsBarcode(canvas, barcodeValue, {
+                format: "CODE128",
+                height: 40,
+                width: 2,
+                displayValue: false,
+                margin: 0
+            });
+        } catch (e) { console.error("Error barcode:", e); }
+        const barcodeData = canvas.toDataURL("image/png");
+
+        // Encabezado Limpio (Sin mención de EFAS)
+        doc.setFillColor(255, 255, 255); doc.rect(0, 0, 210, 40, 'F');
         
+        if (info.logo) {
+            try { doc.addImage(info.logo, 'JPEG', margin, 8, 18, 18); } catch(e){}
+        }
+        
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 36 : margin, 16);
+        doc.setFontSize(10).setFont('helvetica', 'normal').text(`RIF: ${info.rif}`, info.logo ? 36 : margin, 23);
+        
+        // Agregar Código de Barras superior derecho
+        doc.addImage(barcodeData, 'PNG', pageWidth - margin - 45, 8, 45, 10);
+        doc.setFontSize(7).setTextColor(100).text(barcodeValue, pageWidth - margin, 21, { align: 'right' });
+
         doc.setTextColor(0, 0, 0);
-        doc.setFontSize(12).text(`PERÍODO: ${period}`, margin, 45);
+        doc.setLineWidth(0.5).line(margin, 35, pageWidth - margin, 35);
+        doc.setFontSize(12).setFont('helvetica', 'bold').text(`BALANCE GENERAL: ${period}`, margin, 45);
 
         // I. SALDOS INICIALES
         autoTable(doc, {
@@ -194,7 +215,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' }
         });
 
-        // RESULTADOS Y DISPONIBILIDAD (Corregido: X=130 y Bs. explícito para evitar superposición)
+        // RESULTADOS Y DISPONIBILIDAD
         let finalY = (doc as any).lastAutoTable.finalY + 10;
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('TOTAL INGRESOS:', 130, finalY); doc.text(`Bs. ${formatCurrency(totalIngresos)}`, 196, finalY, { align: 'right' });
@@ -203,7 +224,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         doc.setTextColor(30, 80, 180).setFontSize(11);
         doc.text('TOTAL DISPONIBLE:', 130, finalY + 15); doc.text(`Bs. ${formatCurrency(totalDisponible)}`, 196, finalY + 15, { align: 'right' });
 
-        // SALDOS FINALES DE TESORERÍA (Sincronizados con Real)
+        // SALDOS FINALES DE TESORERÍA
         doc.setTextColor(0, 0, 0).setFontSize(10).text('SALDOS FINALES DE TESORERÍA (CONCILIADOS):', margin, finalY + 25);
         autoTable(doc, {
             startY: finalY + 28,
@@ -220,18 +241,18 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
         if (output === 'share') {
             const blob = doc.output('blob');
-            const file = new File([blob], `Balance_General_ElValle_Feb2026.pdf`, { type: 'application/pdf' });
+            const file = new File([blob], `Balance_General_${info.name.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
             if (navigator.share) {
                 await navigator.share({
                     files: [file],
-                    title: 'Balance General - El Valle',
-                    text: 'Balance Financiero correspondiente a Febrero 2026'
+                    title: `Balance General - ${info.name}`,
+                    text: `Balance Financiero correspondiente a ${period}`
                 });
             } else {
                 toast({ title: "Compartir no disponible", description: "Su navegador no soporta la función de compartir archivos." });
             }
         } else {
-            doc.save(`Balance_General_ElValle_Feb2026.pdf`);
+            doc.save(`Balance_General_${info.name.replace(/ /g, '_')}.pdf`);
         }
     };
 
@@ -246,7 +267,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 ingresosMesBDV, ingresosMesCaja,
                 egresos: egresosTesorería, 
                 totalIngresos, totalEgresos, totalDisponible,
-                finalBreakdown, // Guardamos la disponibilidad real sincronizada
+                finalBreakdown,
                 notas, 
                 updatedAt: serverTimestamp()
             });
