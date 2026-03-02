@@ -1,9 +1,10 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, Timestamp, query, orderBy, doc, serverTimestamp, increment, runTransaction, getDocs, where } from 'firebase/firestore';
-import { RefreshCw, History, Zap, Loader2, BookCopy } from 'lucide-react';
+import { RefreshCw, History, Zap, Loader2, BookCopy, Download, Share2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -43,7 +44,7 @@ const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 const AccountingPage = () => {
     const { toast } = useToast();
-    const { workingCondoId, user } = useAuth();
+    const { workingCondoId, user, companyInfo } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -205,6 +206,72 @@ const AccountingPage = () => {
         } finally { setIsSyncing(false); }
     };
 
+    const handleExportDailyBook = async (account: Account, output: 'download' | 'share' = 'download') => {
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        const docPDF = new jsPDF();
+        
+        const data = periodData[account.id];
+        if (!data) return;
+
+        const info = companyInfo || { name: 'EFAS CondoSys', rif: 'J-00000000-0' };
+        const periodLabel = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
+        const margin = 14;
+        const pageWidth = docPDF.internal.pageSize.getWidth();
+
+        // Encabezado
+        docPDF.setFillColor(15, 23, 42);
+        docPDF.rect(0, 0, 210, 30, 'F');
+        docPDF.setTextColor(255, 255, 255);
+        docPDF.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), margin, 15);
+        docPDF.setFontSize(8).text(`RIF: ${info.rif}`, margin, 22);
+        docPDF.setFontSize(10).text("LIBRO DIARIO DE CUENTA", 196, 18, { align: 'right' });
+
+        docPDF.setTextColor(0, 0, 0);
+        docPDF.setFontSize(12).setFont('helvetica', 'bold').text(`CUENTA: ${account.nombre}`, margin, 45);
+        docPDF.setFontSize(10).setFont('helvetica', 'normal').text(`Período: ${periodLabel}`, margin, 52);
+        
+        docPDF.setFillColor(241, 245, 249);
+        docPDF.rect(margin, 58, pageWidth - (margin * 2), 10, 'F');
+        docPDF.setFont('helvetica', 'bold').text(`SALDO INICIAL AL 01 DEL MES:`, margin + 2, 64.5);
+        docPDF.text(`Bs. ${formatCurrency(data.startBalance)}`, 196 - 2, 64.5, { align: 'right' });
+
+        autoTable(docPDF, {
+            startY: 75,
+            head: [['FECHA', 'DESCRIPCIÓN / CONCEPTO', 'REF.', 'INGRESO (+)', 'EGRESO (-)', 'SALDO']],
+            body: data.transactions.map(tx => [
+                format(tx.date, 'dd/MM/yy'),
+                tx.descripcion.toUpperCase(),
+                tx.reference,
+                tx.credit > 0 ? formatCurrency(tx.credit) : '',
+                tx.debit > 0 ? formatCurrency(tx.debit) : '',
+                formatCurrency(tx.balance)
+            ]),
+            headStyles: { fillColor: [15, 23, 42] },
+            styles: { fontSize: 7, cellPadding: 2 },
+            columnStyles: {
+                3: { halign: 'right' },
+                4: { halign: 'right' },
+                5: { halign: 'right', fontStyle: 'bold' }
+            }
+        });
+
+        const finalY = (docPDF as any).lastAutoTable.finalY + 10;
+        docPDF.setFontSize(10).setFont('helvetica', 'bold').text(`SALDO FINAL CONCILIADO: Bs. ${formatCurrency(data.endBalance)}`, 196, finalY, { align: 'right' });
+
+        if (output === 'share') {
+            const blob = docPDF.output('blob');
+            const file = new File([blob], `Libro_Diario_${account.nombre.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
+            if (navigator.share) {
+                await navigator.share({ files: [file], title: `Libro Diario: ${account.nombre}`, text: `Movimientos de ${account.nombre} para ${periodLabel}` });
+            } else {
+                toast({ title: "No disponible", description: "Su navegador no soporta compartir archivos." });
+            }
+        } else {
+            docPDF.save(`Libro_Diario_${account.nombre.replace(/ /g, '_')}_${selectedYear}_${selectedMonth}.pdf`);
+        }
+    };
+
     if (loading) return (
         <div className="flex flex-col h-[70vh] items-center justify-center gap-4 bg-[#1A1D23]">
             <Loader2 className="animate-spin h-12 w-12 text-primary" />
@@ -288,7 +355,21 @@ const AccountingPage = () => {
                     return (
                         <TabsContent key={acc.id} value={acc.id} className="mt-4">
                             <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-slate-900 border border-white/5">
-                                <CardHeader className="bg-slate-950 border-b border-white/5 p-8"><CardTitle className="uppercase italic text-white font-black flex items-center gap-2"><BookCopy className="text-primary"/> Libro Diario: {acc.nombre}</CardTitle></CardHeader>
+                                <CardHeader className="bg-slate-950 border-b border-white/5 p-8">
+                                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                                        <CardTitle className="uppercase italic text-white font-black flex items-center gap-2">
+                                            <BookCopy className="text-primary"/> Libro Diario: {acc.nombre}
+                                        </CardTitle>
+                                        <div className="flex gap-2">
+                                            <Button onClick={() => handleExportDailyBook(acc, 'download')} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] h-10 bg-white/5 hover:bg-white/10 italic">
+                                                <Download className="mr-2 h-4 w-4" /> Exportar PDF
+                                            </Button>
+                                            <Button onClick={() => handleExportDailyBook(acc, 'share')} variant="secondary" className="rounded-xl bg-primary text-slate-900 h-10 font-black uppercase text-[10px] italic">
+                                                <Share2 className="mr-2 h-4 w-4" /> Compartir
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </CardHeader>
                                 <CardContent className="p-0">
                                     <Table>
                                         <TableHeader className="bg-slate-950/50"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-white/40 italic">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción / Concepto</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Ingreso (+)</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Egreso (-)</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-white/40 italic">Saldo Progresivo</TableHead></TableRow></TableHeader>
