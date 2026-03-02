@@ -40,10 +40,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [exporting, setExporting] = useState(false);
-    const [selectedMonth, setSelectedMonth] = useState("2"); // Febrero por defecto
+    const [selectedMonth, setSelectedMonth] = useState("2"); 
     const [selectedYear, setSelectedYear] = useState("2026");
 
-    // Saldos Iniciales Estrictos (Instrucción experta)
     const [saldoInicBDV, setSaldoInicBDV] = useState(44294.13);
     const [saldoInicCaja, setSaldoInicCaja] = useState(0.00);
     const [saldoInicChica, setSaldoInicChica] = useState(0.00);
@@ -55,7 +54,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const [realBalances, setRealBalances] = useState({ banco: 0, cajaPrincipal: 0, cajaChica: 0 });
 
-    // ESCUCHA DE SALDOS REALES DE TESORERÍA (Fuente de Verdad)
     useEffect(() => {
         if (!workingCondoId) return;
         return onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
@@ -88,7 +86,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 
                 const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
-                // 1. Egresos del Mes (Sección III)
                 const egresos = txs.filter(t => t.tipo === 'egreso').map(t => ({ 
                     concepto: t.descripcion, 
                     monto: t.monto, 
@@ -96,7 +93,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 }));
                 setEgresosTesorería(egresos);
 
-                // 2. Ingresos Ordinarios (BDV - Excluyendo Efectivo)
                 const ordBDV = txs.filter(t => 
                     t.tipo === 'ingreso' && 
                     t.cuentaId === BDV_ACCOUNT_ID && 
@@ -104,7 +100,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 ).reduce((sum, t) => sum + t.monto, 0);
                 setIngresosMesBDV(ordBDV);
 
-                // 3. Ingresos en Efectivo (Caja Principal)
                 const cashCaja = txs.filter(t => 
                     t.tipo === 'ingreso' && 
                     (t.cuentaId === 'CAJA_PRINCIPAL_ID' || t.referencia?.toUpperCase() === 'EFECTIVO')
@@ -122,11 +117,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    
-    // Sincronización Total: El Disponible ahora es la suma de los saldos reales de tesorería
     const totalDisponible = useMemo(() => realBalances.banco + realBalances.cajaPrincipal + realBalances.cajaChica, [realBalances]);
 
-    // Desglose Final de Tesorería SINCRONIZADO con Saldos Reales
     const finalBreakdown = useMemo(() => {
         return {
             bdv: realBalances.banco,
@@ -144,7 +136,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const margin = 14;
         const pageWidth = doc.internal.pageSize.getWidth();
 
-        // Código de Barras (Generación en canvas oculto)
         const canvas = document.createElement('canvas');
         const barcodeValue = `BAL-${selectedYear}${selectedMonth.padStart(2, '0')}-${workingCondoId.substring(0, 6).toUpperCase()}`;
         try {
@@ -158,26 +149,30 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         } catch (e) { console.error("Error barcode:", e); }
         const barcodeData = canvas.toDataURL("image/png");
 
-        // Encabezado Limpio (Sin mención de EFAS)
-        doc.setFillColor(255, 255, 255); doc.rect(0, 0, 210, 40, 'F');
+        // Encabezado Institucional Premium (Fondo Azul Profundo)
+        doc.setFillColor(15, 23, 42); 
+        doc.rect(0, 0, 210, 30, 'F');
         
         if (info.logo) {
-            try { doc.addImage(info.logo, 'JPEG', margin, 8, 18, 18); } catch(e){}
+            try { 
+                doc.setFillColor(255, 255, 255);
+                doc.roundedRect(margin, 5, 20, 20, 2, 2, 'F');
+                doc.addImage(info.logo, 'JPEG', margin + 1, 6, 18, 18); 
+            } catch(e){}
         }
         
-        doc.setTextColor(15, 23, 42);
-        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 36 : margin, 16);
-        doc.setFontSize(10).setFont('helvetica', 'normal').text(`RIF: ${info.rif}`, info.logo ? 36 : margin, 23);
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(12).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 38 : margin, 14);
+        doc.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${info.rif}`, info.logo ? 38 : margin, 20);
         
-        // Agregar Código de Barras superior derecho
-        doc.addImage(barcodeData, 'PNG', pageWidth - margin - 45, 8, 45, 10);
-        doc.setFontSize(7).setTextColor(100).text(barcodeValue, pageWidth - margin, 21, { align: 'right' });
+        doc.setFillColor(255, 255, 255);
+        doc.rect(pageWidth - margin - 45, 7, 45, 10, 'F');
+        doc.addImage(barcodeData, 'PNG', pageWidth - margin - 44, 8, 43, 8);
+        doc.setFontSize(7).setTextColor(255, 255, 255).text(barcodeValue, pageWidth - margin, 21, { align: 'right' });
 
         doc.setTextColor(0, 0, 0);
-        doc.setLineWidth(0.5).line(margin, 35, pageWidth - margin, 35);
-        doc.setFontSize(12).setFont('helvetica', 'bold').text(`BALANCE GENERAL: ${period}`, margin, 45);
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(`BALANCE GENERAL: ${period}`, margin, 45);
 
-        // I. SALDOS INICIALES
         autoTable(doc, {
             startY: 55,
             head: [['I. SALDOS INICIALES', 'MONTO (BS.)']],
@@ -190,7 +185,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             styles: { fontSize: 9, cellPadding: 2.5 }
         });
 
-        // II. INGRESOS DEL MES
         autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 5,
             head: [['II. INGRESOS DEL MES', 'MONTO (BS.)']],
@@ -204,7 +198,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             footStyles: { fillColor: [15, 23, 42], textColor: 255 }
         });
 
-        // III. EGRESOS DEL MES
         autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['III. EGRESOS DEL MES', 'CUENTA', 'MONTO (BS.)']],
@@ -215,7 +208,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' }
         });
 
-        // RESULTADOS Y DISPONIBILIDAD
         let finalY = (doc as any).lastAutoTable.finalY + 10;
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('TOTAL INGRESOS:', 130, finalY); doc.text(`Bs. ${formatCurrency(totalIngresos)}`, 196, finalY, { align: 'right' });
@@ -224,7 +216,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         doc.setTextColor(30, 80, 180).setFontSize(11);
         doc.text('TOTAL DISPONIBLE:', 130, finalY + 15); doc.text(`Bs. ${formatCurrency(totalDisponible)}`, 196, finalY + 15, { align: 'right' });
 
-        // SALDOS FINALES DE TESORERÍA
         doc.setTextColor(0, 0, 0).setFontSize(10).text('SALDOS FINALES DE TESORERÍA (CONCILIADOS):', margin, finalY + 25);
         autoTable(doc, {
             startY: finalY + 28,
@@ -280,7 +271,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-10 border-b border-white/5 pb-6">
                 <div>
                     <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Balance <span className="text-primary">General</span></h1>
-                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">Contabilidad EFAS - {authCompanyInfo?.name?.toUpperCase() || "EL VALLE"}</p>
+                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">{authCompanyInfo?.name?.toUpperCase() || "EL VALLE"}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 bg-slate-900 border-white/5 font-black uppercase text-[10px] rounded-xl"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{months.map(m => (<SelectItem key={m.value} value={m.value} className="font-black uppercase text-[10px]">{m.label}</SelectItem>))}</SelectContent></Select>
