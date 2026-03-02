@@ -298,70 +298,87 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     };
 
     const handleExportPDF = async (payment: Payment, ownerId: string) => {
-        if (!companyInfo) return;
-        const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
-        if (!beneficiary) return;
+        try {
+            if (!companyInfo) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no disponible.' });
+                return;
+            }
+            const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+            if (!beneficiary) return;
 
-        const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
+            const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
+            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
 
-        const data = {
-            condoName: companyInfo.name,
-            rif: companyInfo.rif,
-            receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
-            ownerName: beneficiary.ownerName,
-            method: payment.paymentMethod.toUpperCase(),
-            bank: payment.bank,
-            reference: payment.reference,
-            date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
-            rate: formatCurrency(payment.exchangeRate),
-            receivedAmount: formatCurrency(beneficiary.amount),
-            totalDebtPaid: formatCurrency(beneficiary.amount),
-            prevBalance: '0,00',
-            currentBalance: '0,00',
-            observations: payment.observations || 'PAGO VALIDADO',
-            concepts: ownerConcepts.length > 0 
-                ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
-                : [[format(payment.paymentDate.toDate(), 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
-        };
+            const data = {
+                condoName: companyInfo.name || 'CONDOMINIO',
+                rif: companyInfo.rif || 'J-40587208-0',
+                receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
+                ownerName: beneficiary.ownerName,
+                method: payment.paymentMethod?.toUpperCase() || 'N/A',
+                bank: payment.bank || 'N/A',
+                reference: payment.reference || 'N/A',
+                date: format(pDate, 'dd/MM/yyyy'),
+                rate: formatCurrency(payment.exchangeRate),
+                receivedAmount: formatCurrency(beneficiary.amount),
+                totalDebtPaid: formatCurrency(beneficiary.amount),
+                prevBalance: '0,00',
+                currentBalance: '0,00',
+                observations: payment.observations || 'PAGO VALIDADO',
+                concepts: ownerConcepts.length > 0 
+                    ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
+                    : [[format(pDate, 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
+            };
 
-        await generatePaymentReceipt(data, companyInfo.logo, 'download');
+            await generatePaymentReceipt(data, companyInfo.logo, 'download');
+            toast({ title: "Recibo descargado" });
+        } catch (error) {
+            console.error("PDF Export Error:", error);
+            toast({ variant: 'destructive', title: 'Error al generar PDF' });
+        }
     };
 
     const handleSharePDF = async (payment: Payment, ownerId: string) => {
-        if (!companyInfo) return;
-        const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
-        if (!beneficiary) return;
+        try {
+            if (!companyInfo) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no disponible.' });
+                return;
+            }
+            const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+            if (!beneficiary) return;
 
-        const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
+            const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
+            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
 
-        const data = {
-            condoName: companyInfo.name,
-            rif: companyInfo.rif,
-            receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
-            ownerName: beneficiary.ownerName,
-            method: payment.paymentMethod.toUpperCase(),
-            bank: payment.bank,
-            reference: payment.reference,
-            date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
-            rate: formatCurrency(payment.exchangeRate),
-            receivedAmount: formatCurrency(beneficiary.amount),
-            totalDebtPaid: formatCurrency(beneficiary.amount),
-            prevBalance: '0,00',
-            currentBalance: '0,00',
-            observations: payment.observations || 'PAGO VALIDADO',
-            concepts: ownerConcepts.length > 0 
-                ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
-                : [[format(payment.paymentDate.toDate(), 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
-        };
+            const data = {
+                condoName: companyInfo.name || 'CONDOMINIO',
+                rif: companyInfo.rif || 'J-40587208-0',
+                receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
+                ownerName: beneficiary.ownerName,
+                method: payment.paymentMethod?.toUpperCase() || 'N/A',
+                bank: payment.bank || 'N/A',
+                reference: payment.reference || 'N/A',
+                date: format(pDate, 'dd/MM/yyyy'),
+                rate: formatCurrency(payment.exchangeRate),
+                receivedAmount: formatCurrency(beneficiary.amount),
+                totalDebtPaid: formatCurrency(beneficiary.amount),
+                prevBalance: '0,00',
+                currentBalance: '0,00',
+                observations: payment.observations || 'PAGO VALIDADO',
+                concepts: ownerConcepts.length > 0 
+                    ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
+                    : [[format(pDate, 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
+            };
 
-        const blob = await generatePaymentReceipt(data, companyInfo.logo, 'blob');
-        if (blob && navigator.share) {
-            const file = new File([blob as Blob], `Recibo_${beneficiary.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
-            try {
+            const blob = await generatePaymentReceipt(data, companyInfo.logo, 'blob');
+            if (blob && navigator.share) {
+                const file = new File([blob as Blob], `Recibo_${beneficiary.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
                 await navigator.share({ files: [file], title: 'Recibo de Pago', text: `Comprobante para ${beneficiary.ownerName}` });
-            } catch (e) { console.error(e); }
-        } else {
-            toast({ title: "No disponible", description: "Navegador no compatible con Web Share." });
+            } else {
+                toast({ title: "No disponible", description: "Su dispositivo no soporta compartir archivos." });
+            }
+        } catch (error) {
+            console.error("PDF Share Error:", error);
+            toast({ variant: 'destructive', title: 'Error al compartir' });
         }
     };
 
@@ -438,7 +455,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                         <Button 
                                                             variant="ghost" 
                                                             size="icon" 
-                                                            onClick={() => handleExportPDF(p, p.beneficiaries[0].ownerId)} 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleExportPDF(p, p.beneficiaries[0].ownerId);
+                                                            }} 
                                                             className="text-emerald-500 hover:bg-emerald-500/10 rounded-full h-10 w-10"
                                                             title="Descargar Recibo Instantáneo"
                                                         >
