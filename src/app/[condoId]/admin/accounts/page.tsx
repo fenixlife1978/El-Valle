@@ -53,6 +53,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Account {
     id: string;
@@ -394,8 +395,10 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                         {format(dateRange.from, 'dd MMM', {locale: es})} - {format(dateRange.to, 'dd MMM', {locale: es})}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10" align="end">
-                                    <Calendar initialFocus mode="range" selected={{ from: dateRange.from, to: dateRange.to }} onSelect={(range: any) => range && setDateRange({ from: range.from, to: range.to || range.from })} locale={es} captionLayout="dropdown-buttons" fromYear={2020} toYear={2030} />
+                                <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden" align="end">
+                                    <div className="max-h-[350px] overflow-y-auto">
+                                        <Calendar initialFocus mode="range" selected={{ from: dateRange.from, to: dateRange.to }} onSelect={(range: any) => range && setDateRange({ from: range.from, to: range.to || range.from })} locale={es} captionLayout="dropdown-buttons" fromYear={2020} toYear={2030} />
+                                    </div>
                                 </PopoverContent>
                             </Popover>
                         </div>
@@ -503,8 +506,10 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto Bs.</Label><Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-white italic" /></div>
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Fecha</Label><Popover>
                                 <PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl justify-start font-black bg-white/5 border-none text-white italic"><CalendarIcon className="mr-2 h-4 w-4 text-primary" /> {format(transForm.fecha, 'dd/MM/yyyy')}</Button></PopoverTrigger>
-                                <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl">
-                                    <Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es} captionLayout="dropdown-buttons" fromYear={2024} toYear={2026} />
+                                <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+                                    <div className="max-h-[350px] overflow-y-auto">
+                                        <Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es} captionLayout="dropdown-buttons" fromYear={2024} toYear={2026} />
+                                    </div>
                                 </PopoverContent></Popover>
                             </div>
                         </div>
@@ -537,16 +542,18 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                             {format(transferForm.fecha, 'dd/MM/yyyy')}
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl" align="start">
-                                        <Calendar 
-                                            mode="single" 
-                                            selected={transferForm.fecha} 
-                                            onSelect={(d: any) => d && setTransferForm({...transferForm, fecha: d})} 
-                                            locale={es}
-                                            captionLayout="dropdown-buttons"
-                                            fromYear={2024}
-                                            toYear={2026}
-                                        />
+                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden" align="start">
+                                        <div className="max-h-[350px] overflow-y-auto">
+                                            <Calendar 
+                                                mode="single" 
+                                                selected={transferForm.fecha} 
+                                                onSelect={(d: any) => d && setTransferForm({...transferForm, fecha: d})} 
+                                                locale={es}
+                                                captionLayout="dropdown-buttons"
+                                                fromYear={2024}
+                                                toYear={2026}
+                                            />
+                                        </div>
                                     </PopoverContent>
                                 </Popover>
                             </div>
