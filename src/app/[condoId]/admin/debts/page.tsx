@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -33,6 +34,8 @@ const months = [
 ];
 
 const formatToTwoDecimals = (num: number) => {
+    // Blindaje contra NaN o valores no numéricos
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
@@ -86,7 +89,12 @@ export default function DebtManagementPage() {
         };
         const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
         const unsubOwners = onSnapshot(query(collection(db, "condominios", workingCondoId, ownersCol)), (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).filter(o => o.role === 'propietario');
+            const data = snapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                pendingDebtUSD: 0, // Inicialización obligatoria para evitar NaN
+                ...doc.data() 
+            } as Owner)).filter(o => o.role === 'propietario');
+            
             setOwners(data.sort((a, b) => {
                 const ak = getSortKeys(a), bk = getSortKeys(b);
                 return ak.streetNum !== bk.streetNum ? ak.streetNum - bk.streetNum : ak.houseNum - bk.houseNum;
@@ -103,7 +111,10 @@ export default function DebtManagementPage() {
         return onSnapshot(q, (snapshot) => {
             setOwners(prev => {
                 const map: {[key: string]: number} = {};
-                snapshot.forEach(doc => { map[doc.data().ownerId] = (map[doc.data().ownerId] || 0) + doc.data().amountUSD; });
+                snapshot.forEach(doc => { 
+                    const debt = doc.data();
+                    map[debt.ownerId] = (map[debt.ownerId] || 0) + (debt.amountUSD || 0); 
+                });
                 return prev.map(o => ({ ...o, pendingDebtUSD: map[o.id] || 0 }));
             });
         });
@@ -347,7 +358,7 @@ export default function DebtManagementPage() {
                 <CardContent className="p-0">
                     <Table><TableHeader className="bg-slate-950/50"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-white/40 italic">Propietario</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Ubicación</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Deuda Bs.</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Saldo Bs.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-white/40 italic">Acción</TableHead></TableRow></TableHeader>
                     <TableBody>
-                        {filteredOwners.map(o => (<TableRow key={o.id} className="hover:bg-white/5 border-white/5 transition-colors"><TableCell className="px-8 font-black text-white text-xs uppercase italic">{o.name}</TableCell><TableCell className="text-slate-400 font-bold text-[10px] uppercase italic">{o.properties?.map(p => `${p.street}-${p.house}`).join('; ')}</TableCell><TableCell><Badge variant="destructive" className="font-black italic">Bs. {formatToTwoDecimals(o.pendingDebtUSD * activeRate)}</Badge></TableCell><TableCell><Badge variant="success" className="font-black italic bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Bs. {formatToTwoDecimals(o.balance)}</Badge></TableCell><TableCell className="text-right pr-8"><Button variant="ghost" size="sm" onClick={() => { setSelectedOwner(o); setView('detail'); }} className="text-primary font-black uppercase text-[10px] hover:bg-primary/10 italic">Gestionar <WalletCards className="ml-2 h-4 w-4"/></Button></TableCell></TableRow>))}
+                        {filteredOwners.map(o => (<TableRow key={o.id} className="hover:bg-white/5 border-white/5 transition-colors"><TableCell className="px-8 font-black text-white text-xs uppercase italic">{o.name}</TableCell><TableCell className="text-slate-400 font-bold text-[10px] uppercase italic">{o.properties?.map(p => `${p.street}-${p.house}`).join('; ')}</TableCell><TableCell><Badge variant="destructive" className="font-black italic">Bs. {formatToTwoDecimals((o.pendingDebtUSD || 0) * (activeRate || 0))}</Badge></TableCell><TableCell><Badge variant="success" className="font-black italic bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Bs. {formatToTwoDecimals(o.balance)}</Badge></TableCell><TableCell className="text-right pr-8"><Button variant="ghost" size="sm" onClick={() => { setSelectedOwner(o); setView('detail'); }} className="text-primary font-black uppercase text-[10px] hover:bg-primary/10 italic">Gestionar <WalletCards className="ml-2 h-4 w-4"/></Button></TableCell></TableRow>))}
                     </TableBody></Table>
                 </CardContent>
             </Card>
