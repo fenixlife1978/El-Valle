@@ -43,6 +43,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [selectedMonth, setSelectedMonth] = useState("2"); 
     const [selectedYear, setSelectedYear] = useState("2026");
 
+    // Saldos Iniciales Editables
     const [saldoInicBDV, setSaldoInicBDV] = useState(44294.13);
     const [saldoInicCaja, setSaldoInicCaja] = useState(0.00);
     const [saldoInicChica, setSaldoInicChica] = useState(0.00);
@@ -84,7 +85,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     orderBy('fecha', 'desc')
                 ));
                 
-                // REGLA CONTABLE: Filtrar traslados y movimientos internos para no inflar ingresos/egresos
                 const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(t => {
                     const desc = (t.descripcion || "").toUpperCase();
                     return !desc.includes('TRASLADO') && 
@@ -124,7 +124,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    const totalDisponible = useMemo(() => realBalances.banco + realBalances.cajaPrincipal + realBalances.cajaChica, [realBalances]);
+    
+    // REGLA DE NEGOCIO: Total Ingresos - Total Egresos
+    const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
 
     const finalBreakdown = useMemo(() => {
         return {
@@ -156,7 +158,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         } catch (e) { console.error("Error barcode:", e); }
         const barcodeData = canvas.toDataURL("image/png");
 
-        // Encabezado Institucional Premium (Fondo Azul Profundo)
         doc.setFillColor(15, 23, 42); 
         doc.rect(0, 0, 210, 30, 'F');
         
@@ -303,6 +304,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">I. Saldos Iniciales y II. Ingresos</CardTitle></CardHeader>
                     <CardContent className="p-0"><Table><TableBody>
                         <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Banco de Venezuela (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicBDV} onChange={e=>setSaldoInicBDV(Number(e.target.value))}/></TableCell></TableRow>
+                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Caja Principal (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicCaja} onChange={e=>setSaldoInicCaja(Number(e.target.value))}/></TableCell></TableRow>
+                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Caja Chica (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicChica} onChange={e=>setSaldoInicChica(Number(e.target.value))}/></TableCell></TableRow>
                         <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Ordinarios BDV (Mes)</TableCell><TableCell className="text-right font-black italic">Bs. {formatCurrency(ingresosMesBDV)}</TableCell></TableRow>
                         <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Efectivo Caja (Mes)</TableCell><TableCell className="text-right font-black text-emerald-500 italic">Bs. {formatCurrency(ingresosMesCaja)}</TableCell></TableRow>
                         <TableRow className="border-none bg-primary/10"><TableCell className="font-black text-primary text-[10px] uppercase italic">TOTAL DISPONIBILIDAD BRUTA</TableCell><TableCell className="text-right font-black text-white italic">Bs. {formatCurrency(totalIngresos)}</TableCell></TableRow>
@@ -327,7 +330,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 <Card className="rounded-[2rem] bg-slate-950 border border-primary/20 mt-8 shadow-xl">
                     <CardContent className="p-8 flex flex-col md:flex-row justify-between items-center gap-6">
                         <div>
-                            <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión (Disponibilidad Real)</p>
+                            <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión (Disponibilidad)</p>
                             <h3 className="text-4xl font-black italic text-white tracking-tighter">Bs. {formatCurrency(totalDisponible)}</h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
