@@ -47,7 +47,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [saldoInicCaja, setSaldoInicCaja] = useState(0.00);
     const [saldoInicChica, setSaldoInicChica] = useState(0.00);
 
-    // Saldos Finales Editables (Identicos a Tesorería por defecto)
+    // Saldos Finales Editables
     const [saldoFinBDV, setSaldoFinBDV] = useState(0.00);
     const [saldoFinCaja, setSaldoFinCaja] = useState(0.00);
     const [saldoFinChica, setSaldoFinChica] = useState(0.00);
@@ -67,7 +67,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             setCuentasReales(data);
             
-            // Sincronizar automáticamente saldos finales con tesorería
+            // Sincronizar automáticamente saldos finales con tesorería en carga inicial
             const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre.toUpperCase().includes('BANCO'));
             const caja = data.find(a => a.nombre.toUpperCase().includes('CAJA PRINCIPAL'));
             const chica = data.find(a => a.nombre.toUpperCase().includes('CAJA CHICA'));
@@ -93,9 +93,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     setSaldoInicBDV(d.saldoInicBDV || 0);
                     setSaldoInicCaja(d.saldoInicCaja || 0);
                     setSaldoInicChica(d.saldoInicChica || 0);
-                    setSaldoFinBDV(d.saldoFinBDV || d.saldoFinalCuentas?.bdv || 0);
-                    setSaldoFinCaja(d.saldoFinCaja || d.saldoFinalCuentas?.caja || 0);
-                    setSaldoFinChica(d.saldoFinChica || d.saldoFinalCuentas?.chica || 0);
+                    setSaldoFinBDV(d.saldoFinBDV || 0);
+                    setSaldoFinCaja(d.saldoFinCaja || 0);
+                    setSaldoFinChica(d.saldoFinChica || 0);
                     setNotas(d.notas || "");
                 }
 
@@ -147,8 +147,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     
-    // DISPONIBILIDAD CONCILIADA: Suma de los saldos finales (editables)
-    const totalDisponible = useMemo(() => saldoFinBDV + saldoFinCaja + saldoFinChica, [saldoFinBDV, saldoFinCaja, saldoFinChica]);
+    // REGLA DE ORO: TOTAL DISPONIBLE = INGRESOS - EGRESOS
+    const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
 
     const lastDayOfMonthStr = useMemo(() => {
         return format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
@@ -244,7 +244,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             ],
             headStyles: { fillColor: [30, 80, 180] },
             styles: { fontSize: 9, cellPadding: 2.5 },
-            foot: [['TOTAL DISPONIBILIDAD CONCILIADA', formatCurrency(totalDisponible)]],
+            foot: [['RESULTADO DE DISPONIBILIDAD (I+II-III)', formatCurrency(totalDisponible)]],
             footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' }
         });
 
@@ -327,20 +327,20 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
                     <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">I. Saldos Iniciales y II. Ingresos</CardTitle></CardHeader>
                     <CardContent className="p-0"><Table><TableBody>
-                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Banco de Venezuela (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicBDV} onChange={e=>setSaldoInicBDV(Number(e.target.value))}/></TableCell></TableRow>
-                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Caja Principal (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicCaja} onChange={e=>setSaldoInicCaja(Number(e.target.value))}/></TableCell></TableRow>
-                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Caja Chica (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicChica} onChange={e=>setSaldoInicChica(Number(e.target.value))}/></TableCell></TableRow>
-                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Ordinarios BDV (Mes)</TableCell><TableCell className="text-right font-black italic">Bs. {formatCurrency(ingresosMesBDV)}</TableCell></TableRow>
-                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Efectivo Caja (Mes)</TableCell><TableCell className="text-right font-black text-emerald-500 italic">Bs. {formatCurrency(ingresosMesCaja)}</TableCell></TableRow>
-                        <TableRow className="border-none bg-primary/10"><TableCell className="font-black text-primary text-[10px] uppercase italic">TOTAL DISPONIBILIDAD BRUTA</TableCell><TableCell className="text-right font-black text-white italic">Bs. {formatCurrency(totalIngresos)}</TableCell></TableRow>
+                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Banco de Venezuela (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicBDV} onChange={e=>setSaldoInicBDV(Number(e.target.value))}/></TableCell></TableRow>
+                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Caja Principal (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicCaja} onChange={e=>setSaldoInicCaja(Number(e.target.value))}/></TableCell></TableRow>
+                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Caja Chica (Saldo Inicial)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoInicChica} onChange={e=>setSaldoInicChica(Number(e.target.value))}/></TableCell></TableRow>
+                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic px-8 py-4">Ingresos Ordinarios BDV (Mes)</TableCell><TableCell className="text-right font-black italic pr-8">Bs. {formatCurrency(ingresosMesBDV)}</TableCell></TableRow>
+                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic px-8 py-4">Ingresos Efectivo Caja (Mes)</TableCell><TableCell className="text-right font-black text-emerald-500 italic pr-8">Bs. {formatCurrency(ingresosMesCaja)}</TableCell></TableRow>
+                        <TableRow className="border-none bg-primary/10"><TableCell className="font-black text-primary text-[10px] uppercase italic px-8 py-6">TOTAL DISPONIBILIDAD BRUTA</TableCell><TableCell className="text-right font-black text-white italic pr-8">Bs. {formatCurrency(totalIngresos)}</TableCell></TableRow>
                     </TableBody></Table></CardContent></Card>
 
                     <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">III. Detalle de Egresos de Tesorería</CardTitle></CardHeader>
-                    <CardContent className="p-0"><Table><TableHeader><TableRow className="bg-slate-950/50 border-white/5"><TableHead className="text-white/40 font-black text-[10px] uppercase">Concepto</TableHead><TableHead className="text-right text-white/40 font-black text-[10px] pr-8">Monto</TableHead></TableRow></TableHeader>
+                    <CardContent className="p-0"><Table><TableHeader><TableRow className="bg-slate-950/50 border-white/5"><TableHead className="text-white/40 font-black text-[10px] uppercase px-8 py-4">Concepto</TableHead><TableHead className="text-right text-white/40 font-black text-[10px] pr-8">Monto</TableHead></TableRow></TableHeader>
                     <TableBody>
                         {egresosTesorería.map((e, i) => (
                             <TableRow key={i} className="border-white/5 hover:bg-white/5">
-                                <TableCell className="py-4">
+                                <TableCell className="py-4 px-8">
                                     <div className="text-white font-black uppercase text-[10px] italic">{e.concepto}</div>
                                     <div className="text-[8px] font-black text-white/20 uppercase">ORIGEN: {e.cuenta}</div>
                                 </TableCell>
@@ -348,7 +348,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                             </TableRow>
                         ))}
                     </TableBody>
-                    <TableFooter className="bg-red-50/10 border-none"><TableRow className="border-none"><TableCell className="font-black text-red-400 text-[10px] uppercase italic">Total Egresos</TableCell><TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresos)}</TableCell></TableRow></TableFooter></Table></CardContent></Card>
+                    <TableFooter className="bg-red-50/10 border-none"><TableRow className="border-none"><TableCell className="font-black text-red-400 text-[10px] uppercase italic px-8 py-6">Total Egresos</TableCell><TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresos)}</TableCell></TableRow></TableFooter></Table></CardContent></Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
@@ -372,7 +372,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                         <TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoFinChica} onChange={e=>setSaldoFinChica(Number(e.target.value))}/></TableCell>
                                     </TableRow>
                                     <TableRow className="bg-primary/20 border-none">
-                                        <TableCell className="font-black text-primary text-[10px] uppercase italic px-8 py-6">DISPONIBILIDAD CONCILIADA</TableCell>
+                                        <TableCell className="font-black text-primary text-[10px] uppercase italic px-8 py-6">DISPONIBILIDAD FINAL (ING - EGR)</TableCell>
                                         <TableCell className="text-right font-black text-white text-xl italic pr-8">Bs. {formatCurrency(totalDisponible)}</TableCell>
                                     </TableRow>
                                 </TableBody>
@@ -388,6 +388,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                             <div>
                                 <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em]">Resultado de Gestión ({selectedMonth}/{selectedYear})</p>
                                 <h3 className="text-4xl font-black italic text-white tracking-tighter mt-1">Bs. {formatCurrency(totalDisponible)}</h3>
+                                <p className="text-[9px] font-bold text-slate-500 uppercase mt-2 italic">Calculado como Ingresos totales menos Egresos totales</p>
                             </div>
                         </CardContent>
                     </Card>
