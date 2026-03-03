@@ -47,19 +47,34 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [saldoInicCaja, setSaldoInicCaja] = useState(0.00);
     const [saldoInicChica, setSaldoInicChica] = useState(0.00);
 
+    // Saldos Finales Editables (Identicos a Tesorería por defecto)
+    const [saldoFinBDV, setSaldoFinBDV] = useState(0.00);
+    const [saldoFinCaja, setSaldoFinCaja] = useState(0.00);
+    const [saldoFinChica, setSaldoFinChica] = useState(0.00);
+
     const [egresosTesorería, setEgresosTesorería] = useState<{ concepto: string, monto: number, cuenta: string }[]>([]);
     const [ingresosMesBDV, setIngresosMesBDV] = useState(0);
     const [ingresosMesCaja, setIngresosMesCaja] = useState(0);
     const [notas, setNotas] = useState("");
 
-    // Saldos Reales de las Cuentas (Solo para visualización en tarjetas superiores)
+    // Saldos Reales de las Cuentas
     const [cuentasReales, setCuentasReales] = useState<any[]>([]);
 
     useEffect(() => {
         if (!workingCondoId) return;
         
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
-            setCuentasReales(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setCuentasReales(data);
+            
+            // Sincronizar automáticamente saldos finales con tesorería
+            const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre.toUpperCase().includes('BANCO'));
+            const caja = data.find(a => a.nombre.toUpperCase().includes('CAJA PRINCIPAL'));
+            const chica = data.find(a => a.nombre.toUpperCase().includes('CAJA CHICA'));
+            
+            if (bdv) setSaldoFinBDV(bdv.saldoActual || 0);
+            if (caja) setSaldoFinCaja(caja.saldoActual || 0);
+            if (chica) setSaldoFinChica(chica.saldoActual || 0);
         });
 
         const fetchData = async () => {
@@ -78,6 +93,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     setSaldoInicBDV(d.saldoInicBDV || 0);
                     setSaldoInicCaja(d.saldoInicCaja || 0);
                     setSaldoInicChica(d.saldoInicChica || 0);
+                    setSaldoFinBDV(d.saldoFinBDV || d.saldoFinalCuentas?.bdv || 0);
+                    setSaldoFinCaja(d.saldoFinCaja || d.saldoFinalCuentas?.caja || 0);
+                    setSaldoFinChica(d.saldoFinChica || d.saldoFinalCuentas?.chica || 0);
                     setNotas(d.notas || "");
                 }
 
@@ -88,7 +106,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     orderBy('fecha', 'desc')
                 ));
                 
-                // Ignorar traslados internos para el flujo operativo
                 const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(t => {
                     const desc = (t.descripcion || "").toUpperCase();
                     return !desc.includes('TRASLADO') && 
@@ -130,21 +147,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     
-    // RESULTADO DISPONIBLE: Diferencia estricta entre Ingresos y Egresos del balance
-    const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
-
-    // Cálculo de Saldos Finales por Cuenta para el bloque IV
-    const saldoFinalCuentas = useMemo(() => {
-        const egresosBDV = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('BANCO') || e.cuenta.toUpperCase().includes('BDV')).reduce((sum, e) => sum + e.monto, 0);
-        const egresosCaja = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA PRINCIPAL')).reduce((sum, e) => sum + e.monto, 0);
-        const egresosChica = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA CHICA')).reduce((sum, e) => sum + e.monto, 0);
-
-        return {
-            bdv: saldoInicBDV + ingresosMesBDV - egresosBDV,
-            caja: saldoInicCaja + ingresosMesCaja - egresosCaja,
-            chica: saldoInicChica - egresosChica
-        };
-    }, [egresosTesorería, saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
+    // DISPONIBILIDAD CONCILIADA: Suma de los saldos finales (editables)
+    const totalDisponible = useMemo(() => saldoFinBDV + saldoFinCaja + saldoFinChica, [saldoFinBDV, saldoFinCaja, saldoFinChica]);
 
     const lastDayOfMonthStr = useMemo(() => {
         return format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
@@ -234,9 +238,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [[`IV. SALDOS FINALES AL ${lastDayOfMonthStr}`, 'MONTO (BS.)']],
             body: [
-                ['Banco de Venezuela (Cierre)', formatCurrency(saldoFinalCuentas.bdv)],
-                ['Caja Principal (Cierre)', formatCurrency(saldoFinalCuentas.caja)],
-                ['Caja Chica (Cierre)', formatCurrency(saldoFinalCuentas.chica)]
+                ['Banco de Venezuela (Cierre)', formatCurrency(saldoFinBDV)],
+                ['Caja Principal (Cierre)', formatCurrency(saldoFinCaja)],
+                ['Caja Chica (Cierre)', formatCurrency(saldoFinChica)]
             ],
             headStyles: { fillColor: [30, 80, 180] },
             styles: { fontSize: 9, cellPadding: 2.5 },
@@ -277,10 +281,10 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', docId), {
                 periodo: docId, 
                 saldoInicBDV, saldoInicCaja, saldoInicChica,
+                saldoFinBDV, saldoFinCaja, saldoFinChica,
                 ingresosMesBDV, ingresosMesCaja,
                 egresos: egresosTesorería, 
                 totalIngresos, totalEgresos, totalDisponible,
-                saldoFinalCuentas,
                 notas, 
                 updatedAt: serverTimestamp()
             });
@@ -357,15 +361,15 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                 <TableBody>
                                     <TableRow className="border-b border-white/5">
                                         <TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Saldo Final Banco de Venezuela</TableCell>
-                                        <TableCell className="text-right font-black text-white italic pr-8">Bs. {formatCurrency(saldoFinalCuentas.bdv)}</TableCell>
+                                        <TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoFinBDV} onChange={e=>setSaldoFinBDV(Number(e.target.value))}/></TableCell>
                                     </TableRow>
                                     <TableRow className="border-b border-white/5">
                                         <TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Saldo Final Caja Principal</TableCell>
-                                        <TableCell className="text-right font-black text-white italic pr-8">Bs. {formatCurrency(saldoFinalCuentas.caja)}</TableCell>
+                                        <TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoFinCaja} onChange={e=>setSaldoFinCaja(Number(e.target.value))}/></TableCell>
                                     </TableRow>
                                     <TableRow className="border-b border-white/5">
                                         <TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Saldo Final Caja Chica</TableCell>
-                                        <TableCell className="text-right font-black text-white italic pr-8">Bs. {formatCurrency(saldoFinalCuentas.chica)}</TableCell>
+                                        <TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoFinChica} onChange={e=>setSaldoFinChica(Number(e.target.value))}/></TableCell>
                                     </TableRow>
                                     <TableRow className="bg-primary/20 border-none">
                                         <TableCell className="font-black text-primary text-[10px] uppercase italic px-8 py-6">DISPONIBILIDAD CONCILIADA</TableCell>
