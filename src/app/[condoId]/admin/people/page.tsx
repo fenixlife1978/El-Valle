@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home, Banknote } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type Role = 'propietario' | 'administrador';
 interface Property { street: string; house: string; }
@@ -45,6 +46,7 @@ interface Owner {
     properties: Property[];
     password?: string;
     condominioId?: string;
+    cedula?: string;
 }
 
 const emptyOwner: Owner = {
@@ -299,110 +301,114 @@ export default function OwnersManagement() {
                             {currentOwner.id ? 'Editar' : 'Nuevo'} <span className="text-primary">Perfil</span>
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-5 py-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Rol de Usuario</Label>
-                            <Select 
-                                value={currentOwner.role}
-                                onValueChange={(v: Role) => setCurrentOwner({...currentOwner, role: v})}
-                            >
-                                <SelectTrigger className="font-black uppercase text-[10px] h-12 rounded-xl bg-white/5 border-none">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-slate-950 border-white/10 text-white">
-                                    <SelectItem value="propietario" className="font-black italic">PROPIETARIO</SelectItem>
-                                    <SelectItem value="administrador" className="font-black italic">ADMINISTRADOR</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Nombre Completo</Label>
-                            <Input 
-                                className="font-black uppercase h-12 rounded-xl bg-white/5 border-none text-white italic"
-                                placeholder="NOMBRE Y APELLIDO"
-                                value={currentOwner.name}
-                                onChange={(e) => setCurrentOwner({...currentOwner, name: e.target.value})}
-                            />
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-primary ml-2 tracking-widest flex items-center gap-2">
-                                <Banknote className="h-3 w-3" /> Saldo a Favor (Bs.)
-                            </Label>
-                            <Input 
-                                type="number"
-                                step="0.01"
-                                className="font-black h-12 rounded-xl bg-white/5 border-none text-emerald-500 text-xl italic"
-                                placeholder="0.00"
-                                value={currentOwner.balance}
-                                onChange={(e) => setCurrentOwner({...currentOwner, balance: parseFloat(e.target.value) || 0})}
-                            />
-                        </div>
-
-                        {currentOwner.role === 'propietario' && (
-                            <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
-                                <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Calle / Sector</Label>
-                                    <div className="relative">
-                                        <Input 
-                                            className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
-                                            placeholder="CALLE 1"
-                                            value={currentOwner.properties?.[0]?.street || ''}
-                                            onChange={(e) => {
-                                                const props = [...(currentOwner.properties || [])];
-                                                if (props.length === 0) props.push({ street: '', house: '' });
-                                                props[0].street = e.target.value;
-                                                setCurrentOwner({...currentOwner, properties: props});
-                                            }}
-                                        />
-                                        <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                                    </div>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Casa / Unidad</Label>
-                                    <div className="relative">
-                                        <Input 
-                                            className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
-                                            placeholder="CASA 10"
-                                            value={currentOwner.properties?.[0]?.house || ''}
-                                            onChange={(e) => {
-                                                const props = [...(currentOwner.properties || [])];
-                                                if (props.length === 0) props.push({ street: '', house: '' });
-                                                props[0].house = e.target.value;
-                                                setCurrentOwner({...currentOwner, properties: props});
-                                            }}
-                                        />
-                                        <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Correo Electrónico</Label>
-                            <Input 
-                                type="email"
-                                disabled={!!currentOwner.id}
-                                className="font-bold h-12 rounded-xl bg-white/5 border-none text-white italic"
-                                placeholder="correo@ejemplo.com"
-                                value={currentOwner.email || ''}
-                                onChange={(e) => setCurrentOwner({...currentOwner, email: e.target.value})}
-                            />
-                        </div>
-
-                        {!currentOwner.id && (
+                    
+                    <ScrollArea className="max-h-[60vh] pr-4">
+                        <div className="space-y-5 py-4">
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Contraseña Inicial</Label>
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Rol de Usuario</Label>
+                                <Select 
+                                    value={currentOwner.role}
+                                    onValueChange={(v: Role) => setCurrentOwner({...currentOwner, role: v})}
+                                >
+                                    <SelectTrigger className="font-black uppercase text-[10px] h-12 rounded-xl bg-white/5 border-none">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-950 border-white/10 text-white">
+                                        <SelectItem value="propietario" className="font-black italic">PROPIETARIO</SelectItem>
+                                        <SelectItem value="administrador" className="font-black italic">ADMINISTRADOR</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Nombre Completo</Label>
                                 <Input 
-                                    type="password"
-                                    placeholder="••••••"
-                                    className="h-12 rounded-xl bg-white/5 border-none text-white"
-                                    onChange={(e) => setCurrentOwner({...currentOwner, password: e.target.value})}
+                                    className="font-black uppercase h-12 rounded-xl bg-white/5 border-none text-white italic"
+                                    placeholder="NOMBRE Y APELLIDO"
+                                    value={currentOwner.name}
+                                    onChange={(e) => setCurrentOwner({...currentOwner, name: e.target.value})}
                                 />
                             </div>
-                        )}
-                    </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-primary ml-2 tracking-widest flex items-center gap-2">
+                                    <Banknote className="h-3 w-3" /> Saldo a Favor (Bs.)
+                                </Label>
+                                <Input 
+                                    type="number"
+                                    step="0.01"
+                                    className="font-black h-12 rounded-xl bg-white/5 border-none text-emerald-500 text-xl italic"
+                                    placeholder="0.00"
+                                    value={currentOwner.balance}
+                                    onChange={(e) => setCurrentOwner({...currentOwner, balance: parseFloat(e.target.value) || 0})}
+                                />
+                            </div>
+
+                            {currentOwner.role === 'propietario' && (
+                                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Calle / Sector</Label>
+                                        <div className="relative">
+                                            <Input 
+                                                className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
+                                                placeholder="CALLE 1"
+                                                value={currentOwner.properties?.[0]?.street || ''}
+                                                onChange={(e) => {
+                                                    const props = [...(currentOwner.properties || [])];
+                                                    if (props.length === 0) props.push({ street: '', house: '' });
+                                                    props[0].street = e.target.value;
+                                                    setCurrentOwner({...currentOwner, properties: props});
+                                                }}
+                                            />
+                                            <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Casa / Unidad</Label>
+                                        <div className="relative">
+                                            <Input 
+                                                className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
+                                                placeholder="CASA 10"
+                                                value={currentOwner.properties?.[0]?.house || ''}
+                                                onChange={(e) => {
+                                                    const props = [...(currentOwner.properties || [])];
+                                                    if (props.length === 0) props.push({ street: '', house: '' });
+                                                    props[0].house = e.target.value;
+                                                    setCurrentOwner({...currentOwner, properties: props});
+                                                }}
+                                            />
+                                            <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Correo Electrónico</Label>
+                                <Input 
+                                    type="email"
+                                    disabled={!!currentOwner.id}
+                                    className="font-bold h-12 rounded-xl bg-white/5 border-none text-white italic"
+                                    placeholder="correo@ejemplo.com"
+                                    value={currentOwner.email || ''}
+                                    onChange={(e) => setCurrentOwner({...currentOwner, email: e.target.value})}
+                                />
+                            </div>
+
+                            {!currentOwner.id && (
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Contraseña Inicial</Label>
+                                    <Input 
+                                        type="password"
+                                        placeholder="••••••"
+                                        className="h-12 rounded-xl bg-white/5 border-none text-white"
+                                        onChange={(e) => setCurrentOwner({...currentOwner, password: e.target.value})}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </ScrollArea>
+
                     <DialogFooter className="gap-2 mt-4">
                         <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-black uppercase text-[10px] rounded-xl h-12 text-white/40">Cancelar</Button>
                         <Button onClick={handleSaveOwner} disabled={loading} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-[0.2em] flex-1 h-14 rounded-2xl shadow-xl italic">
