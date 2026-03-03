@@ -84,7 +84,14 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     orderBy('fecha', 'desc')
                 ));
                 
-                const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+                // REGLA CONTABLE: Filtrar traslados y movimientos internos para no inflar ingresos/egresos
+                const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(t => {
+                    const desc = (t.descripcion || "").toUpperCase();
+                    return !desc.includes('TRASLADO') && 
+                           !desc.includes('RECEPCIÓN') && 
+                           !desc.includes('TRANSFERENCIA ENTRE CUENTAS') &&
+                           !desc.includes('INGRESO DESDE');
+                });
 
                 const egresos = txs.filter(t => t.tipo === 'egreso').map(t => ({ 
                     concepto: t.descripcion, 
@@ -163,7 +170,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(12).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 38 : margin, 14);
-        doc.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${info.rif}`, info.logo ? 38 : margin, 20);
+        doc.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: J-40587208-0`, info.logo ? 38 : margin, 20);
         
         doc.setFillColor(255, 255, 255);
         doc.rect(pageWidth - margin - 45, 7, 45, 10, 'F');
