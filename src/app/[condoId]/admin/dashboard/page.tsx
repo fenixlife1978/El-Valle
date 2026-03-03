@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, Building2, Users, Banknote, Landmark } from "lucide-react"; 
 import { collection, query, onSnapshot, doc, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { format, startOfMonth, isAfter } from "date-fns";
+import { format, startOfMonth, isAfter, isEqual } from "date-fns";
 import { es } from "date-fns/locale";
 import CarteleraDigital from "@/components/CarteleraDigital";
 import { useAuth } from "@/hooks/use-auth";
@@ -87,7 +87,10 @@ export default function AdminDashboardPage({ params }: PageProps) {
                         if (data.status === 'pendiente') {
                             pendingCount++;
                         } else if (data.status === 'aprobado') {
-                            if (fechaPago && isAfter(fechaPago, inicioDeMes)) {
+                            // CORRECCIÓN: Comparación inclusiva para capturar el primer día del mes
+                            const esDeEsteMes = fechaPago && (isAfter(fechaPago, inicioDeMes) || isEqual(fechaPago, inicioDeMes));
+                            
+                            if (esDeEsteMes) {
                                 const amount = data.totalAmount || 0;
                                 const method = data.paymentMethod;
     
