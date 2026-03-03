@@ -52,16 +52,23 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [ingresosMesCaja, setIngresosMesCaja] = useState(0);
     const [notas, setNotas] = useState("");
 
-    // EFAS: Ya no usamos onSnapshot de cuentas porque el balance debe ser retroactivo y calculado
+    // Saldos Reales de las Cuentas
+    const [cuentasReales, setCuentasReales] = useState<any[]>([]);
+
     useEffect(() => {
         if (!workingCondoId) return;
+        
+        const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
+            setCuentasReales(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
         const fetchData = async () => {
             setLoading(true);
             try {
                 const year = parseInt(selectedYear), month = parseInt(selectedMonth) - 1;
                 const from = startOfMonth(new Date(year, month, 1)), to = endOfMonth(from);
                 
-                // Buscar si ya existe un balance guardado para este periodo para cargar los saldos iniciales previos
+                // Buscar si ya existe un balance guardado
                 const docId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
                 const savedRef = doc(db, 'condominios', workingCondoId, 'financial_statements', docId);
                 const savedSnap = await getDoc(savedRef);
@@ -81,7 +88,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     orderBy('fecha', 'desc')
                 ));
                 
-                // REGLA DE ORO: Ignorar traslados internos para el Resultado de Gestión
+                // Ignorar traslados internos
                 const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(t => {
                     const desc = (t.descripcion || "").toUpperCase();
                     return !desc.includes('TRASLADO') && 
@@ -117,26 +124,12 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             }
         };
         fetchData();
+        return () => unsubCuentas();
     }, [selectedMonth, selectedYear, workingCondoId]);
 
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    
-    // REGLA DE NEGOCIO: Total Disponible = Resultado Aritmético estricto del período
     const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
-
-    // Cálculo de saldos finales por cuenta basados en la retroactividad
-    const finalBreakdown = useMemo(() => {
-        const egresosBDV = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('BANCO') || e.cuenta.toUpperCase().includes('BDV')).reduce((sum, e) => sum + e.monto, 0);
-        const egresosCaja = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA PRINCIPAL')).reduce((sum, e) => sum + e.monto, 0);
-        const egresosChica = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA CHICA')).reduce((sum, e) => sum + e.monto, 0);
-
-        return {
-            bdv: saldoInicBDV + ingresosMesBDV - egresosBDV,
-            caja: saldoInicCaja + ingresosMesCaja - egresosCaja,
-            chica: saldoInicChica - egresosChica
-        };
-    }, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja, egresosTesorería]);
 
     const generatePdfBlob = async (output: 'download' | 'share' = 'download') => {
         const { default: jsPDF } = await import('jspdf');
@@ -226,20 +219,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         doc.setTextColor(30, 80, 180).setFontSize(11);
         doc.text('TOTAL DISPONIBLE:', 130, finalY + 15); doc.text(`Bs. ${formatCurrency(totalDisponible)}`, 196, finalY + 15, { align: 'right' });
 
-        doc.setTextColor(0, 0, 0).setFontSize(10).text('SALDOS FINALES DE TESORERÍA (CALCULADOS AL CIERRE):', margin, finalY + 25);
-        autoTable(doc, {
-            startY: finalY + 28,
-            head: [['CUENTA', 'SALDO AL CIERRE (BS.)']],
-            body: [
-                ['BANCO DE VENEZUELA', formatCurrency(finalBreakdown.bdv)],
-                ['CAJA PRINCIPAL (EFECTIVO)', formatCurrency(finalBreakdown.caja)],
-                ['CAJA CHICA', formatCurrency(finalBreakdown.chica)]
-            ],
-            theme: 'grid',
-            headStyles: { fillColor: [51, 65, 85] },
-            styles: { fontSize: 9 }
-        });
-
         if (output === 'share') {
             const blob = doc.output('blob');
             const file = new File([blob], `Balance_General_${info.name.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
@@ -268,7 +247,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 ingresosMesBDV, ingresosMesCaja,
                 egresos: egresosTesorería, 
                 totalIngresos, totalEgresos, totalDisponible,
-                finalBreakdown,
                 notas, 
                 updatedAt: serverTimestamp()
             });
@@ -297,9 +275,15 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
             {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div> : <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">BDV (Al Cierre)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(finalBreakdown.bdv)}</p></div><Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Caja Principal (Al Cierre)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(finalBreakdown.caja)}</p></div><Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-[#F28705] italic">Caja Chica (Al Cierre)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(finalBreakdown.chica)}</p></div><Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    {cuentasReales.map(acc => (
+                        <Card key={acc.id} className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105">
+                            <div className="relative z-10">
+                                <p className="text-[10px] font-black uppercase text-primary italic">{acc.nombre}</p>
+                                <p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(acc.saldoActual)}</p>
+                            </div>
+                            {acc.nombre.includes('BANCO') ? <Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/> : acc.nombre.includes('CAJA PRINCIPAL') ? <Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/> : <Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/>}
+                        </Card>
+                    ))}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
@@ -326,7 +310,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                             </TableRow>
                         ))}
                     </TableBody>
-                    <TableFooter className="bg-red-500/10 border-none"><TableRow className="border-none"><TableCell className="font-black text-red-400 text-[10px] uppercase italic">Total Egresos</TableCell><TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresos)}</TableCell></TableRow></TableFooter></Table></CardContent></Card>
+                    <TableFooter className="bg-red-50/10 border-none"><TableRow className="border-none"><TableCell className="font-black text-red-400 text-[10px] uppercase italic">Total Egresos</TableCell><TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresos)}</TableCell></TableRow></TableFooter></Table></CardContent></Card>
                 </div>
 
                 <Card className="rounded-[2rem] bg-slate-950 border border-primary/20 mt-8 shadow-xl">
@@ -339,11 +323,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                 <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión (Periodo {selectedMonth}/{selectedYear})</p>
                                 <h3 className="text-4xl font-black italic text-white tracking-tighter">Bs. {formatCurrency(totalDisponible)}</h3>
                             </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="text-right border-r border-white/10 pr-4"><p className="text-[8px] text-white/40 uppercase">Cierre BDV</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.bdv)}</p></div>
-                            <div className="text-right border-r border-white/10 pr-4"><p className="text-[8px] text-white/40 uppercase">Cierre Caja</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.caja)}</p></div>
-                            <div className="text-right"><p className="text-[8px] text-white/40 uppercase">Cierre Chica</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.chica)}</p></div>
                         </div>
                     </CardContent>
                 </Card>
