@@ -31,7 +31,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home, Banknote } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home, Banknote, Plus, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -209,7 +209,7 @@ export default function OwnersManagement() {
                     <>
                         <div className="flex items-start gap-2 text-sm text-white/60 font-bold">
                             <Building className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                            <span className="uppercase tracking-tight italic">
+                            <span className="uppercase tracking-tight italic leading-tight">
                                 {user.properties?.length > 0 
                                     ? user.properties.map(p => `${p.street} ${p.house}`).join(' | ') 
                                     : "Sin ubicación"}
@@ -345,41 +345,74 @@ export default function OwnersManagement() {
                             </div>
 
                             {currentOwner.role === 'propietario' && (
-                                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Calle / Sector</Label>
-                                        <div className="relative">
-                                            <Input 
-                                                className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
-                                                placeholder="CALLE 1"
-                                                value={currentOwner.properties?.[0]?.street || ''}
-                                                onChange={(e) => {
-                                                    const props = [...(currentOwner.properties || [])];
-                                                    if (props.length === 0) props.push({ street: '', house: '' });
-                                                    props[0].street = e.target.value;
-                                                    setCurrentOwner({...currentOwner, properties: props});
-                                                }}
-                                            />
-                                            <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                                        </div>
+                                <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
+                                    <div className="flex items-center justify-between px-2">
+                                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Unidades Vinculadas</Label>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            onClick={() => {
+                                                const props = [...(currentOwner.properties || [])];
+                                                props.push({ street: '', house: '' });
+                                                setCurrentOwner({...currentOwner, properties: props});
+                                            }}
+                                            className="h-7 text-[9px] font-black uppercase border border-primary/20 text-primary hover:bg-primary/10 rounded-lg"
+                                        >
+                                            <Plus className="h-3 w-3 mr-1" /> Añadir Unidad
+                                        </Button>
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Casa / Unidad</Label>
-                                        <div className="relative">
-                                            <Input 
-                                                className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
-                                                placeholder="CASA 10"
-                                                value={currentOwner.properties?.[0]?.house || ''}
-                                                onChange={(e) => {
-                                                    const props = [...(currentOwner.properties || [])];
-                                                    if (props.length === 0) props.push({ street: '', house: '' });
-                                                    props[0].house = e.target.value;
-                                                    setCurrentOwner({...currentOwner, properties: props});
-                                                }}
-                                            />
-                                            <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                    
+                                    {currentOwner.properties.map((prop, index) => (
+                                        <div key={index} className="p-4 bg-white/5 rounded-2xl border border-white/5 relative group/prop">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[9px] font-bold uppercase text-white/30 ml-2 tracking-widest">Calle / Sector</Label>
+                                                    <div className="relative">
+                                                        <Input 
+                                                            className="font-black uppercase h-10 rounded-xl bg-slate-800 border-none pl-9 text-white italic text-xs"
+                                                            placeholder="CALLE 1"
+                                                            value={prop.street || ''}
+                                                            onChange={(e) => {
+                                                                const props = [...currentOwner.properties];
+                                                                props[index].street = e.target.value;
+                                                                setCurrentOwner({...currentOwner, properties: props});
+                                                            }}
+                                                        />
+                                                        <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[9px] font-bold uppercase text-white/30 ml-2 tracking-widest">Casa / Unidad</Label>
+                                                    <div className="relative">
+                                                        <Input 
+                                                            className="font-black uppercase h-10 rounded-xl bg-slate-800 border-none pl-9 text-white italic text-xs"
+                                                            placeholder="CASA 10"
+                                                            value={prop.house || ''}
+                                                            onChange={(e) => {
+                                                                const props = [...currentOwner.properties];
+                                                                props[index].house = e.target.value;
+                                                                setCurrentOwner({...currentOwner, properties: props});
+                                                            }}
+                                                        />
+                                                        <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {currentOwner.properties.length > 1 && (
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-white hover:bg-red-600 shadow-lg opacity-0 group-hover/prop:opacity-100 transition-opacity"
+                                                    onClick={() => {
+                                                        const props = currentOwner.properties.filter((_, i) => i !== index);
+                                                        setCurrentOwner({...currentOwner, properties: props});
+                                                    }}
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            )}
                                         </div>
-                                    </div>
+                                    ))}
                                 </div>
                             )}
 
