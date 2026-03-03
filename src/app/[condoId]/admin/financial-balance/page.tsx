@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, CalendarClock } from "lucide-react";
+import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText, Scale, CalendarClock } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
@@ -71,7 +71,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             
             setCuentasReales(data);
             
-            // Sincronizar automáticamente saldos finales (Casting a any para evitar error TS)
+            // Sincronizar automáticamente saldos finales con tesorería en carga inicial
             const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre?.toUpperCase().includes('BANCO'));
             const caja = data.find(a => a.nombre?.toUpperCase().includes('CAJA PRINCIPAL'));
             const chica = data.find(a => a.nombre?.toUpperCase().includes('CAJA CHICA'));
@@ -319,7 +319,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                 <p className="text-[10px] font-black uppercase text-primary italic">{acc.nombre}</p>
                                 <p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(acc.saldoActual)}</p>
                             </div>
-                            {acc.nombre.includes('BANCO') ? <Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/> : acc.nombre.includes('CAJA PRINCIPAL') ? <Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/> : <Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/>}
+                            {acc.nombre?.includes('BANCO') ? <Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/> : acc.nombre?.includes('CAJA PRINCIPAL') ? <Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/> : <Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/>}
                         </Card>
                     ))}
                 </div>

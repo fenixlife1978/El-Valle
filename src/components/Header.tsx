@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,6 +7,7 @@ import { db, auth } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { Building2, Loader2, Power } from 'lucide-react';
+import { SYSTEM_LOGO } from '@/lib/constants';
 
 export default function Header() {
     const params = useParams();
@@ -78,7 +78,7 @@ export default function Header() {
                     {info?.logo ? (
                         <img src={info.logo} alt="Logo" className="h-full w-full object-cover" />
                     ) : (
-                        <Building2 className="h-6 w-6 md:h-7 md:w-7 text-slate-400" />
+                        <img src={SYSTEM_LOGO} alt="EFAS Logo" className="h-full w-full object-cover p-1" />
                     )}
                 </div>
                 
