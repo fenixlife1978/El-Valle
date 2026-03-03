@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Textarea } from "@/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText, Scale, CalendarClock } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -131,6 +131,19 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
 
+    // Cálculo de Saldos Finales por Cuenta
+    const saldoFinalCuentas = useMemo(() => {
+        const egresosBDV = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('BANCO') || e.cuenta.toUpperCase().includes('BDV')).reduce((sum, e) => sum + e.monto, 0);
+        const egresosCaja = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA PRINCIPAL')).reduce((sum, e) => sum + e.monto, 0);
+        const egresosChica = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA CHICA')).reduce((sum, e) => sum + e.monto, 0);
+
+        return {
+            bdv: saldoInicBDV + ingresosMesBDV - egresosBDV,
+            caja: saldoInicCaja + ingresosMesCaja - egresosCaja,
+            chica: saldoInicChica - egresosChica
+        };
+    }, [egresosTesorería, saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
+
     const generatePdfBlob = async (output: 'download' | 'share' = 'download') => {
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
@@ -139,6 +152,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const period = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
         const margin = 14;
         const pageWidth = doc.internal.pageSize.getWidth();
+        const lastDayStr = format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
 
         const canvas = document.createElement('canvas');
         const barcodeValue = `BAL-${selectedYear}${selectedMonth.padStart(2, '0')}-${workingCondoId.substring(0, 6).toUpperCase()}`;
@@ -211,6 +225,20 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' }
         });
 
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [[`IV. SALDOS FINALES AL ${lastDayStr}`, 'MONTO (BS.)']],
+            body: [
+                ['Banco de Venezuela (Cierre)', formatCurrency(saldoFinalCuentas.bdv)],
+                ['Caja Principal (Cierre)', formatCurrency(saldoFinalCuentas.caja)],
+                ['Caja Chica (Cierre)', formatCurrency(saldoFinalCuentas.chica)]
+            ],
+            headStyles: { fillColor: [30, 80, 180] },
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            foot: [['TOTAL DISPONIBILIDAD CONCILIADA', formatCurrency(totalDisponible)]],
+            footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' }
+        });
+
         let finalY = (doc as any).lastAutoTable.finalY + 10;
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('TOTAL INGRESOS:', 130, finalY); doc.text(`Bs. ${formatCurrency(totalIngresos)}`, 196, finalY, { align: 'right' });
@@ -247,12 +275,17 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 ingresosMesBDV, ingresosMesCaja,
                 egresos: egresosTesorería, 
                 totalIngresos, totalEgresos, totalDisponible,
+                saldoFinalCuentas,
                 notas, 
                 updatedAt: serverTimestamp()
             });
             toast({ title: "Balance Guardado" });
         } catch (e) { toast({ variant: 'destructive', title: "Error" }); } finally { setSaving(false); }
     };
+
+    const lastDayOfMonthStr = useMemo(() => {
+        return format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
+    }, [selectedMonth, selectedYear]);
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-8 bg-[#1A1D23] min-h-screen font-montserrat text-white italic">
@@ -313,19 +346,47 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     <TableFooter className="bg-red-50/10 border-none"><TableRow className="border-none"><TableCell className="font-black text-red-400 text-[10px] uppercase italic">Total Egresos</TableCell><TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresos)}</TableCell></TableRow></TableFooter></Table></CardContent></Card>
                 </div>
 
-                <Card className="rounded-[2rem] bg-slate-950 border border-primary/20 mt-8 shadow-xl">
-                    <CardContent className="p-8 flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div className="flex items-center gap-4">
-                            <div className="p-4 bg-primary/10 rounded-2xl">
-                                <CalendarClock className="h-10 w-10 text-primary" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+                    <Card className="rounded-[2.5rem] bg-slate-950 border border-primary/20 shadow-xl overflow-hidden">
+                        <CardHeader className="bg-primary/10 p-6 border-b border-white/5">
+                            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-primary italic">IV. Saldos Finales al {lastDayOfMonthStr}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableBody>
+                                    <TableRow className="border-b border-white/5">
+                                        <TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Saldo Final Banco de Venezuela</TableCell>
+                                        <TableCell className="text-right font-black text-white italic pr-8">Bs. {formatCurrency(saldoFinalCuentas.bdv)}</TableCell>
+                                    </TableRow>
+                                    <TableRow className="border-b border-white/5">
+                                        <TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Saldo Final Caja Principal</TableCell>
+                                        <TableCell className="text-right font-black text-white italic pr-8">Bs. {formatCurrency(saldoFinalCuentas.caja)}</TableCell>
+                                    </TableRow>
+                                    <TableRow className="border-b border-white/5">
+                                        <TableCell className="font-black text-white text-[10px] uppercase italic px-8 py-4">Saldo Final Caja Chica</TableCell>
+                                        <TableCell className="text-right font-black text-white italic pr-8">Bs. {formatCurrency(saldoFinalCuentas.chica)}</TableCell>
+                                    </TableRow>
+                                    <TableRow className="bg-primary/20 border-none">
+                                        <TableCell className="font-black text-primary text-[10px] uppercase italic px-8 py-6">DISPONIBILIDAD CONCILIADA</TableCell>
+                                        <TableCell className="text-right font-black text-white text-xl italic pr-8">Bs. {formatCurrency(totalDisponible)}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-[2rem] bg-slate-950 border border-emerald-500/20 shadow-xl flex items-center justify-center">
+                        <CardContent className="p-8 flex flex-col items-center text-center gap-4">
+                            <div className="p-4 bg-emerald-500/10 rounded-2xl">
+                                <CalendarClock className="h-10 w-10 text-emerald-500" />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión (Periodo {selectedMonth}/{selectedYear})</p>
-                                <h3 className="text-4xl font-black italic text-white tracking-tighter">Bs. {formatCurrency(totalDisponible)}</h3>
+                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em]">Resultado de Gestión ({selectedMonth}/{selectedYear})</p>
+                                <h3 className="text-4xl font-black italic text-white tracking-tighter mt-1">Bs. {formatCurrency(totalDisponible)}</h3>
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                </div>
 
                 <div className="pt-10"><Label className="text-[10px] font-black uppercase text-white/40 ml-4 italic">Notas y Observaciones del Balance</Label><Textarea className="rounded-[2rem] bg-slate-900 border-white/5 text-white font-bold p-6 min-h-[120px] shadow-2xl italic mt-2 uppercase text-xs focus-visible:ring-primary" value={notas} onChange={e => setNotas(e.target.value)} placeholder="Escriba aquí los detalles relevantes..." /></div>
                 <div className="flex justify-end pt-6"><Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 h-14 rounded-2xl font-black uppercase px-12 shadow-2xl shadow-primary/20 italic">{saving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance Oficial</Button></div>
