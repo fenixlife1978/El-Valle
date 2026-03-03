@@ -24,12 +24,14 @@ export default function LandingPage() {
       {/* HEADER ESTRUCTURAL */}
       <header className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-white/5 sticky top-0 bg-[#1A1D23]/90 backdrop-blur-xl z-50">
         <div className="flex items-center gap-4">
-          <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-2xl">
+          <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-2xl flex flex-col items-center justify-center min-w-[55px] min-h-[55px]">
             <img 
               src={SYSTEM_LOGO} 
               alt="EFAS Logo" 
-              className="h-10 w-10 object-cover rounded-lg"
+              className="h-8 w-8 object-cover rounded-lg"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
+            <span className="text-[10px] font-black text-white mt-0.5 tracking-tighter">EFAS</span>
           </div>
           <div className="flex flex-col">
             <h1 className="text-xl md:text-2xl font-[900] italic tracking-tighter leading-none uppercase">
@@ -59,11 +61,17 @@ export default function LandingPage() {
         
         <div className="relative mb-14 group">
           <div className="absolute inset-0 bg-[#F28705]/20 blur-[80px] rounded-full transition-all group-hover:bg-[#F28705]/30" />
-          <img 
-            src={SYSTEM_LOGO} 
-            alt="EFAS Central" 
-            className="relative h-48 w-48 md:h-72 md:w-72 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 object-cover transition-transform duration-700 hover:rotate-2"
-          />
+          <div className="relative h-48 w-48 md:h-72 md:w-72 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden bg-card flex flex-col items-center justify-center">
+            <div className="absolute top-4 left-0 right-0 z-10 text-center">
+                <span className="text-white font-bold text-xs md:text-sm tracking-widest uppercase opacity-80">EFAS Central</span>
+            </div>
+            <img 
+              src={SYSTEM_LOGO} 
+              alt="EFAS Central" 
+              className="w-full h-full object-cover transition-transform duration-700 hover:rotate-2 scale-105"
+              onError={(e) => { e.currentTarget.style.opacity = '0.3'; }}
+            />
+          </div>
         </div>
 
         <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-full px-6 py-2 mb-10 backdrop-blur-sm">

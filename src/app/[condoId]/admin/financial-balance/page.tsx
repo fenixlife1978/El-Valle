@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -64,14 +65,12 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         if (!workingCondoId) return;
         
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
-            // Filtramos Banco Mercantil de la vista
             const data = snap.docs
                 .map(d => ({ id: d.id, ...d.data() } as any))
                 .filter(a => !a.nombre?.toUpperCase().includes('MERCANTIL'));
             
             setCuentasReales(data);
             
-            // Sincronizar automáticamente saldos finales con tesorería en carga inicial
             const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre?.toUpperCase().includes('BANCO'));
             const caja = data.find(a => a.nombre?.toUpperCase().includes('CAJA PRINCIPAL'));
             const chica = data.find(a => a.nombre?.toUpperCase().includes('CAJA CHICA'));
@@ -112,7 +111,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(t => {
                     const desc = (t.descripcion || "").toUpperCase();
                     const accName = (t.nombreCuenta || "").toUpperCase();
-                    // Excluir Mercantil y traslados internos
                     return !accName.includes('MERCANTIL') &&
                            !desc.includes('TRASLADO') && 
                            !desc.includes('RECEPCIÓN') && 
@@ -150,7 +148,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         return () => unsubCuentas();
     }, [selectedMonth, selectedYear, workingCondoId]);
 
-    // Lógica: Solo I y II suman para Ingresos. Caja chica no es ingreso del mes.
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
