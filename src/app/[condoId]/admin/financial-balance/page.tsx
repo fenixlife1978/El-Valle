@@ -66,7 +66,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const data = snap.docs
-                .map(d => ({ id: d.id, ...d.data() } as any))
+                .map(d => ({ id: d.id, ...d.data() } as { id: string, nombre: string, saldoActual: number }))
                 .filter(a => !a.nombre?.toUpperCase().includes('MERCANTIL'));
             
             setCuentasReales(data);

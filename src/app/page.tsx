@@ -4,34 +4,24 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight, Zap } from 'lucide-react';
-import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
+import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight, Zap, Shield } from 'lucide-react';
+import { COMPANY_NAME } from '@/lib/constants';
 
-/**
- * EFAS CondoSys - Landing Page Principal
- * Esta página es el punto de entrada para usuarios no autenticados.
- * Redirige a /welcome para iniciar el flujo de selección de portal.
- */
 export default function LandingPage() {
   const router = useRouter();
 
-  // Función de navegación centralizada
   const handleStart = () => router.push('/welcome');
 
   return (
     <div className="min-h-screen bg-[#1A1D23] text-white font-sans selection:bg-[#F28705] selection:text-white overflow-x-hidden">
       
-      {/* HEADER ESTRUCTURAL */}
       <header className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-white/5 sticky top-0 bg-[#1A1D23]/90 backdrop-blur-xl z-50">
         <div className="flex items-center gap-4">
           <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-2xl flex flex-col items-center justify-center min-w-[55px] min-h-[55px]">
-            <img 
-              src={SYSTEM_LOGO} 
-              alt="EFAS Logo" 
-              className="h-8 w-8 object-cover rounded-lg"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-            <span className="text-[10px] font-black text-white mt-0.5 tracking-tighter">EFAS</span>
+            <div className="h-8 w-8 bg-[#F28705] rounded-lg flex items-center justify-center">
+                <Shield className="text-white h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-black text-white mt-0.5 tracking-tighter uppercase">EFAS</span>
           </div>
           <div className="flex flex-col">
             <h1 className="text-xl md:text-2xl font-[900] italic tracking-tighter leading-none uppercase">
@@ -54,23 +44,19 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* HERO SECTION */}
       <main className="flex flex-col items-center justify-center text-center px-6 pt-20 pb-32 relative">
-        {/* Efectos de fondo (Glow) */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[500px] bg-[#F28705]/5 blur-[120px] rounded-full -z-10" />
         
         <div className="relative mb-14 group">
           <div className="absolute inset-0 bg-[#F28705]/20 blur-[80px] rounded-full transition-all group-hover:bg-[#F28705]/30" />
           <div className="relative h-48 w-48 md:h-72 md:w-72 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden bg-card flex flex-col items-center justify-center">
-            <div className="absolute top-4 left-0 right-0 z-10 text-center">
-                <span className="text-white font-bold text-xs md:text-sm tracking-widest uppercase opacity-80">EFAS Central</span>
+            <div className="bg-[#1A1D23] w-full h-full flex flex-col items-center justify-center p-8">
+                <div className="bg-[#F28705] p-6 rounded-[2rem] shadow-2xl mb-4">
+                    <Shield className="h-16 w-16 md:h-24 md:w-24 text-white" />
+                </div>
+                <h3 className="text-white font-black text-xl md:text-2xl tracking-widest uppercase italic">EFAS Central</h3>
+                <p className="text-[#F28705] text-[10px] font-black uppercase tracking-[0.4em] mt-2">Nucleus</p>
             </div>
-            <img 
-              src={SYSTEM_LOGO} 
-              alt="EFAS Central" 
-              className="w-full h-full object-cover transition-transform duration-700 hover:rotate-2 scale-105"
-              onError={(e) => { e.currentTarget.style.opacity = '0.3'; }}
-            />
           </div>
         </div>
 
@@ -109,7 +95,6 @@ export default function LandingPage() {
         </div>
       </main>
 
-      {/* MODULES SECTION */}
       <section className="bg-[#14161B] py-24 md:py-32 border-t border-white/5 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 relative z-10">
           <div className="flex flex-col items-center text-center mb-24">
@@ -120,7 +105,6 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-            {/* Cobranza */}
             <div className="bg-[#1E2128]/50 p-8 md:p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
               <div className="w-20 h-20 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-8 text-[#0070f3] group-hover:scale-110 transition-transform">
                 <Wallet size={42} />
@@ -131,7 +115,6 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Panel */}
             <div className="bg-[#1E2128]/50 p-8 md:p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
               <div className="w-20 h-20 bg-[#F28705]/10 rounded-3xl flex items-center justify-center mb-8 text-[#F28705] group-hover:scale-110 transition-transform">
                 <LayoutDashboard size={42} />
@@ -142,7 +125,6 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Seguridad */}
             <div className="bg-[#1E2128]/50 p-8 md:p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
               <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-8 text-emerald-500 group-hover:scale-110 transition-transform">
                 <ShieldCheck size={42} />
@@ -156,11 +138,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FOOTER */}
       <footer className="py-24 text-center border-t border-white/5 bg-[#1A1D23]">
         <div className="flex flex-col items-center gap-8">
           <div className="flex items-center gap-4 opacity-40 hover:opacity-100 transition-opacity duration-500 cursor-default">
-            <img src={SYSTEM_LOGO} alt="EFAS" className="h-8 w-8 grayscale hover:grayscale-0 transition-all" />
+            <div className="h-8 w-8 bg-white/20 rounded flex items-center justify-center grayscale hover:grayscale-0">
+                <Shield className="text-white h-5 w-5" />
+            </div>
             <span className="font-black italic tracking-tighter text-lg uppercase">EFAS CONDOSYS</span>
           </div>
           <div className="flex flex-col gap-2">
