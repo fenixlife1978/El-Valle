@@ -66,14 +66,21 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const data = snap.docs
-                .map(d => ({ id: d.id, ...d.data() } as { id: string, nombre: string, saldoActual: number }))
-                .filter(a => !a.nombre?.toUpperCase().includes('MERCANTIL'));
+                .map(d => {
+                    const docData = d.data();
+                    return { 
+                        id: d.id, 
+                        nombre: (docData.nombre || 'SIN NOMBRE').toString(), 
+                        saldoActual: Number(docData.saldoActual || 0) 
+                    };
+                })
+                .filter(a => !a.nombre.toUpperCase().includes('MERCANTIL'));
             
             setCuentasReales(data);
             
-            const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre?.toUpperCase().includes('BANCO'));
-            const caja = data.find(a => a.nombre?.toUpperCase().includes('CAJA PRINCIPAL'));
-            const chica = data.find(a => a.nombre?.toUpperCase().includes('CAJA CHICA'));
+            const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre.toUpperCase().includes('BANCO'));
+            const caja = data.find(a => a.nombre.toUpperCase().includes('CAJA PRINCIPAL'));
+            const chica = data.find(a => a.nombre.toUpperCase().includes('CAJA CHICA'));
             
             if (bdv) setSaldoFinBDV(bdv.saldoActual || 0);
             if (caja) setSaldoFinCaja(caja.saldoActual || 0);
@@ -160,7 +167,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
-        const info = authCompanyInfo || { name: 'CONJUNTO RESIDENCIAL EL VALLE', rif: 'J-40587208-0', logo: '' };
+        const info = authCompanyInfo || { name: 'CONJUNTO RESIDENCIAL EL VALLE', RIF: 'J-40587208-0', logo: '' };
         const period = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
         const margin = 14;
         const pageWidth = doc.internal.pageSize.getWidth();

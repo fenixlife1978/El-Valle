@@ -5,7 +5,8 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight, Zap, Shield } from 'lucide-react';
-import { COMPANY_NAME } from '@/lib/constants';
+import { COMPANY_NAME, SYSTEM_LOGO } from '@/lib/constants';
+import Image from 'next/image';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -17,11 +18,14 @@ export default function LandingPage() {
       
       <header className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-white/5 sticky top-0 bg-[#1A1D23]/90 backdrop-blur-xl z-50">
         <div className="flex items-center gap-4">
-          <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-2xl flex flex-col items-center justify-center min-w-[55px] min-h-[55px]">
-            <div className="h-8 w-8 bg-[#F28705] rounded-lg flex items-center justify-center">
-                <Shield className="text-white h-5 w-5" />
-            </div>
-            <span className="text-[10px] font-black text-white mt-0.5 tracking-tighter uppercase">EFAS</span>
+          <div className="relative h-12 w-12 overflow-hidden rounded-xl">
+            <Image 
+              src={SYSTEM_LOGO} 
+              alt="EFAS Logo" 
+              fill 
+              className="object-cover"
+              priority
+            />
           </div>
           <div className="flex flex-col">
             <h1 className="text-xl md:text-2xl font-[900] italic tracking-tighter leading-none uppercase">
@@ -48,15 +52,16 @@ export default function LandingPage() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[500px] bg-[#F28705]/5 blur-[120px] rounded-full -z-10" />
         
         <div className="relative mb-14 group">
-          <div className="absolute inset-0 bg-[#F28705]/20 blur-[80px] rounded-full transition-all group-hover:bg-[#F28705]/30" />
-          <div className="relative h-48 w-48 md:h-72 md:w-72 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden bg-card flex flex-col items-center justify-center">
-            <div className="bg-[#1A1D23] w-full h-full flex flex-col items-center justify-center p-8">
-                <div className="bg-[#F28705] p-6 rounded-[2rem] shadow-2xl mb-4">
-                    <Shield className="h-16 w-16 md:h-24 md:w-24 text-white" />
-                </div>
-                <h3 className="text-white font-black text-xl md:text-2xl tracking-widest uppercase italic">EFAS Central</h3>
-                <p className="text-[#F28705] text-[10px] font-black uppercase tracking-[0.4em] mt-2">Nucleus</p>
-            </div>
+          <div className="absolute inset-0 bg-[#F28705]/10 blur-[100px] rounded-full transition-all group-hover:bg-[#F28705]/20" />
+          <div className="relative h-64 w-64 md:h-96 md:w-96 rounded-[3.5rem] shadow-[0_30px_80px_-15px_rgba(0,0,0,0.9)] border border-white/5 overflow-hidden bg-[#1A1D23] flex flex-col items-center justify-center">
+            <Image 
+              src={SYSTEM_LOGO} 
+              alt="EFAS Central Nucleus" 
+              fill 
+              className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
+              priority
+              quality={100}
+            />
           </div>
         </div>
 
@@ -141,8 +146,8 @@ export default function LandingPage() {
       <footer className="py-24 text-center border-t border-white/5 bg-[#1A1D23]">
         <div className="flex flex-col items-center gap-8">
           <div className="flex items-center gap-4 opacity-40 hover:opacity-100 transition-opacity duration-500 cursor-default">
-            <div className="h-8 w-8 bg-white/20 rounded flex items-center justify-center grayscale hover:grayscale-0">
-                <Shield className="text-white h-5 w-5" />
+            <div className="h-10 w-10 relative overflow-hidden rounded grayscale hover:grayscale-0">
+                <Image src={SYSTEM_LOGO} alt="EFAS" fill className="object-cover" />
             </div>
             <span className="font-black italic tracking-tighter text-lg uppercase">EFAS CONDOSYS</span>
           </div>
