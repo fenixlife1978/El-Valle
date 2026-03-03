@@ -100,7 +100,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
-    // Recuperar información de la empresa directamente para evitar errores de sincronización de contexto
     useEffect(() => {
         if (!condoId) return;
         const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
@@ -321,24 +320,33 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
 
+            // Buscar saldo actual del propietario para el desglose
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
+            const totalAbonado = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonado));
+
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
-                method: payment.paymentMethod?.toUpperCase() || 'N/A',
+                method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
                 date: format(pDate, 'dd/MM/yyyy'),
                 rate: formatCurrency(payment.exchangeRate),
                 receivedAmount: formatCurrency(beneficiary.amount),
-                totalDebtPaid: formatCurrency(beneficiary.amount),
-                prevBalance: '0,00',
-                currentBalance: '0,00',
-                observations: payment.observations || 'PAGO VALIDADO',
-                concepts: ownerConcepts.length > 0 
-                    ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
-                    : [[format(pDate, 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
+                totalDebtPaid: formatCurrency(totalAbonado),
+                prevBalance: formatCurrency(prevBalance),
+                currentBalance: formatCurrency(currentBalance),
+                observations: payment.observations || 'Pago verificado y aplicado por la administración.',
+                concepts: ownerConcepts.map(c => [
+                    c.period, 
+                    `${c.description} (${beneficiary.street || ''} - ${beneficiary.house || ''})`, 
+                    `$${c.amountUSD.toFixed(2)}`, 
+                    formatCurrency(c.amountUSD * payment.exchangeRate)
+                ])
             };
 
             await generatePaymentReceipt(data, localCompanyInfo.logo, 'download');
@@ -361,24 +369,32 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
 
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
+            const totalAbonado = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonado));
+
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
-                method: payment.paymentMethod?.toUpperCase() || 'N/A',
+                method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
                 date: format(pDate, 'dd/MM/yyyy'),
                 rate: formatCurrency(payment.exchangeRate),
                 receivedAmount: formatCurrency(beneficiary.amount),
-                totalDebtPaid: formatCurrency(beneficiary.amount),
-                prevBalance: '0,00',
-                currentBalance: '0,00',
-                observations: payment.observations || 'PAGO VALIDADO',
-                concepts: ownerConcepts.length > 0 
-                    ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
-                    : [[format(pDate, 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
+                totalDebtPaid: formatCurrency(totalAbonado),
+                prevBalance: formatCurrency(prevBalance),
+                currentBalance: formatCurrency(currentBalance),
+                observations: payment.observations || 'Pago verificado y aplicado por la administración.',
+                concepts: ownerConcepts.map(c => [
+                    c.period, 
+                    `${c.description} (${beneficiary.street || ''} - ${beneficiary.house || ''})`, 
+                    `$${c.amountUSD.toFixed(2)}`, 
+                    formatCurrency(c.amountUSD * payment.exchangeRate)
+                ])
             };
 
             const blob = await generatePaymentReceipt(data, localCompanyInfo.logo, 'blob');
