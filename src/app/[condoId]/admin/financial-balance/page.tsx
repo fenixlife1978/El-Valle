@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/textarea";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText, Scale, CalendarClock } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -52,7 +52,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [ingresosMesCaja, setIngresosMesCaja] = useState(0);
     const [notas, setNotas] = useState("");
 
-    // Saldos Reales de las Cuentas
+    // Saldos Reales de las Cuentas (Solo para visualización en tarjetas superiores)
     const [cuentasReales, setCuentasReales] = useState<any[]>([]);
 
     useEffect(() => {
@@ -88,7 +88,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     orderBy('fecha', 'desc')
                 ));
                 
-                // Ignorar traslados internos
+                // Ignorar traslados internos para el flujo operativo
                 const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(t => {
                     const desc = (t.descripcion || "").toUpperCase();
                     return !desc.includes('TRASLADO') && 
@@ -129,9 +129,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
+    
+    // RESULTADO DISPONIBLE: Diferencia estricta entre Ingresos y Egresos del balance
     const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
 
-    // Cálculo de Saldos Finales por Cuenta
+    // Cálculo de Saldos Finales por Cuenta para el bloque IV
     const saldoFinalCuentas = useMemo(() => {
         const egresosBDV = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('BANCO') || e.cuenta.toUpperCase().includes('BDV')).reduce((sum, e) => sum + e.monto, 0);
         const egresosCaja = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA PRINCIPAL')).reduce((sum, e) => sum + e.monto, 0);
@@ -144,6 +146,10 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         };
     }, [egresosTesorería, saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
 
+    const lastDayOfMonthStr = useMemo(() => {
+        return format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
+    }, [selectedMonth, selectedYear]);
+
     const generatePdfBlob = async (output: 'download' | 'share' = 'download') => {
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
@@ -152,7 +158,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const period = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
         const margin = 14;
         const pageWidth = doc.internal.pageSize.getWidth();
-        const lastDayStr = format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
 
         const canvas = document.createElement('canvas');
         const barcodeValue = `BAL-${selectedYear}${selectedMonth.padStart(2, '0')}-${workingCondoId.substring(0, 6).toUpperCase()}`;
@@ -227,7 +232,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
         autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 10,
-            head: [[`IV. SALDOS FINALES AL ${lastDayStr}`, 'MONTO (BS.)']],
+            head: [[`IV. SALDOS FINALES AL ${lastDayOfMonthStr}`, 'MONTO (BS.)']],
             body: [
                 ['Banco de Venezuela (Cierre)', formatCurrency(saldoFinalCuentas.bdv)],
                 ['Caja Principal (Cierre)', formatCurrency(saldoFinalCuentas.caja)],
@@ -282,10 +287,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             toast({ title: "Balance Guardado" });
         } catch (e) { toast({ variant: 'destructive', title: "Error" }); } finally { setSaving(false); }
     };
-
-    const lastDayOfMonthStr = useMemo(() => {
-        return format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
-    }, [selectedMonth, selectedYear]);
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-8 bg-[#1A1D23] min-h-screen font-montserrat text-white italic">
