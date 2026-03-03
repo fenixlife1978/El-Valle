@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText, Scale } from "lucide-react";
+import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText, Scale, CalendarClock } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
@@ -39,12 +39,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [exporting, setExporting] = useState(false);
-    const [selectedMonth, setSelectedMonth] = useState("2"); 
-    const [selectedYear, setSelectedYear] = useState("2026");
+    const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1)); 
+    const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
     // Saldos Iniciales Editables
-    const [saldoInicBDV, setSaldoInicBDV] = useState(44294.13);
+    const [saldoInicBDV, setSaldoInicBDV] = useState(0.00);
     const [saldoInicCaja, setSaldoInicCaja] = useState(0.00);
     const [saldoInicChica, setSaldoInicChica] = useState(0.00);
 
@@ -53,23 +52,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [ingresosMesCaja, setIngresosMesCaja] = useState(0);
     const [notas, setNotas] = useState("");
 
-    const [realBalances, setRealBalances] = useState({ banco: 0, cajaPrincipal: 0, cajaChica: 0 });
-
-    useEffect(() => {
-        if (!workingCondoId) return;
-        return onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
-            const accounts = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-            const bdv = accounts.find(a => a.id === BDV_ACCOUNT_ID);
-            const cp = accounts.find(a => a.id === 'CAJA_PRINCIPAL_ID' || a.nombre?.toUpperCase().includes('CAJA PRINCIPAL'));
-            const cc = accounts.find(a => a.nombre?.toUpperCase().includes('CAJA CHICA'));
-            setRealBalances({ 
-                banco: bdv?.saldoActual || 0, 
-                cajaPrincipal: cp?.saldoActual || 0, 
-                cajaChica: cc?.saldoActual || 0
-            });
-        });
-    }, [workingCondoId]);
-
+    // EFAS: Ya no usamos onSnapshot de cuentas porque el balance debe ser retroactivo y calculado
     useEffect(() => {
         if (!workingCondoId) return;
         const fetchData = async () => {
@@ -78,6 +61,19 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const year = parseInt(selectedYear), month = parseInt(selectedMonth) - 1;
                 const from = startOfMonth(new Date(year, month, 1)), to = endOfMonth(from);
                 
+                // Buscar si ya existe un balance guardado para este periodo para cargar los saldos iniciales previos
+                const docId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+                const savedRef = doc(db, 'condominios', workingCondoId, 'financial_statements', docId);
+                const savedSnap = await getDoc(savedRef);
+                
+                if (savedSnap.exists()) {
+                    const d = savedSnap.data();
+                    setSaldoInicBDV(d.saldoInicBDV || 0);
+                    setSaldoInicCaja(d.saldoInicCaja || 0);
+                    setSaldoInicChica(d.saldoInicChica || 0);
+                    setNotas(d.notas || "");
+                }
+
                 const tSnap = await getDocs(query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', from), 
@@ -85,6 +81,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     orderBy('fecha', 'desc')
                 ));
                 
+                // REGLA DE ORO: Ignorar traslados internos para el Resultado de Gestión
                 const txs = tSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(t => {
                     const desc = (t.descripcion || "").toUpperCase();
                     return !desc.includes('TRASLADO') && 
@@ -102,14 +99,14 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
                 const ordBDV = txs.filter(t => 
                     t.tipo === 'ingreso' && 
-                    t.cuentaId === BDV_ACCOUNT_ID && 
+                    (t.cuentaId === BDV_ACCOUNT_ID || t.nombreCuenta?.toUpperCase().includes('BANCO')) && 
                     t.referencia?.toUpperCase() !== 'EFECTIVO'
                 ).reduce((sum, t) => sum + t.monto, 0);
                 setIngresosMesBDV(ordBDV);
 
                 const cashCaja = txs.filter(t => 
                     t.tipo === 'ingreso' && 
-                    (t.cuentaId === 'CAJA_PRINCIPAL_ID' || t.referencia?.toUpperCase() === 'EFECTIVO')
+                    (t.cuentaId === 'CAJA_PRINCIPAL_ID' || t.referencia?.toUpperCase() === 'EFECTIVO' || t.nombreCuenta?.toUpperCase().includes('CAJA PRINCIPAL'))
                 ).reduce((sum, t) => sum + t.monto, 0);
                 setIngresosMesCaja(cashCaja);
 
@@ -125,16 +122,21 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const totalIngresos = useMemo(() => saldoInicBDV + saldoInicCaja + saldoInicChica + ingresosMesBDV + ingresosMesCaja, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja]);
     const totalEgresos = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     
-    // REGLA DE NEGOCIO: Total Ingresos - Total Egresos
+    // REGLA DE NEGOCIO: Total Disponible = Resultado Aritmético estricto del período
     const totalDisponible = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos]);
 
+    // Cálculo de saldos finales por cuenta basados en la retroactividad
     const finalBreakdown = useMemo(() => {
+        const egresosBDV = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('BANCO') || e.cuenta.toUpperCase().includes('BDV')).reduce((sum, e) => sum + e.monto, 0);
+        const egresosCaja = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA PRINCIPAL')).reduce((sum, e) => sum + e.monto, 0);
+        const egresosChica = egresosTesorería.filter(e => e.cuenta.toUpperCase().includes('CAJA CHICA')).reduce((sum, e) => sum + e.monto, 0);
+
         return {
-            bdv: realBalances.banco,
-            caja: realBalances.cajaPrincipal,
-            chica: realBalances.cajaChica
+            bdv: saldoInicBDV + ingresosMesBDV - egresosBDV,
+            caja: saldoInicCaja + ingresosMesCaja - egresosCaja,
+            chica: saldoInicChica - egresosChica
         };
-    }, [realBalances]);
+    }, [saldoInicBDV, saldoInicCaja, saldoInicChica, ingresosMesBDV, ingresosMesCaja, egresosTesorería]);
 
     const generatePdfBlob = async (output: 'download' | 'share' = 'download') => {
         const { default: jsPDF } = await import('jspdf');
@@ -224,13 +226,13 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         doc.setTextColor(30, 80, 180).setFontSize(11);
         doc.text('TOTAL DISPONIBLE:', 130, finalY + 15); doc.text(`Bs. ${formatCurrency(totalDisponible)}`, 196, finalY + 15, { align: 'right' });
 
-        doc.setTextColor(0, 0, 0).setFontSize(10).text('SALDOS FINALES DE TESORERÍA (CONCILIADOS):', margin, finalY + 25);
+        doc.setTextColor(0, 0, 0).setFontSize(10).text('SALDOS FINALES DE TESORERÍA (CALCULADOS AL CIERRE):', margin, finalY + 25);
         autoTable(doc, {
             startY: finalY + 28,
-            head: [['CUENTA', 'SALDO FINAL (BS.)']],
+            head: [['CUENTA', 'SALDO AL CIERRE (BS.)']],
             body: [
                 ['BANCO DE VENEZUELA', formatCurrency(finalBreakdown.bdv)],
-                ['CAJA PRINCIPAL ( EFECTIVO)', formatCurrency(finalBreakdown.caja)],
+                ['CAJA PRINCIPAL (EFECTIVO)', formatCurrency(finalBreakdown.caja)],
                 ['CAJA CHICA', formatCurrency(finalBreakdown.chica)]
             ],
             theme: 'grid',
@@ -295,9 +297,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
             {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div> : <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">Banco BDV (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p></div><Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Caja Principal (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p></div><Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-[#F28705] italic">Caja Chica (Real)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaChica)}</p></div><Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">BDV (Al Cierre)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(finalBreakdown.bdv)}</p></div><Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Caja Principal (Al Cierre)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(finalBreakdown.caja)}</p></div><Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic transition-transform hover:scale-105"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-[#F28705] italic">Caja Chica (Al Cierre)</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(finalBreakdown.chica)}</p></div><Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
@@ -329,14 +331,19 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
                 <Card className="rounded-[2rem] bg-slate-950 border border-primary/20 mt-8 shadow-xl">
                     <CardContent className="p-8 flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div>
-                            <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión (Disponibilidad)</p>
-                            <h3 className="text-4xl font-black italic text-white tracking-tighter">Bs. {formatCurrency(totalDisponible)}</h3>
+                        <div className="flex items-center gap-4">
+                            <div className="p-4 bg-primary/10 rounded-2xl">
+                                <CalendarClock className="h-10 w-10 text-primary" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Resultado de Gestión (Periodo {selectedMonth}/{selectedYear})</p>
+                                <h3 className="text-4xl font-black italic text-white tracking-tighter">Bs. {formatCurrency(totalDisponible)}</h3>
+                            </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="text-right border-r border-white/10 pr-4"><p className="text-[8px] text-white/40 uppercase">Final BDV</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.bdv)}</p></div>
-                            <div className="text-right border-r border-white/10 pr-4"><p className="text-[8px] text-white/40 uppercase">Final Caja</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.caja)}</p></div>
-                            <div className="text-right"><p className="text-[8px] text-white/40 uppercase">Final Chica</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.chica)}</p></div>
+                            <div className="text-right border-r border-white/10 pr-4"><p className="text-[8px] text-white/40 uppercase">Cierre BDV</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.bdv)}</p></div>
+                            <div className="text-right border-r border-white/10 pr-4"><p className="text-[8px] text-white/40 uppercase">Cierre Caja</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.caja)}</p></div>
+                            <div className="text-right"><p className="text-[8px] text-white/40 uppercase">Cierre Chica</p><p className="font-black text-xs text-white">Bs. {formatCurrency(finalBreakdown.chica)}</p></div>
                         </div>
                     </CardContent>
                 </Card>
