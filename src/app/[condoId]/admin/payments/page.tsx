@@ -464,7 +464,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             const blob = await generatePaymentReceipt(data, localCompanyInfo.logo, 'blob');
             if (blob && navigator.share) {
-                // Nombre de archivo sanitizado para el compartido
                 const safeName = beneficiary.ownerName.replace(/[^a-z0-9]/gi, '_').toUpperCase();
                 const file = new File([blob as Blob], `Recibo_Pago_${safeName}.pdf`, { type: 'application/pdf' });
                 await navigator.share({ files: [file], title: 'Recibo de Pago', text: `Comprobante para ${beneficiary.ownerName}` });
@@ -739,6 +738,11 @@ function ReportPaymentComponent() {
     const handleOwnerSelect = (rowId: string, owner: Owner) => updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: owner.properties?.[0] || null });
     const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
     const removeBeneficiaryRow = (id: string) => setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
+
+    const getFilteredOwners = (searchTerm: string) => {
+        if (!searchTerm || searchTerm.length < 2) return [];
+        return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

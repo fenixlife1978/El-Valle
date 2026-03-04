@@ -34,7 +34,6 @@ const months = [
 ];
 
 const formatToTwoDecimals = (num: number) => {
-    // Blindaje contra NaN o valores no numéricos
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -77,21 +76,23 @@ export default function DebtManagementPage() {
     useEffect(() => {
         if (!workingCondoId) return;
         setLoading(true);
-        const fetchSettings = async () => {
-            const snap = await getDoc(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'));
+
+        // ESCUCHA REACTIVA DE AJUSTES (Tasa y Cuota)
+        const unsubSettings = onSnapshot(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'), (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
                 setCondoFee(data.condoFee || 0);
                 const rates = data.exchangeRates || [];
-                const active = rates.find((r: any) => r.active);
+                const active = rates.find((r: any) => r.active === true || r.status === 'active');
                 setActiveRate(active?.rate || 0);
             }
-        };
+        });
+
         const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
         const unsubOwners = onSnapshot(query(collection(db, "condominios", workingCondoId, ownersCol)), (snapshot) => {
             const data = snapshot.docs.map(doc => ({ 
                 id: doc.id, 
-                pendingDebtUSD: 0, // Inicialización obligatoria para evitar NaN
+                pendingDebtUSD: 0,
                 ...doc.data() 
             } as Owner)).filter(o => o.role === 'propietario');
             
@@ -101,13 +102,14 @@ export default function DebtManagementPage() {
             }));
             setLoading(false);
         });
-        fetchSettings();
-        return () => unsubOwners();
+
+        return () => { unsubOwners(); unsubSettings(); };
     }, [workingCondoId]);
 
     useEffect(() => {
         if (!workingCondoId) return;
-        const q = query(collection(db, 'condominios', workingCondoId, 'debts'), where("status", "==", "pending"));
+        // CONSULTA INCLUYENDO DEUDAS VENCIDAS PARA EL CÁLCULO EN BOLÍVARES
+        const q = query(collection(db, 'condominios', workingCondoId, 'debts'), where("status", "in", ["pending", "vencida"]));
         return onSnapshot(q, (snapshot) => {
             setOwners(prev => {
                 const map: {[key: string]: number} = {};
@@ -255,7 +257,6 @@ export default function DebtManagementPage() {
             const year = parseInt(addForm.year);
             const month = parseInt(addForm.month);
 
-            // REGLA DE ORO: Validar duplicados para esta unidad y periodo
             const q = query(
                 collection(db, 'condominios', workingCondoId, 'debts'),
                 where('ownerId', '==', selectedOwner.id),
