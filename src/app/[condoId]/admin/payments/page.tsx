@@ -145,7 +145,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
-                // PRE-LECTURA: Obtener todas las deudas pendientes antes de entrar en la transacción
                 const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
                 const debtsSnap = await getDocs(query(
                     collection(db, 'condominios', condoId, 'debts'),
@@ -156,7 +155,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const allPendingDebts = debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any));
 
                 await runTransaction(db, async (transaction) => {
-                    // REGLA DE FIRESTORE: Todas las lecturas transaccionales (transaction.get) primero
                     const ownerSnapsMap = new Map();
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
@@ -169,7 +167,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     const receiptNumbers: { [ownerId: string]: string } = {};
                     const liquidatedConcepts: LiquidatedConcept[] = [];
 
-                    // PROCESAMIENTO DE ESCRITURAS
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerData = ownerSnapsMap.get(beneficiary.ownerId);
                         if (!ownerData) continue;
@@ -200,11 +197,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             } else break;
                         }
 
-                        // Lógica de Adelantos
                         const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
                         if (funds.gte(advanceAmountBs)) {
-                            // Para simplificar y evitar lecturas adicionales complejas dentro de la transacción,
-                            // asumimos el mes siguiente basándonos en la fecha actual o última deuda.
                             let nextMonthDate = addMonths(new Date(), 1);
                             
                             while (funds.gte(advanceAmountBs)) {
@@ -254,7 +248,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
 
-                    // Actualizaciones de Tesorería y Estadísticas
                     const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                     transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
@@ -326,7 +319,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
             
-            // Reconstrucción dinámica para pagos antiguos (retrocompatibilidad)
             if (ownerConcepts.length === 0) {
                 const debtsSnap = await getDocs(query(
                     collection(db, 'condominios', condoId, 'debts'),
@@ -345,7 +337,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     }));
                 }
                 
-                // Si aún está vacío o hay diferencia, añadir abono
                 const totalPaidInDebtsUSD = ownerConcepts.reduce((sum, c) => sum + c.amountUSD, 0);
                 const totalPaidInDebtsBs = totalPaidInDebtsUSD * payment.exchangeRate;
                 const remainderBs = beneficiary.amount - totalPaidInDebtsBs;
@@ -409,7 +400,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
             
-            // Reconstrucción dinámica
             if (ownerConcepts.length === 0) {
                 const debtsSnap = await getDocs(query(
                     collection(db, 'condominios', condoId, 'debts'),
@@ -474,7 +464,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             const blob = await generatePaymentReceipt(data, localCompanyInfo.logo, 'blob');
             if (blob && navigator.share) {
-                const file = new File([blob as Blob], `Recibo_${beneficiary.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
+                // Nombre de archivo sanitizado para el compartido
+                const safeName = beneficiary.ownerName.replace(/[^a-z0-9]/gi, '_').toUpperCase();
+                const file = new File([blob as Blob], `Recibo_Pago_${safeName}.pdf`, { type: 'application/pdf' });
                 await navigator.share({ files: [file], title: 'Recibo de Pago', text: `Comprobante para ${beneficiary.ownerName}` });
             } else {
                 toast({ title: "No disponible", description: "Su dispositivo no soporta compartir archivos." });
@@ -800,7 +792,7 @@ function ReportPaymentComponent() {
                                 <div className="grid md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
                                         {!row.owner ? (
-                                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(row.searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase text-white border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>}</div>
+                                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(row.searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase text-white border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>}</div>
                                         ) : (<div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center"><p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500"><XCircle className="h-5 w-5"/></Button></div>)}
                                         {row.owner && (<Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}><SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]"><SelectValue placeholder="Unidad..."/></SelectTrigger><SelectContent className="bg-slate-900 text-white border-white/10 italic">{row.owner.properties.map((p, i) => (<SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase italic">{p.street} - {p.house}</SelectItem>))}</SelectContent></Select>)}
                                     </div>

@@ -163,7 +163,9 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   if (outputType === 'blob') {
     return doc.output('blob');
   } else {
-    doc.save(`Recibo_Pago_${barcodeValue}.pdf`);
+    // Saneamiento del nombre para el archivo
+    const safeName = (paymentData.ownerName || 'Beneficiario').replace(/[^a-z0-9]/gi, '_').toUpperCase();
+    doc.save(`Recibo_Pago_${safeName}.pdf`);
     return null;
   }
 };
