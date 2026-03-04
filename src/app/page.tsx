@@ -4,7 +4,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight, Zap, Shield } from 'lucide-react';
+import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight, Zap } from 'lucide-react';
 import { COMPANY_NAME, SYSTEM_LOGO } from '@/lib/constants';
 import Image from 'next/image';
 
@@ -21,9 +21,9 @@ export default function LandingPage() {
           <div className="relative h-12 w-12 overflow-hidden rounded-xl">
             <Image 
               src={SYSTEM_LOGO} 
-              alt="EFAS Logo" 
+              alt={COMPANY_NAME} 
               fill 
-              className="object-cover"
+              className="object-contain"
               priority
             />
           </div>
@@ -53,12 +53,12 @@ export default function LandingPage() {
         
         <div className="relative mb-14 group">
           <div className="absolute inset-0 bg-[#F28705]/10 blur-[100px] rounded-full transition-all group-hover:bg-[#F28705]/20" />
-          <div className="relative h-64 w-64 md:h-96 md:w-96 rounded-[3.5rem] shadow-[0_30px_80px_-15px_rgba(0,0,0,0.9)] border border-white/5 overflow-hidden bg-[#1A1D23] flex flex-col items-center justify-center">
+          <div className="relative h-64 w-64 md:h-96 md:w-96 rounded-[3.5rem] shadow-[0_30px_80px_-15px_rgba(0,0,0,0.9)] border border-white/5 overflow-hidden bg-[#1A1D23] flex flex-col items-center justify-center p-8">
             <Image 
               src={SYSTEM_LOGO} 
               alt="EFAS Central Nucleus" 
               fill 
-              className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
+              className="object-contain opacity-90 group-hover:scale-105 transition-transform duration-700 p-8"
               priority
               quality={100}
             />
@@ -147,9 +147,9 @@ export default function LandingPage() {
         <div className="flex flex-col items-center gap-8">
           <div className="flex items-center gap-4 opacity-40 hover:opacity-100 transition-opacity duration-500 cursor-default">
             <div className="h-10 w-10 relative overflow-hidden rounded grayscale hover:grayscale-0">
-                <Image src={SYSTEM_LOGO} alt="EFAS" fill className="object-cover" />
+                <Image src={SYSTEM_LOGO} alt={COMPANY_NAME} fill className="object-contain" />
             </div>
-            <span className="font-black italic tracking-tighter text-lg uppercase">EFAS CONDOSYS</span>
+            <span className="font-black italic tracking-tighter text-lg uppercase">{COMPANY_NAME}</span>
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">

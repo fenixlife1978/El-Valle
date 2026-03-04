@@ -7,6 +7,24 @@ const nextConfig = {
       ],
     },
   },
+  images: {
+    // Permite que las imágenes locales y externas carguen sin restricciones de optimización del servidor
+    unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'raw.githubusercontent.com',
+        port: '',
+        pathname: '/**',
+      }
+    ],
+  },
 };
 
 export default nextConfig;

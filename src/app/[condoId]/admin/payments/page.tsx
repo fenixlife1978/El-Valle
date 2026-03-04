@@ -317,14 +317,48 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
             if (!beneficiary) return;
 
-            const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
-            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
+            let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
+            
+            // Reconstrucción dinámica para pagos antiguos (retrocompatibilidad)
+            if (ownerConcepts.length === 0) {
+                const debtsSnap = await getDocs(query(
+                    collection(db, 'condominios', condoId, 'debts'),
+                    where('paymentId', '==', payment.id),
+                    where('ownerId', '==', ownerId)
+                ));
+                
+                const debts = debtsSnap.docs.map(d => d.data());
+                if (debts.length > 0) {
+                    ownerConcepts = debts.map((d: any) => ({
+                        ownerId: ownerId,
+                        description: d.description,
+                        amountUSD: d.paidAmountUSD || d.amountUSD,
+                        period: `${monthsLocale[d.month] || 'Mes'} ${d.year}`,
+                        type: 'deuda'
+                    }));
+                }
+                
+                // Si aún está vacío o hay diferencia, añadir abono
+                const totalPaidInDebtsUSD = ownerConcepts.reduce((sum, c) => sum + c.amountUSD, 0);
+                const totalPaidInDebtsBs = totalPaidInDebtsUSD * payment.exchangeRate;
+                const remainderBs = beneficiary.amount - totalPaidInDebtsBs;
+                
+                if (remainderBs > 0.05) {
+                    ownerConcepts.push({
+                        ownerId: ownerId,
+                        description: 'ABONO A SALDO A FAVOR',
+                        amountUSD: remainderBs / payment.exchangeRate,
+                        period: 'SALDO',
+                        type: 'abono'
+                    });
+                }
+            }
 
-            // Buscar saldo actual del propietario para el desglose
+            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
             const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
             const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
-            const totalAbonado = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
-            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonado));
+            const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
 
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
@@ -337,7 +371,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 date: format(pDate, 'dd/MM/yyyy'),
                 rate: formatCurrency(payment.exchangeRate),
                 receivedAmount: formatCurrency(beneficiary.amount),
-                totalDebtPaid: formatCurrency(totalAbonado),
+                totalDebtPaid: formatCurrency(totalAbonadoBs),
                 prevBalance: formatCurrency(prevBalance),
                 currentBalance: formatCurrency(currentBalance),
                 observations: payment.observations || 'Pago verificado y aplicado por la administración.',
@@ -366,13 +400,47 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
             if (!beneficiary) return;
 
-            const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
-            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
+            let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
+            
+            // Reconstrucción dinámica
+            if (ownerConcepts.length === 0) {
+                const debtsSnap = await getDocs(query(
+                    collection(db, 'condominios', condoId, 'debts'),
+                    where('paymentId', '==', payment.id),
+                    where('ownerId', '==', ownerId)
+                ));
+                
+                const debts = debtsSnap.docs.map(d => d.data());
+                if (debts.length > 0) {
+                    ownerConcepts = debts.map((d: any) => ({
+                        ownerId: ownerId,
+                        description: d.description,
+                        amountUSD: d.paidAmountUSD || d.amountUSD,
+                        period: `${monthsLocale[d.month] || 'Mes'} ${d.year}`,
+                        type: 'deuda'
+                    }));
+                }
+                
+                const totalPaidInDebtsUSD = ownerConcepts.reduce((sum, c) => sum + c.amountUSD, 0);
+                const totalPaidInDebtsBs = totalPaidInDebtsUSD * payment.exchangeRate;
+                const remainderBs = beneficiary.amount - totalPaidInDebtsBs;
+                
+                if (remainderBs > 0.05) {
+                    ownerConcepts.push({
+                        ownerId: ownerId,
+                        description: 'ABONO A SALDO A FAVOR',
+                        amountUSD: remainderBs / payment.exchangeRate,
+                        period: 'SALDO',
+                        type: 'abono'
+                    });
+                }
+            }
 
+            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
             const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
             const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
-            const totalAbonado = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
-            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonado));
+            const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
 
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
@@ -385,7 +453,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 date: format(pDate, 'dd/MM/yyyy'),
                 rate: formatCurrency(payment.exchangeRate),
                 receivedAmount: formatCurrency(beneficiary.amount),
-                totalDebtPaid: formatCurrency(totalAbonado),
+                totalDebtPaid: formatCurrency(totalAbonadoBs),
                 prevBalance: formatCurrency(prevBalance),
                 currentBalance: formatCurrency(currentBalance),
                 observations: payment.observations || 'Pago verificado y aplicado por la administración.',
