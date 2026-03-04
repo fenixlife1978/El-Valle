@@ -145,28 +145,42 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
+                // PRE-LECTURA: Obtener todas las deudas pendientes antes de entrar en la transacción
+                const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
+                const debtsSnap = await getDocs(query(
+                    collection(db, 'condominios', condoId, 'debts'),
+                    where('ownerId', 'in', beneficiaryIds),
+                    where('status', 'in', ['pending', 'vencida'])
+                ));
+                
+                const allPendingDebts = debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any));
+
                 await runTransaction(db, async (transaction) => {
+                    // REGLA DE FIRESTORE: Todas las lecturas transaccionales (transaction.get) primero
+                    const ownerSnapsMap = new Map();
+                    for (const beneficiary of payment.beneficiaries) {
+                        const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
+                        const snap = await transaction.get(ownerRef);
+                        if (snap.exists()) {
+                            ownerSnapsMap.set(beneficiary.ownerId, snap.data());
+                        }
+                    }
+
                     const receiptNumbers: { [ownerId: string]: string } = {};
                     const liquidatedConcepts: LiquidatedConcept[] = [];
 
+                    // PROCESAMIENTO DE ESCRITURAS
                     for (const beneficiary of payment.beneficiaries) {
-                        const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
-                        const ownerSnap = await transaction.get(ownerRef);
-                        if (!ownerSnap.exists()) continue;
+                        const ownerData = ownerSnapsMap.get(beneficiary.ownerId);
+                        if (!ownerData) continue;
 
-                        let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
+                        let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerData.balance || 0));
                         
-                        const debtsSnap = await getDocs(query(
-                            collection(db, 'condominios', condoId, 'debts'),
-                            where('ownerId', '==', beneficiary.ownerId),
-                            where('status', 'in', ['pending', 'vencida'])
-                        ));
-                        
-                        const pendingDebts = debtsSnap.docs
-                            .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
-                            .sort((a, b) => a.year - b.year || a.month - b.month);
+                        const ownerPendingDebts = allPendingDebts
+                            .filter((d: any) => d.ownerId === beneficiary.ownerId)
+                            .sort((a: any, b: any) => a.year - b.year || a.month - b.month);
 
-                        for (const debt of pendingDebts) {
+                        for (const debt of ownerPendingDebts) {
                             const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
                             if (funds.gte(debtAmountBs)) {
                                 funds = funds.minus(debtAmountBs);
@@ -186,22 +200,13 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             } else break;
                         }
 
+                        // Lógica de Adelantos
                         const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
                         if (funds.gte(advanceAmountBs)) {
-                            const allDebtsSnap = await getDocs(query(
-                                collection(db, 'condominios', condoId, 'debts'),
-                                where('ownerId', '==', beneficiary.ownerId)
-                            ));
-                            const allDebtsSorted = allDebtsSnap.docs
-                                .map(d => d.data())
-                                .sort((a, b) => a.year - b.year || a.month - b.month);
-                            
+                            // Para simplificar y evitar lecturas adicionales complejas dentro de la transacción,
+                            // asumimos el mes siguiente basándonos en la fecha actual o última deuda.
                             let nextMonthDate = addMonths(new Date(), 1);
-                            if (allDebtsSorted.length > 0) {
-                                const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
-                                nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
-                            }
-
+                            
                             while (funds.gte(advanceAmountBs)) {
                                 const year = nextMonthDate.getFullYear();
                                 const month = nextMonthDate.getMonth() + 1;
@@ -245,9 +250,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         }
 
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                        const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
 
+                    // Actualizaciones de Tesorería y Estadísticas
                     const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                     transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 

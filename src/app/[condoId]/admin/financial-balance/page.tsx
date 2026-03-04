@@ -30,6 +30,12 @@ const months = Array.from({ length: 12 }, (_, i) => ({
 
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 
+interface FinancialAccount {
+    id: string;
+    nombre: string;
+    saldoActual: number;
+}
+
 export default function FinancialBalancePage({ params }: { params: Promise<{ condoId: string }> }) {
     const resolvedParams = use(params);
     const { condoId: urlCondoId } = resolvedParams;
@@ -59,13 +65,13 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [notas, setNotas] = useState("");
 
     // Saldos Reales de las Cuentas
-    const [cuentasReales, setCuentasReales] = useState<any[]>([]);
+    const [cuentasReales, setCuentasReales] = useState<FinancialAccount[]>([]);
 
     useEffect(() => {
         if (!workingCondoId) return;
         
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
-            const data = snap.docs
+            const data: FinancialAccount[] = snap.docs
                 .map(d => {
                     const docData = d.data();
                     return { 
@@ -78,6 +84,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             
             setCuentasReales(data);
             
+            // Sincronizar automáticamente saldos finales con tesorería en carga inicial
             const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre.toUpperCase().includes('BANCO'));
             const caja = data.find(a => a.nombre.toUpperCase().includes('CAJA PRINCIPAL'));
             const chica = data.find(a => a.nombre.toUpperCase().includes('CAJA CHICA'));
