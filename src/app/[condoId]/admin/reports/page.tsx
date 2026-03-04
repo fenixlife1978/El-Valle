@@ -142,11 +142,18 @@ const getSortKeys = (owner: { properties: string }) => {
     let street = 'N/A', house = 'N/A';
     if (owner.properties) {
         const firstProp = owner.properties.split(',')[0] || '';
-        [street, house] = firstProp.split('-').map(s => s.trim());
+        const parts = firstProp.split('-');
+        if (parts.length >= 2) {
+            street = parts[0].trim();
+            house = parts[1].trim();
+        } else {
+            street = firstProp.trim();
+        }
     }
 
-    const streetNum = parseInt(String(street || '').replace('Calle ', '') || '999');
-    const houseNum = parseInt(String(house || '').replace('Casa ', '') || '999');
+    // Extraer solo números usando regex para garantizar orden numérico correcto
+    const streetNum = parseInt(street.match(/\d+/)?.[0] || '99999');
+    const houseNum = parseInt(house.match(/\d+/)?.[0] || '99999');
     return { streetNum, houseNum };
 };
 
@@ -168,6 +175,7 @@ const buildIntegralReportData = (
             return { ...owner, sortKeys };
         })
         .sort((a, b) => {
+            // Ordenamiento por Calle (1-8) y luego por Casa (1-N)
             if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
             return a.sortKeys.houseNum - b.sortKeys.houseNum;
         });
