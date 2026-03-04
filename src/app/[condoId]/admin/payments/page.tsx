@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense, use } from 'react';
@@ -18,7 +17,7 @@ import {
     UserPlus, CheckCircle2, WalletCards, Trash2, 
     Hash, FileText, Save, Share2, FileDown,
     Calculator, Minus, Equal, Check, Receipt, X, DollarSign,
-    PlusCircle
+    PlusCircle, FileUp
 } from 'lucide-react';
 import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -146,6 +145,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
                 const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
+                
+                // Firestore Transaction Rule: All reads before writes
                 const debtsSnap = await getDocs(query(
                     collection(db, 'condominios', condoId, 'debts'),
                     where('ownerId', 'in', beneficiaryIds),
@@ -189,7 +190,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 });
                                 liquidatedConcepts.push({
                                     ownerId: beneficiary.ownerId,
-                                    description: debt.description,
+                                    description: `${debt.description} (${beneficiary.street || ''} - ${beneficiary.house || ''})`,
                                     amountUSD: debt.amountUSD,
                                     period: `${monthsLocale[debt.month]} ${debt.year}`,
                                     type: 'deuda'
@@ -212,7 +213,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     year,
                                     month,
                                     amountUSD: currentFee,
-                                    description: 'Cuota de Condominio (Adelantado)',
+                                    description: `Cuota de Condominio (Adelantado) (${beneficiary.street || ''} - ${beneficiary.house || ''})`,
                                     status: 'paid',
                                     paidAmountUSD: currentFee,
                                     paymentDate: payment.paymentDate,
@@ -222,7 +223,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                                 liquidatedConcepts.push({
                                     ownerId: beneficiary.ownerId,
-                                    description: 'CUOTA ADELANTADA',
+                                    description: `CUOTA ADELANTADA (${beneficiary.street || ''} - ${beneficiary.house || ''})`,
                                     amountUSD: currentFee,
                                     period: `${monthsLocale[month]} ${year}`,
                                     type: 'adelanto'
@@ -236,7 +237,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (funds.gt(0)) {
                             liquidatedConcepts.push({
                                 ownerId: beneficiary.ownerId,
-                                description: 'ABONO A SALDO A FAVOR',
+                                description: `ABONO A SALDO A FAVOR (${beneficiary.street || ''} - ${beneficiary.house || ''})`,
                                 amountUSD: funds.div(payment.exchangeRate).toNumber(),
                                 period: 'SALDO',
                                 type: 'abono'
@@ -317,6 +318,14 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
             if (!beneficiary) return;
 
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const ownerDataFromDb = ownerSnap.exists() ? ownerSnap.data() : null;
+            const primaryProp = ownerDataFromDb?.properties?.[0] || { street: 'S/D', house: 'S/D' };
+
+            const displayStreet = beneficiary.street || primaryProp.street;
+            const displayHouse = beneficiary.house || primaryProp.house;
+            const propertyLabel = `${displayStreet} - ${displayHouse}`;
+
             let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
             
             if (ownerConcepts.length === 0) {
@@ -353,7 +362,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             }
 
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
-            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
             const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
             const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
             const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
@@ -363,6 +371,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
+                property: propertyLabel,
                 method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
@@ -375,7 +384,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 observations: payment.observations || 'Pago verificado y aplicado por la administración.',
                 concepts: ownerConcepts.map(c => [
                     c.period, 
-                    `${c.description} (${beneficiary.street || ''} - ${beneficiary.house || ''})`, 
+                    `${c.description} (${displayStreet} - ${displayHouse})`, 
                     c.type === 'abono' ? '' : `$${c.amountUSD.toFixed(2)}`, 
                     formatCurrency(c.amountUSD * payment.exchangeRate)
                 ])
@@ -398,6 +407,14 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
             if (!beneficiary) return;
 
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const ownerDataFromDb = ownerSnap.exists() ? ownerSnap.data() : null;
+            const primaryProp = ownerDataFromDb?.properties?.[0] || { street: 'S/D', house: 'S/D' };
+
+            const displayStreet = beneficiary.street || primaryProp.street;
+            const displayHouse = beneficiary.house || primaryProp.house;
+            const propertyLabel = `${displayStreet} - ${displayHouse}`;
+
             let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
             
             if (ownerConcepts.length === 0) {
@@ -434,7 +451,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             }
 
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
-            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
             const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
             const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
             const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
@@ -444,6 +460,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
+                property: propertyLabel,
                 method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
@@ -456,7 +473,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 observations: payment.observations || 'Pago verificado y aplicado por la administración.',
                 concepts: ownerConcepts.map(c => [
                     c.period, 
-                    `${c.description} (${beneficiary.street || ''} - ${beneficiary.house || ''})`, 
+                    `${c.description} (${displayStreet} - ${displayHouse})`, 
                     c.type === 'abono' ? '' : `$${c.amountUSD.toFixed(2)}`, 
                     formatCurrency(c.amountUSD * payment.exchangeRate)
                 ])

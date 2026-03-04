@@ -1,4 +1,3 @@
-
 'use client';
 
 import jsPDF from 'jspdf';
@@ -75,6 +74,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   
   const details = [
     { label: 'Beneficiario:', value: paymentData.ownerName },
+    { label: 'Propiedad:', value: paymentData.property || 'N/A' },
     { label: 'Método de pago:', value: paymentData.method || 'N/A' },
     { label: 'Banco Emisor:', value: paymentData.bank || 'N/A' },
     { label: 'N° de Referencia Bancaria:', value: paymentData.reference || 'N/A' },
@@ -92,7 +92,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
 
   // 5. Tabla de Conceptos (Estilo Azul de la imagen)
   autoTable(doc, {
-    startY: 110,
+    startY: 115,
     head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
     body: paymentData.concepts,
     headStyles: { 
