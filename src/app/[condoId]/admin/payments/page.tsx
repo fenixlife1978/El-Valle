@@ -57,6 +57,11 @@ const formatCurrency = (num: number) => {
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const formatToTwoDecimals = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "fS0hdoWOyZBuTVuUJSic";
 
@@ -378,6 +383,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
+                property: beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : 'N/A',
                 method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
@@ -467,6 +473,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
+                property: beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : 'N/A',
                 method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
@@ -866,7 +873,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
         if (!condoId) return;
         const q = query(collection(db, 'condominios', condoId, ownersCol), where('role', '==', 'propietario'));
         return onSnapshot(q, snap => {
-            setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).sort((a,b) => a.name.localeCompare(b.name)));
+            setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).filter(o => o.email !== 'vallecondo@gmail.com').sort((a,b) => a.name.localeCompare(b.name)));
         });
     }, [condoId, ownersCol]);
 
@@ -924,10 +931,10 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 h-5 w-5"/>
                                 <Input placeholder="BUSCAR PROPIETARIO..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none font-black text-xs uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
                                 {searchTerm.length >= 2 && (
-                                    <Card className="absolute z-50 w-full mt-2 bg-slate-950 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
-                                        <ScrollArea className="h-48">
+                                    <Card className="absolute z-50 w-full mt-2 bg-slate-950 border border-white/10 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-primary/20">
+                                        <ScrollArea className="h-64">
                                             {allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (
-                                                <div key={o.id} onClick={() => setSelectedOwner(o)} className="p-5 hover:bg-white/5 cursor-pointer font-black text-sm uppercase border-b border-white/5">
+                                                <div key={o.id} onClick={() => setSelectedOwner(o)} className="p-5 hover:bg-white/10 cursor-pointer font-black text-sm uppercase border-b border-white/5 transition-colors text-white">
                                                     {o.name}
                                                 </div>
                                             ))}
@@ -1034,7 +1041,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                         <div className="flex flex-col gap-1 text-center bg-white/5 p-6 rounded-[2rem] border border-white/5 shadow-inner">
                             <span className="text-[10px] font-black uppercase text-primary tracking-widest">TOTAL A PAGAR</span>
                             <span className="text-4xl font-black text-white italic drop-shadow-2xl">Bs. {formatCurrency(totals.totalToPayBs)}</span>
-                            <span className="text-[10px] font-bold text-emerald-500 uppercase mt-1">EQUIV: ${formatToTwoDecimals(totals.totalToPayBs / activeRate)}</span>
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase mt-1">EQUIV: ${formatToTwoDecimals(totals.totalToPayBs / (activeRate || 1))}</span>
                         </div>
                     </CardContent>
                     <CardFooter className="px-8 pb-8"><Button onClick={() => onReport({ owner: selectedOwner, totalBs: totals.totalToPayBs })} disabled={!selectedOwner || totals.totalToPayBs <= 0} className="w-full h-16 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">PROCEDER AL REPORTE <Receipt className="ml-2"/></Button></CardFooter>
