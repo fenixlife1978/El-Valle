@@ -146,7 +146,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                 const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
                 
-                // Firestore Transaction Rule: All reads before writes
                 const debtsSnap = await getDocs(query(
                     collection(db, 'condominios', condoId, 'debts'),
                     where('ownerId', 'in', beneficiaryIds),
@@ -1060,27 +1059,29 @@ function ReportPaymentComponent() {
                                                             <p className="font-semibold text-primary">{row.owner.name}</p>
                                                             <Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading || beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button>
                                                         </div>
-                                                        <div className="space-y-1">
-                                                            <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
-                                                            <Select 
-                                                                onValueChange={(v) => {
-                                                                    const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
-                                                                    updateBeneficiaryRow(row.id, { selectedProperty: found || null });
-                                                                }} 
-                                                                value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
-                                                            >
-                                                                <SelectTrigger className="rounded-xl h-10 bg-slate-50 border-slate-200 text-slate-900">
-                                                                    <SelectValue placeholder="Seleccione propiedad..." />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {row.owner.properties.map((p, pIdx) => (
-                                                                        <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
-                                                                            {p.street} - {p.house}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
+                                                        {row.owner.properties && (
+                                                            <div className="space-y-1">
+                                                                <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
+                                                                <Select 
+                                                                    onValueChange={(v) => {
+                                                                        const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                                    }} 
+                                                                    value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
+                                                                >
+                                                                    <SelectTrigger className="rounded-xl h-10 bg-slate-50 border-slate-200 text-slate-900">
+                                                                        <SelectValue placeholder="Seleccione propiedad..." />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {row.owner.properties.map((p, pIdx) => (
+                                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
+                                                                                {p.street} - {p.house}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
