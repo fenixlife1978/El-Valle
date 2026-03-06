@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense, use } from 'react';
@@ -18,7 +17,7 @@ import {
     UserPlus, CheckCircle2, WalletCards, Trash2, 
     Hash, FileText, Save, Share2, FileDown,
     Calculator, Minus, Equal, Check, Receipt, X, DollarSign,
-    PlusCircle, Info, ChevronRight
+    PlusCircle, Info
 } from 'lucide-react';
 import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -48,7 +47,6 @@ import {
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import Decimal from 'decimal.js';
 
-// --- CONSTANTES Y TIPOS ---
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
@@ -58,6 +56,9 @@ const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
+const CAJA_PRINCIPAL_ID = "fS0hdoWOyZBuTVuUJSic";
 
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
@@ -81,10 +82,6 @@ type Payment = {
     liquidatedConcepts?: LiquidatedConcept[];
 };
 
-const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
-const CAJA_PRINCIPAL_ID = "fS0hdoWOyZBuTVuUJSic";
-
-// --- COMPONENTE: VERIFICACIÓN ---
 function VerificationComponent({ condoId }: { condoId: string }) {
     const { user } = useAuth();
     const { requestAuthorization } = useAuthorization();
@@ -105,9 +102,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     useEffect(() => {
         if (!condoId) return;
         const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-        onSnapshot(settingsRef, (snap) => {
-            if (snap.exists()) setLocalCompanyInfo(snap.data().companyInfo);
+        return onSnapshot(settingsRef, (snap) => {
+            if (snap.exists()) {
+                setLocalCompanyInfo(snap.data().companyInfo);
+            }
         });
+    }, [condoId]);
+
+    useEffect(() => {
+        if (!condoId) return;
         const q = query(collection(db, 'condominios', condoId, 'payments'), orderBy('reportedAt', 'desc'));
         return onSnapshot(q, (snapshot) => {
             setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment)));
@@ -120,7 +123,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (p.status !== activeTab) return false;
             if (!searchTerm) return true;
             const search = searchTerm.toLowerCase();
-            return p.reference?.toLowerCase().includes(search) || p.beneficiaries?.some(b => b.ownerName?.toLowerCase().includes(search));
+            return (
+                p.reference?.toLowerCase().includes(search) || 
+                p.beneficiaries?.some(b => b.ownerName?.toLowerCase().includes(search))
+            );
         });
     }, [payments, activeTab, searchTerm]);
 
@@ -148,63 +154,379 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (!ownerSnap.exists()) continue;
 
                         let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
-                        const debtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', beneficiary.ownerId), where('status', 'in', ['pending', 'vencida'])));
-                        const pendingDebts = debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any)).sort((a, b) => a.year - b.year || a.month - b.month);
+                        
+                        const debtsSnap = await getDocs(query(
+                            collection(db, 'condominios', condoId, 'debts'),
+                            where('ownerId', '==', beneficiary.ownerId),
+                            where('status', 'in', ['pending', 'vencida'])
+                        ));
+                        
+                        const pendingDebts = debtsSnap.docs
+                            .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
+                            .sort((a, b) => a.year - b.year || a.month - b.month);
 
                         for (const debt of pendingDebts) {
                             const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
                             if (funds.gte(debtAmountBs)) {
                                 funds = funds.minus(debtAmountBs);
-                                transaction.update(debt.ref, { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: payment.paymentDate, paymentId: payment.id });
-                                liquidatedConcepts.push({ ownerId: beneficiary.ownerId, description: `${debt.description} (${beneficiary.street || 'S/D'} ${beneficiary.house || ''})`.toUpperCase(), amountUSD: debt.amountUSD, period: `${monthsLocale[debt.month]} ${debt.year}`, type: 'deuda' });
+                                transaction.update(debt.ref, {
+                                    status: 'paid',
+                                    paidAmountUSD: debt.amountUSD,
+                                    paymentDate: payment.paymentDate,
+                                    paymentId: payment.id
+                                });
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: debt.description,
+                                    amountUSD: debt.amountUSD,
+                                    period: `${monthsLocale[debt.month]} ${debt.year}`,
+                                    type: 'deuda'
+                                });
                             } else break;
                         }
 
                         const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
-                        while (funds.gte(advanceAmountBs)) {
-                            const year = new Date().getFullYear();
-                            const month = new Date().getMonth() + 1;
-                            const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
-                            transaction.set(newDebtRef, { ownerId: beneficiary.ownerId, property: { street: beneficiary.street || '', house: beneficiary.house || '' }, year, month, amountUSD: currentFee, description: 'CUOTA ADELANTADA', status: 'paid', paidAmountUSD: currentFee, paymentDate: payment.paymentDate, paymentId: payment.id, published: true });
-                            liquidatedConcepts.push({ ownerId: beneficiary.ownerId, description: `CUOTA ADELANTADA (${beneficiary.street || 'S/D'} ${beneficiary.house || ''})`.toUpperCase(), amountUSD: currentFee, period: 'ADELANTO', type: 'adelanto' });
-                            funds = funds.minus(advanceAmountBs);
+                        if (funds.gte(advanceAmountBs)) {
+                            const allDebtsSnap = await getDocs(query(
+                                collection(db, 'condominios', condoId, 'debts'),
+                                where('ownerId', '==', beneficiary.ownerId)
+                            ));
+                            const allDebtsSorted = allDebtsSnap.docs
+                                .map(d => d.data())
+                                .sort((a, b) => a.year - b.year || a.month - b.month);
+                            
+                            let nextMonthDate = addMonths(new Date(), 1);
+                            if (allDebtsSorted.length > 0) {
+                                const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
+                                nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
+                            }
+
+                            while (funds.gte(advanceAmountBs)) {
+                                const year = nextMonthDate.getFullYear();
+                                const month = nextMonthDate.getMonth() + 1;
+                                
+                                const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
+                                transaction.set(newDebtRef, {
+                                    ownerId: beneficiary.ownerId,
+                                    property: { 
+                                        street: beneficiary.street || '',
+                                        house: beneficiary.house || '' 
+                                    },
+                                    year,
+                                    month,
+                                    amountUSD: currentFee,
+                                    description: 'Cuota de Condominio (Adelantado)',
+                                    status: 'paid',
+                                    paidAmountUSD: currentFee,
+                                    paymentDate: payment.paymentDate,
+                                    paymentId: payment.id,
+                                    published: true
+                                });
+
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: 'CUOTA ADELANTADA',
+                                    amountUSD: currentFee,
+                                    period: `${monthsLocale[month]} ${year}`,
+                                    type: 'adelanto'
+                                });
+
+                                funds = funds.minus(advanceAmountBs);
+                                nextMonthDate = addMonths(nextMonthDate, 1);
+                            }
                         }
 
                         if (funds.gt(0)) {
-                            liquidatedConcepts.push({ ownerId: beneficiary.ownerId, description: `ABONO A SALDO A FAVOR (${beneficiary.street || 'S/D'} ${beneficiary.house || ''})`.toUpperCase(), amountUSD: funds.div(payment.exchangeRate).toNumber(), period: 'SALDO', type: 'abono' });
+                            liquidatedConcepts.push({
+                                ownerId: beneficiary.ownerId,
+                                description: 'ABONO A SALDO A FAVOR',
+                                amountUSD: funds.div(payment.exchangeRate).toNumber(),
+                                period: 'SALDO',
+                                type: 'abono'
+                            });
                         }
 
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
                         transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
 
-                    transaction.update(doc(db, 'condominios', condoId, 'cuentas', targetAccountId), { saldoActual: increment(payment.totalAmount) });
-                    transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), { monto: payment.totalAmount, tipo: 'ingreso', cuentaId: targetAccountId, nombreCuenta: targetAccountName, descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(), referencia: payment.reference, fecha: payment.paymentDate, sourcePaymentId: payment.id, createdAt: serverTimestamp(), createdBy: user?.email });
-                    transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { status: 'aprobado', receiptNumbers, liquidatedConcepts, observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' });
+                    const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
+                    transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
+
+                    const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                    transaction.set(statsRef, {
+                        periodo: monthId,
+                        saldoBancarioReal: increment(isDigital ? payment.totalAmount : 0),
+                        saldoCajaReal: increment(!isDigital ? payment.totalAmount : 0),
+                        totalIngresosMes: increment(payment.totalAmount),
+                        updatedAt: serverTimestamp()
+                    }, { merge: true });
+
+                    const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
+                    transaction.set(transRef, {
+                        monto: payment.totalAmount, 
+                        tipo: 'ingreso', 
+                        cuentaId: targetAccountId, 
+                        nombreCuenta: targetAccountName,
+                        descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(),
+                        referencia: payment.reference, 
+                        fecha: payment.paymentDate, 
+                        sourcePaymentId: payment.id,
+                        createdAt: serverTimestamp(), 
+                        createdBy: user?.email
+                    });
+
+                    transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
+                        status: 'aprobado', 
+                        receiptNumbers, 
+                        liquidatedConcepts,
+                        observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' 
+                    });
                 });
 
-                toast({ title: "Pago Validado", description: "Sincronización exitosa con Tesorería." });
+                toast({ title: "Pago Validado", description: "Deudas liquidadas y sincronizadas con Tesorería." });
                 setSelectedPayment(null);
-            } catch (error: any) { toast({ variant: 'destructive', title: "Error", description: error.message }); }
-            finally { setIsVerifying(false); }
+            } catch (error: any) { 
+                console.error(error);
+                toast({ variant: 'destructive', title: "Error en proceso", description: error.message }); 
+            } finally { setIsVerifying(false); }
+        });
+    };
+
+    const handleReject = (payment: Payment) => {
+        if (!rejectionReason) return toast({ variant: 'destructive', title: "Motivo requerido" });
+        requestAuthorization(async () => {
+            if (!condoId) return;
+            try {
+                await updateDoc(doc(db, 'condominios', condoId, 'payments', payment.id), {
+                    status: 'rechazado',
+                    observations: rejectionReason.toUpperCase(),
+                    rejectedBy: user?.email,
+                    rejectedAt: serverTimestamp()
+                });
+                toast({ title: "Pago Rechazado" });
+                setSelectedPayment(null);
+            } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
         });
     };
 
     const handleExportPDF = async (payment: Payment, ownerId: string) => {
-        const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
-        if (!beneficiary || !localCompanyInfo) return;
-        const ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
-        const concepts = ownerConcepts.map(c => [c.period, c.description, c.type === 'abono' ? '-' : `$${c.amountUSD.toFixed(2)}`, formatCurrency(c.amountUSD * payment.exchangeRate)]);
-        
-        const data = {
-            condoName: localCompanyInfo.name, rif: localCompanyInfo.rif, receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
-            ownerName: beneficiary.ownerName, property: `${beneficiary.street || 'S/D'} - ${beneficiary.house || 'S/D'}`,
-            method: payment.paymentMethod, bank: payment.bank, reference: payment.reference,
-            date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'), rate: formatCurrency(payment.exchangeRate),
-            receivedAmount: formatCurrency(beneficiary.amount), totalDebtPaid: formatCurrency(ownerConcepts.reduce((s, c) => s + (c.amountUSD * payment.exchangeRate), 0)),
-            currentBalance: formatCurrency(beneficiary.amount), observations: payment.observations, concepts
-        };
-        await generatePaymentReceipt(data, localCompanyInfo.logo, 'download');
+        try {
+            if (!localCompanyInfo) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no disponible.' });
+                return;
+            }
+            const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+            if (!beneficiary) return;
+
+            let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
+            
+            if (ownerConcepts.length === 0) {
+                const debtsSnap = await getDocs(query(
+                    collection(db, 'condominios', condoId, 'debts'),
+                    where('paymentId', '==', payment.id),
+                    where('ownerId', '==', ownerId)
+                ));
+                
+                const debts = debtsSnap.docs.map(d => d.data());
+                if (debts.length > 0) {
+                    ownerConcepts = debts.map((d: any) => ({
+                        ownerId: ownerId,
+                        description: d.description,
+                        amountUSD: d.paidAmountUSD || d.amountUSD,
+                        period: `${monthsLocale[d.month] || 'Mes'} ${d.year}`,
+                        type: 'deuda'
+                    }));
+                }
+                
+                const totalPaidInDebtsUSD = ownerConcepts.reduce((sum, c) => sum + c.amountUSD, 0);
+                const totalPaidInDebtsBs = totalPaidInDebtsUSD * payment.exchangeRate;
+                const remainderBs = beneficiary.amount - totalPaidInDebtsBs;
+                
+                if (remainderBs > 0.05) {
+                    ownerConcepts.push({
+                        ownerId: ownerId,
+                        description: 'ABONO A SALDO A FAVOR',
+                        amountUSD: remainderBs / payment.exchangeRate,
+                        period: 'SALDO',
+                        type: 'abono'
+                    });
+                }
+            }
+
+            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
+            const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
+
+            const concepts = ownerConcepts.map(c => {
+                const isAbono = c.type === 'abono' || c.description.includes('ABONO');
+                const propertyPart = (beneficiary.street && beneficiary.house) 
+                    ? ` (${beneficiary.street} - ${beneficiary.house})` 
+                    : '';
+                return [
+                    c.period,
+                    `${c.description}${propertyPart}`,
+                    isAbono ? '-' : `$${c.amountUSD.toFixed(2)}`,
+                    formatCurrency(c.amountUSD * payment.exchangeRate)
+                ];
+            });
+
+            const data = {
+                condoName: localCompanyInfo.name || 'CONDOMINIO',
+                rif: localCompanyInfo.rif || 'J-40587208-0',
+                receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
+                ownerName: beneficiary.ownerName,
+                method: payment.paymentMethod?.toLowerCase() || 'N/A',
+                bank: payment.bank || 'N/A',
+                reference: payment.reference || 'N/A',
+                date: format(pDate, 'dd/MM/yyyy'),
+                rate: formatCurrency(payment.exchangeRate),
+                receivedAmount: formatCurrency(beneficiary.amount),
+                totalDebtPaid: formatCurrency(totalAbonadoBs),
+                prevBalance: formatCurrency(prevBalance),
+                currentBalance: formatCurrency(currentBalance),
+                observations: payment.observations || 'Pago verificado y aplicado por la administración.',
+                concepts
+            };
+
+            await generatePaymentReceipt(data, localCompanyInfo.logo, 'download');
+            toast({ title: "Recibo descargado" });
+        } catch (error) {
+            console.error("PDF Export Error:", error);
+            toast({ variant: 'destructive', title: 'Error al generar PDF' });
+        }
+    };
+
+    const handleSharePDF = async (payment: Payment, ownerId: string) => {
+        try {
+            if (!localCompanyInfo) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no disponible.' });
+                return;
+            }
+            const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+            if (!beneficiary) return;
+
+            let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
+            
+            if (ownerConcepts.length === 0) {
+                const debtsSnap = await getDocs(query(
+                    collection(db, 'condominios', condoId, 'debts'),
+                    where('paymentId', '==', payment.id),
+                    where('ownerId', '==', ownerId)
+                ));
+                
+                const debts = debtsSnap.docs.map(d => d.data());
+                if (debts.length > 0) {
+                    ownerConcepts = debts.map((d: any) => ({
+                        ownerId: ownerId,
+                        description: d.description,
+                        amountUSD: d.paidAmountUSD || d.amountUSD,
+                        period: `${monthsLocale[d.month] || 'Mes'} ${d.year}`,
+                        type: 'deuda'
+                    }));
+                }
+                
+                const totalPaidInDebtsUSD = ownerConcepts.reduce((sum, c) => sum + c.amountUSD, 0);
+                const totalPaidInDebtsBs = totalPaidInDebtsUSD * payment.exchangeRate;
+                const remainderBs = beneficiary.amount - totalPaidInDebtsBs;
+                
+                if (remainderBs > 0.05) {
+                    ownerConcepts.push({
+                        ownerId: ownerId,
+                        description: 'ABONO A SALDO A FAVOR',
+                        amountUSD: remainderBs / payment.exchangeRate,
+                        period: 'SALDO',
+                        type: 'abono'
+                    });
+                }
+            }
+
+            const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
+            const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
+
+            const concepts = ownerConcepts.map(c => {
+                const isAbono = c.type === 'abono' || c.description.includes('ABONO');
+                const propertyPart = (beneficiary.street && beneficiary.house) 
+                    ? ` (${beneficiary.street} - ${beneficiary.house})` 
+                    : '';
+                return [
+                    c.period,
+                    `${c.description}${propertyPart}`,
+                    isAbono ? '-' : `$${c.amountUSD.toFixed(2)}`,
+                    formatCurrency(c.amountUSD * payment.exchangeRate)
+                ];
+            });
+
+            const data = {
+                condoName: localCompanyInfo.name || 'CONDOMINIO',
+                rif: localCompanyInfo.rif || 'J-40587208-0',
+                receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
+                ownerName: beneficiary.ownerName,
+                method: payment.paymentMethod?.toLowerCase() || 'N/A',
+                bank: payment.bank || 'N/A',
+                reference: payment.reference || 'N/A',
+                date: format(pDate, 'dd/MM/yyyy'),
+                rate: formatCurrency(payment.exchangeRate),
+                receivedAmount: formatCurrency(beneficiary.amount),
+                totalDebtPaid: formatCurrency(totalAbonadoBs),
+                prevBalance: formatCurrency(prevBalance),
+                currentBalance: formatCurrency(currentBalance),
+                observations: payment.observations || 'Pago verificado y aplicado por la administración.',
+                concepts
+            };
+
+            const blob = await generatePaymentReceipt(data, localCompanyInfo.logo, 'blob');
+            if (blob && navigator.share) {
+                const file = new File([blob as Blob], `Recibo_${beneficiary.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
+                await navigator.share({ files: [file], title: 'Recibo de Pago', text: `Comprobante para ${beneficiary.ownerName}` });
+            } else {
+                toast({ title: "No disponible", description: "Su dispositivo no soporta compartir archivos." });
+            }
+        } catch (error) {
+            console.error("PDF Share Error:", error);
+            toast({ variant: 'destructive', title: 'Error al compartir' });
+        }
+    };
+
+    const handleDeletePayment = async () => {
+        if (!paymentToDelete || !condoId) return;
+        requestAuthorization(async () => {
+            setIsVerifying(true);
+            try {
+                const monthId = format(paymentToDelete.paymentDate.toDate(), 'yyyy-MM');
+                const transSnap = await getDocs(query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id)));
+                
+                await runTransaction(db, async (transaction) => {
+                    if (paymentToDelete.status === 'aprobado') {
+                        for (const ben of paymentToDelete.beneficiaries) {
+                            const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, ben.ownerId);
+                            transaction.update(ownerRef, { balance: increment(-ben.amount) });
+                        }
+                        
+                        if (!transSnap.empty) {
+                            const txData = transSnap.docs[0].data();
+                            transaction.update(doc(db, 'condominios', condoId, 'cuentas', txData.cuentaId), { saldoActual: increment(-paymentToDelete.totalAmount) });
+                            const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                            transaction.update(statsRef, {
+                                saldoBancarioReal: increment(txData.nombreCuenta === "BANCO DE VENEZUELA" ? -paymentToDelete.totalAmount : 0),
+                                saldoCajaReal: increment(txData.nombreCuenta === "CAJA PRINCIPAL" ? -paymentToDelete.totalAmount : 0),
+                                totalIngresosMes: increment(-paymentToDelete.totalAmount)
+                            });
+                            transSnap.forEach(d => transaction.delete(d.ref));
+                        }
+                    }
+                    transaction.delete(doc(db, 'condominios', condoId, 'payments', paymentToDelete.id));
+                });
+                toast({ title: "Registro Eliminado" });
+                setPaymentToDelete(null);
+            } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
+            finally { setIsVerifying(false); }
+        });
     };
 
     return (
@@ -214,7 +536,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     <CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">Bandeja de <span className="text-primary">Validación</span></CardTitle>
                     <div className="relative w-full md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input placeholder="BUSCAR..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-800 border-none text-white font-bold" />
+                        <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-800 border-none text-white font-bold" />
                     </div>
                 </div>
             </CardHeader>
@@ -226,74 +548,145 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         <TabsTrigger value="rechazado" className="rounded-lg font-black uppercase text-[10px]">Rechazados</TabsTrigger>
                     </TabsList>
                     
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader className="bg-slate-800/20"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-40 text-center text-slate-500 font-bold italic uppercase text-[10px]">Sin reportes registrados</TableCell></TableRow>) : 
-                                filteredPayments.map(p => (
-                                    <TableRow key={p.id} className="hover:bg-white/5 border-white/5 transition-colors">
-                                        <TableCell className="px-8 py-6"><div className="font-black text-white text-xs uppercase italic">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-1">{p.paymentMethod} • {p.bank}</div></TableCell>
-                                        <TableCell className="text-slate-400 font-bold text-xs">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
-                                        <TableCell className="font-black text-white text-lg italic">Bs. {formatCurrency(p.totalAmount)}</TableCell>
-                                        <TableCell className="font-mono text-[10px] text-slate-500">{p.reference}</TableCell>
-                                        <TableCell className="text-right pr-8">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white italic">
-                                                    <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Ver Detalles</DropdownMenuItem>
-                                                    {p.status === 'aprobado' && (<DropdownMenuItem onClick={() => handleExportPDF(p, p.beneficiaries[0].ownerId)} className="font-black uppercase text-[10px] p-3 gap-2"><FileDown className="h-4 w-4 text-sky-400" /> Descargar PDF</DropdownMenuItem>)}
-                                                    {p.status === 'pendiente' && (<DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Aprobar y Liquidar</DropdownMenuItem>)}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
+                    {loading ? <div className="text-center p-20"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div> : (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader className="bg-slate-800/20"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead></TableRow></TableHeader>
+                                <TableBody>
+                                    {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-40 text-center text-slate-500 font-bold italic uppercase text-[10px]">Sin reportes</TableCell></TableRow>) : 
+                                    filteredPayments.map(p => (
+                                        <TableRow key={p.id} className="hover:bg-white/5 border-white/5 transition-colors">
+                                            <TableCell className="px-8 py-6"><div className="font-black text-white text-xs uppercase italic">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-1">{p.paymentMethod} • {p.bank}</div></TableCell>
+                                            <TableCell className="text-slate-400 font-bold text-xs">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
+                                            <TableCell className="font-black text-white text-lg italic">Bs. {formatCurrency(p.totalAmount)}</TableCell>
+                                            <TableCell className="font-mono text-[10px] text-slate-500">{p.reference}</TableCell>
+                                            <TableCell className="text-right pr-8">
+                                                <div className="flex justify-end items-center gap-2">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white italic">
+                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Ver Detalles</DropdownMenuItem>
+                                                            
+                                                            {p.status === 'aprobado' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuSub>
+                                                                        <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><FileDown className="h-4 w-4 text-sky-400" /> Descargar PDF</DropdownMenuSubTrigger>
+                                                                        <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
+                                                                            {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleExportPDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
+                                                                        </DropdownMenuSubContent></DropdownMenuPortal>
+                                                                    </DropdownMenuSub>
+                                                                    <DropdownMenuSub>
+                                                                        <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><Share2 className="h-4 w-4 text-emerald-400" /> Compartir</DropdownMenuSubTrigger>
+                                                                        <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
+                                                                            {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleSharePDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
+                                                                        </DropdownMenuSubContent></DropdownMenuPortal>
+                                                                    </DropdownMenuSub>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Revertir y Eliminar</DropdownMenuItem>
+                                                                </>
+                                                            )}
+
+                                                            {p.status === 'pendiente' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Aprobar y Liquidar</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><XCircle className="h-4 w-4" /> Rechazar Pago</DropdownMenuItem>
+                                                                </>
+                                                            )}
+
+                                                            {p.status === 'rechazado' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Eliminar Definitivamente</DropdownMenuItem>
+                                                                </>
+                                                            )}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </Tabs>
             </CardContent>
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
-                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic overflow-y-auto max-h-[90vh]">
+                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat max-h-[90vh] overflow-y-auto italic">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Detalle del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
                         <div className="space-y-6">
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
-                                <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-widest">Distribución</p>
+                                <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-widest">Distribución de Ingreso</p>
                                 {selectedPayment?.beneficiaries.map((b, i) => (
                                     <div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
-                                        <div className="flex flex-col"><span className="font-black text-white text-xs uppercase">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span></div>
+                                        <div className="flex flex-col"><span className="font-black text-white text-xs uppercase italic">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span></div>
                                         <span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span>
                                     </div>
                                 ))}
+                                <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-white">Total Reportado:</span><span className="text-2xl font-black italic">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
                             </div>
-                            {selectedPayment?.receiptUrl && (
-                                <div className="relative aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border border-white/5">
-                                    <Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />
+
+                            {selectedPayment?.status === 'aprobado' && selectedPayment?.liquidatedConcepts && (
+                                <div className="bg-slate-800 p-6 rounded-3xl border border-white/5 animate-in slide-in-from-top-4 duration-500">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Conceptos Computados</p>
+                                        {selectedPayment.beneficiaries.length === 1 && (
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                onClick={() => handleExportPDF(selectedPayment, selectedPayment.beneficiaries[0].ownerId)}
+                                                className="h-8 rounded-xl font-black uppercase text-[9px] border-emerald-500/20 text-emerald-500"
+                                            >
+                                                <Download className="h-3 w-3 mr-1" /> Recibo PDF
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <div className="space-y-3">
+                                        {selectedPayment.liquidatedConcepts.map((concept, idx) => (
+                                            <div key={idx} className="flex justify-between items-start gap-4 text-[10px]">
+                                                <div className="flex flex-col">
+                                                    <span className="font-black text-white uppercase italic">{concept.period}</span>
+                                                    <span className="font-bold text-slate-500 uppercase">{concept.description}</span>
+                                                </div>
+                                                <span className="font-black text-emerald-400 italic">${concept.amountUSD.toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
+
+                            {selectedPayment?.status === 'pendiente' && (
+                                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
+                            )}
                         </div>
-                        <div className="space-y-4">
-                            <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20"><p className="text-[10px] font-black text-primary uppercase">Monto Total</p><p className="text-3xl font-black italic text-white">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</p></div>
-                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5"><p className="text-[10px] font-black text-slate-500 uppercase">Referencia</p><p className="text-xl font-black text-white">{selectedPayment?.reference}</p></div>
-                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5"><p className="text-[10px] font-black text-slate-500 uppercase">Banco</p><p className="text-lg font-black text-white uppercase">{selectedPayment?.bank}</p></div>
+                        <div className="relative aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border border-white/5">
+                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />) : (<div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen adjunta</div>)}
                         </div>
                     </div>
                     {selectedPayment?.status === 'pendiente' && (
-                        <DialogFooter><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="w-full h-14 bg-primary text-slate-900 font-black uppercase rounded-2xl shadow-xl italic tracking-widest">{isVerifying ? <Loader2 className="animate-spin" /> : "Validar Ahora"}</Button></DialogFooter>
+                        <DialogFooter className="gap-3 mt-4"><Button variant="ghost" onClick={() => handleReject(selectedPayment!)} className="text-red-500 font-black uppercase text-[10px]">Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-primary text-slate-900 font-black uppercase text-[10px] h-12 rounded-xl flex-1 italic">Validar y Liquidar</Button></DialogFooter>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic">
+                    <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Confirmar Eliminación?</DialogTitle></DialogHeader>
+                    <p className="text-slate-400 font-bold text-sm uppercase">Se borrará permanentemente el registro. Si estaba aprobado, los saldos serán revertidos automáticamente.</p>
+                    <DialogFooter className="gap-2 mt-8"><Button variant="ghost" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-black uppercase text-[10px] h-12">Cancelar</Button><Button onClick={handleDeletePayment} className="bg-red-600 rounded-xl font-black uppercase text-[10px] h-12 italic">Confirmar Borrado</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </Card>
     );
 }
 
-// --- COMPONENTE: REPORTE MANUAL ---
 function ReportPaymentComponent() {
     const { toast } = useToast();
-    const { user: authUser } = useAuth();
+    const { user: authUser, ownerData: authOwnerData } = useAuth();
     const params = useParams();
     const condoId = params?.condoId as string;
     
@@ -308,43 +701,83 @@ function ReportPaymentComponent() {
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-    const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-
+    
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
     useEffect(() => {
         if (!condoId) return;
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
-        onSnapshot(q, (snap) => setAllOwners(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).filter(o => o.email !== 'vallecondo@gmail.com').sort((a,b) => a.name.localeCompare(b.name))));
-        getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings')).then(snap => {
-            if (snap.exists()) {
-                const active = (snap.data().exchangeRates || []).find((r:any) => r.active);
-                setExchangeRate(active?.rate || 0);
-            }
+        return onSnapshot(q, (snapshot) => {
+            const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
+            setAllOwners(ownersData.filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
-    }, [condoId]);
+    }, [condoId, ownersCollectionName]);
 
-    const getFilteredOwners = (searchTerm: string) => allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    useEffect(() => {
+        if (!condoId) return;
+        const fetchRate = async () => {
+            const docSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
+            if (docSnap.exists() && paymentDate) {
+                const allRates = (docSnap.data().exchangeRates || []);
+                const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
+                const applicable = allRates.filter((r:any) => r.date <= paymentDateString).sort((a:any, b:any) => b.date.localeCompare(a.date));
+                setExchangeRate(applicable.length > 0 ? applicable[0].rate : null);
+            }
+        };
+        fetchRate();
+    }, [paymentDate, condoId]);
+
+    const amountUSD = useMemo(() => {
+        const bs = parseFloat(totalAmount);
+        if (!isNaN(bs) && exchangeRate && exchangeRate > 0) return (bs / exchangeRate).toFixed(2);
+        return '0.00';
+    }, [totalAmount, exchangeRate]);
+
+    const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
+    const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
+    
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
+    
+    const handleOwnerSelect = (rowId: string, owner: Owner) => {
+        updateBeneficiaryRow(rowId, { 
+            owner, 
+            searchTerm: '', 
+            selectedProperty: owner.properties && owner.properties.length > 0 ? owner.properties[0] : null 
+        });
+    };
+
+    const getFilteredOwners = (searchTerm: string) => {
+        if (searchTerm.length < 2) return [];
+        return allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    };
+
+    const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
     const removeBeneficiaryRow = (id: string) => setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
-    const handleOwnerSelect = (rowId: string, owner: Owner) => updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: owner.properties?.[0] || null });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!totalAmount || beneficiaryRows.length === 0) return;
+        if (!authUser || !condoId || !exchangeRate || !totalAmount) {
+            toast({ variant: 'destructive', title: 'Faltan datos', description: 'Monto y tasa son obligatorios.' });
+            return;
+        }
         setIsSubmitting(true);
         try {
-            const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, street: row.selectedProperty?.street, house: row.selectedProperty?.house, amount: Number(row.amount) }));
+            const beneficiaries = beneficiaryRows.map(row => ({ 
+                ownerId: row.owner!.id, 
+                ownerName: row.owner!.name, 
+                ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), 
+                amount: Number(row.amount) 
+            }));
             await addDoc(collection(db, "condominios", condoId, "payments"), { 
-                reportedBy: authUser?.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), 
+                reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), 
                 totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), 
                 paymentMethod, bank: paymentMethod === 'efectivo_bs' ? 'Efectivo' : bank, 
                 reference: paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : reference, receiptUrl: receiptImage || "", 
                 status: 'pendiente', reportedAt: serverTimestamp() 
             });
-            setShowSuccessDialog(true);
+            toast({ title: 'Reporte Enviado' });
             setTotalAmount(''); setReference(''); setReceiptImage(null); setBeneficiaryRows([]);
-        } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
+        } catch (error) { toast({ variant: "destructive", title: "Error" }); } 
         finally { setIsSubmitting(false); }
     };
 
@@ -354,41 +787,68 @@ function ReportPaymentComponent() {
             <form onSubmit={handleSubmit}>
                 <CardContent className="p-8 space-y-10">
                     <div className="grid md:grid-cols-2 gap-8">
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tasa Bs.</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto Bs.</Label><Input type="number" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia</Label><Input value={reference} onChange={e => setReference(e.target.value.replace(/\D/g, ''))} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic" placeholder="6 DÍGITOS" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Fecha Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa Bs.</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left" onClick={() => setIsBankModalOpen(true)} disabled={paymentMethod === 'efectivo_bs'}>{paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={paymentMethod === 'efectivo_bs'} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic" placeholder="6 DÍGITOS" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
+                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equiv. USD</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={amountUSD} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
+                        </div>
+                        <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Soporte Digital (Opcional)</Label><Input type="file" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(file) setReceiptImage(await compressImage(file, 800, 800)); }} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
                     </div>
                     
                     <div className="space-y-6">
                         <Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-2">Asignación de Beneficiarios</Label>
                         {beneficiaryRows.map((row) => (
-                            <div key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] space-y-6">
+                            <div key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] space-y-6 relative">
                                 <div className="grid md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
                                         {!row.owner ? (
-                                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{getFilteredOwners(row.searchTerm).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase text-white border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>}</div>
+                                            <div className="relative">
+                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                                                <Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />
+                                                {row.searchTerm.length >= 2 && (
+                                                    <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+                                                        <ScrollArea className="h-48">
+                                                            {getFilteredOwners(row.searchTerm).map(o => (
+                                                                <div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">
+                                                                    {o.name}
+                                                                </div>
+                                                            ))}
+                                                        </ScrollArea>
+                                                    </Card>
+                                                )}
+                                            </div>
                                         ) : (<div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center"><p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500"><XCircle className="h-5 w-5"/></Button></div>)}
-                                        {row.owner && (<Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}><SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]"><SelectValue placeholder="Unidad..."/></SelectTrigger><SelectContent className="bg-slate-900 text-white border-white/10 italic">{row.owner.properties.map((p, i) => (<SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase italic">{p.street} - {p.house}</SelectItem>))}</SelectContent></Select>)}
+                                        {row.owner && row.owner.properties && (
+                                            <Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}>
+                                                <SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]">
+                                                    <SelectValue placeholder="Unidad..."/>
+                                                </SelectTrigger>
+                                                <SelectContent className="bg-slate-900 text-white border-white/10 italic">
+                                                    {row.owner.properties.map((p, i) => (
+                                                        <SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase italic">{p.street} - {p.house}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        )}
                                     </div>
                                     <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-500 ml-2">Monto Individual (Bs.)</Label><Input type="number" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" placeholder="0,00" /></div>
                                 </div>
                             </div>
                         ))}
-                        <Button type="button" variant="outline" size="sm" onClick={() => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }])} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"><UserPlus className="mr-2 h-4 w-4 text-primary"/>Añadir Beneficiario</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"><UserPlus className="mr-2 h-4 w-4 text-primary"/>Añadir Beneficiario</Button>
                     </div>
                 </CardContent>
-                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex justify-end"><Button type="submit" disabled={isSubmitting || !totalAmount} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">{isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO</Button></CardFooter>
+                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6"><div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: Bs. {formatCurrency(balance)}</div><Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">{isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR</Button></CardFooter>
             </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
-            <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-                <DialogContent className="rounded-3xl bg-slate-900 text-white italic"><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-primary" /> Reporte Exitoso</DialogTitle><p className="text-slate-400 font-bold text-sm uppercase pt-4">El pago ha sido registrado y está en bandeja de validación.</p></DialogHeader><DialogFooter><Button onClick={() => setShowSuccessDialog(false)} className="bg-primary text-slate-900 font-black">ENTENDIDO</Button></DialogFooter></DialogContent>
-            </Dialog>
         </Card>
     );
 }
 
-// --- COMPONENTE: CALCULADORA ---
 function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
@@ -398,14 +858,20 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
     const [activeRate, setActiveRate] = useState(0);
     const [condoFee, setCondoFee] = useState(0);
     const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
-    const [advanceMonths, setAdvanceMonths] = useState(0);
+    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
 
     const ownersCol = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
     useEffect(() => {
         if (!condoId) return;
         const q = query(collection(db, 'condominios', condoId, ownersCol), where('role', '==', 'propietario'));
-        onSnapshot(q, snap => setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).filter(o => o.email !== 'vallecondo@gmail.com').sort((a,b) => a.name.localeCompare(b.name))));
+        return onSnapshot(q, snap => {
+            setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).sort((a,b) => a.name.localeCompare(b.name)));
+        });
+    }, [condoId, ownersCol]);
+
+    useEffect(() => {
+        if (!condoId) return;
         getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings')).then(snap => {
             if (snap.exists()) {
                 const data = snap.data();
@@ -414,65 +880,138 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                 setActiveRate(active?.rate || 0);
             }
         });
-    }, [condoId, ownersCol]);
+    }, [condoId]);
 
     useEffect(() => {
         if (!selectedOwner || !condoId) return;
         setLoading(true);
         const q = query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', selectedOwner.id), where('status', 'in', ['pending', 'vencida']));
-        onSnapshot(q, snap => {
+        return onSnapshot(q, snap => {
             setDebts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
         });
     }, [selectedOwner, condoId]);
 
+    const futureMonths = useMemo(() => {
+        const now = new Date();
+        return Array.from({ length: 12 }, (_, i) => {
+            const date = addMonths(now, i);
+            return {
+                value: format(date, 'yyyy-MM'),
+                label: format(date, 'MMMM yyyy', { locale: es }).toUpperCase()
+            };
+        });
+    }, []);
+
     const totals = useMemo(() => {
         const selectedAmountUSD = debts.filter(d => selectedDebts.includes(d.id)).reduce((sum, d) => sum + d.amountUSD, 0);
-        const advanceAmountUSD = advanceMonths * condoFee;
-        const totalUSD = selectedAmountUSD + advanceAmountUSD;
-        const totalBs = totalUSD * activeRate;
-        const balanceInFavor = selectedOwner?.balance || 0;
-        return { totalUSD, totalBs, toPayBs: Math.max(0, totalBs - balanceInFavor) };
-    }, [debts, selectedDebts, advanceMonths, condoFee, activeRate, selectedOwner]);
+        const advanceAmountUSD = selectedAdvanceMonths.length * condoFee;
+        const subTotalUSD = selectedAmountUSD + advanceAmountUSD;
+        const subTotalBs = subTotalUSD * activeRate;
+        const balanceBs = selectedOwner?.balance || 0;
+        const totalToPayBs = Math.max(0, subTotalBs - balanceBs);
+        return { subTotalBs, balanceBs, totalToPayBs, subTotalUSD };
+    }, [debts, selectedDebts, selectedAdvanceMonths, condoFee, activeRate, selectedOwner]);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 font-montserrat italic text-white">
             <div className="lg:col-span-2 space-y-6">
                 <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]">
-                    <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic">1. Residente</CardTitle></CardHeader>
+                    <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic tracking-tighter">1. Seleccionar Residente</CardTitle></CardHeader>
                     <CardContent className="p-8">
                         {!selectedOwner ? (
-                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 h-5 w-5"/><Input placeholder="BUSCAR PROPIETARIO..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none font-black text-xs uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
-                            {searchTerm.length >= 2 && (
-                                <Card className="absolute z-50 w-full mt-2 bg-slate-950 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => setSelectedOwner(o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>
-                            )}</div>
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 h-5 w-5"/>
+                                <Input placeholder="BUSCAR PROPIETARIO..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none font-black text-xs uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                                {searchTerm.length >= 2 && (
+                                    <Card className="absolute z-50 w-full mt-2 bg-slate-950 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+                                        <ScrollArea className="h-48">
+                                            {allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (
+                                                <div key={o.id} onClick={() => setSelectedOwner(o)} className="p-5 hover:bg-white/5 cursor-pointer font-black text-sm uppercase border-b border-white/5">
+                                                    {o.name}
+                                                </div>
+                                            ))}
+                                        </ScrollArea>
+                                    </Card>
+                                )}
+                            </div>
                         ) : (
-                            <div className="flex justify-between items-center p-6 bg-slate-800 rounded-3xl border border-primary/20"><div className="flex items-center gap-4"><div className="bg-primary/10 p-3 rounded-2xl text-primary"><UserPlus /></div><div><p className="font-black text-lg uppercase">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-500 uppercase">{selectedOwner.properties.map(p => `${p.street} ${p.house}`).join(' | ')}</p></div></div><Button variant="ghost" size="icon" onClick={() => setSelectedOwner(null)} className="text-red-500 hover:bg-red-500/10"><XCircle /></Button></div>
+                            <div className="flex justify-between items-center p-6 bg-slate-800 rounded-3xl border border-primary/20">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-primary/10 p-3 rounded-2xl text-primary"><UserPlus /></div>
+                                    <div>
+                                        <p className="font-black text-xl uppercase tracking-tighter">{selectedOwner.name}</p>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{selectedOwner.properties.map(p => `${p.street} ${p.house}`).join(' | ')}</p>
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedDebts([]); setSelectedAdvanceMonths([]); }} className="text-red-500 hover:bg-red-500/10 rounded-full h-12 w-12"><XCircle /></Button>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
 
                 {selectedOwner && (
-                    <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]">
-                        <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic">2. Deudas y Adelantos</CardTitle></CardHeader>
-                        <CardContent className="p-0">
-                            {loading ? <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary h-10 w-10"/></div> : (
-                                <Table><TableHeader className="bg-slate-800/30"><TableRow className="border-white/5"><TableHead className="w-16 px-8 py-6 text-center">PAGAR</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">PERÍODO</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">CONCEPTO</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">MONTO BS.</TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    {debts.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center text-slate-500 font-bold uppercase text-[10px]">Sin deudas pendientes</TableCell></TableRow> : 
-                                    debts.sort((a,b) => a.year - b.year || a.month - b.month).map(d => (
-                                        <TableRow key={d.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                                            <TableCell className="px-8 py-6 text-center"><Checkbox checked={selectedDebts.includes(d.id)} onCheckedChange={c => setSelectedDebts(p => c ? [...p, d.id] : p.filter(id => id !== d.id))}/></TableCell>
-                                            <TableCell className="font-black text-white text-xs uppercase">{monthsLocale[d.month]} {d.year}</TableCell>
-                                            <TableCell className="text-[10px] font-bold text-slate-500 uppercase">{d.description}</TableCell>
-                                            <TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell>
-                                        </TableRow>
+                    <>
+                        <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]">
+                            <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic tracking-tighter">2. Deudas Pendientes</CardTitle></CardHeader>
+                            <CardContent className="p-0">
+                                {loading ? <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary h-10 w-10"/></div> : (
+                                    <Table>
+                                        <TableHeader className="bg-slate-800/30">
+                                            <TableRow className="border-white/5">
+                                                <TableHead className="w-16 px-8 py-6 text-center">PAGAR</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-slate-400">PERÍODO</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-slate-400">CONCEPTO</TableHead>
+                                                <TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">MONTO BS.</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {debts.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center text-slate-500 font-bold uppercase text-[10px]">Sin deudas pendientes</TableCell></TableRow> : 
+                                            debts.sort((a,b) => a.year - b.year || a.month - b.month).map(d => (
+                                                <TableRow key={d.id} className="border-white/5 hover:bg-white/5 transition-colors">
+                                                    <TableCell className="px-8 py-6 text-center">
+                                                        <Checkbox 
+                                                            className="border-primary data-[state=checked]:bg-primary"
+                                                            checked={selectedDebts.includes(d.id)} 
+                                                            onCheckedChange={c => setSelectedDebts(p => c ? [...p, d.id] : p.filter(id => id !== d.id))}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-black text-white text-xs uppercase">{monthsLocale[d.month]} {d.year}</TableCell>
+                                                    <TableCell className="text-[10px] font-bold text-slate-500 uppercase">{d.description}</TableCell>
+                                                    <TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]">
+                            <CardHeader className="bg-white/5 p-8 border-b border-white/5">
+                                <CardTitle className="text-xl font-black uppercase italic tracking-tighter">3. Meses por Adelantado</CardTitle>
+                                <CardDescription className="text-white/40 font-bold text-[10px] uppercase">Cuota actual: ${condoFee.toFixed(2)}</CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-8">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    {futureMonths.map(month => (
+                                        <Button 
+                                            key={month.value}
+                                            variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'}
+                                            className={cn(
+                                                "h-14 rounded-2xl font-black uppercase text-[10px] tracking-tighter transition-all",
+                                                selectedAdvanceMonths.includes(month.value) ? "bg-primary text-slate-900" : "border-white/10 text-white hover:bg-white/5"
+                                            )}
+                                            onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m => m !== month.value) : [...p, month.value])}
+                                        >
+                                            {selectedAdvanceMonths.includes(month.value) && <Check className="h-3 w-3 mr-1" />}
+                                            {month.label}
+                                        </Button>
                                     ))}
-                                    <TableRow className="bg-primary/5 border-none"><TableCell className="px-8 py-8 font-black text-xs text-primary uppercase italic" colSpan={2}>MESES POR ADELANTADO</TableCell><TableCell className="text-center"><div className="flex items-center justify-center gap-4"><Button variant="outline" size="icon" className="h-10 w-10 border-primary text-primary rounded-xl" onClick={() => setAdvanceMonths(Math.max(0, advanceMonths - 1))}><Minus/></Button><span className="text-xl font-black w-8">{advanceMonths}</span><Button variant="outline" size="icon" className="h-10 w-10 border-primary text-primary rounded-xl" onClick={() => setAdvanceMonths(advanceMonths + 1)}><PlusCircle/></Button></div></TableCell><TableCell className="text-right pr-8 font-black text-primary italic">Bs. {formatCurrency(advanceMonths * condoFee * activeRate)}</TableCell></TableRow>
-                                </TableBody></Table>
-                            )}
-                        </CardContent>
-                    </Card>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </>
                 )}
             </div>
 
@@ -482,30 +1021,48 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                     <CardContent className="p-8 space-y-6">
                         <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-500">TASA BCV</span><Badge variant="outline" className="font-black text-primary border-primary/20">Bs. {formatCurrency(activeRate)}</Badge></div>
                         <Separator className="bg-white/5"/>
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-500 mb-1">TOTAL BS.</span><span className="text-3xl font-black text-white italic">Bs. {formatCurrency(totals.totalBs)}</span></div>
-                        <div className="flex justify-between items-center text-xs font-bold text-emerald-500 italic"><span>(-) SALDO A FAVOR</span><span>Bs. {formatCurrency(selectedOwner?.balance || 0)}</span></div>
-                        <div className="flex flex-col gap-1 text-center bg-white/5 p-6 rounded-[2rem] border border-white/5"><span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">NETO A PAGAR</span><span className="text-4xl font-black text-primary italic drop-shadow-2xl">Bs. {formatCurrency(totals.toPayBs)}</span></div>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black uppercase text-slate-400">Sub-Total Deuda</span>
+                                <span className="font-black text-white italic">Bs. {formatCurrency(totals.subTotalBs)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-emerald-500">
+                                <span className="text-[10px] font-black uppercase">(-) Saldo a Favor</span>
+                                <span className="font-black italic">Bs. {formatCurrency(totals.balanceBs)}</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-1 text-center bg-white/5 p-6 rounded-[2rem] border border-white/5 shadow-inner">
+                            <span className="text-[10px] font-black uppercase text-primary tracking-widest">TOTAL A PAGAR</span>
+                            <span className="text-4xl font-black text-white italic drop-shadow-2xl">Bs. {formatCurrency(totals.totalToPayBs)}</span>
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase mt-1">EQUIV: ${formatToTwoDecimals(totals.totalToPayBs / activeRate)}</span>
+                        </div>
                     </CardContent>
-                    <CardFooter className="px-8 pb-8"><Button onClick={() => onReport({ owner: selectedOwner, totalBs: totals.toPayBs })} disabled={!selectedOwner || totals.toPayBs <= 0} className="w-full h-16 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl">REPORTE DE PAGO <Receipt className="ml-2"/></Button></CardFooter>
+                    <CardFooter className="px-8 pb-8"><Button onClick={() => onReport({ owner: selectedOwner, totalBs: totals.totalToPayBs })} disabled={!selectedOwner || totals.totalToPayBs <= 0} className="w-full h-16 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">PROCEDER AL REPORTE <Receipt className="ml-2"/></Button></CardFooter>
                 </Card>
             </div>
         </div>
     );
 }
 
-// --- COMPONENTE: MAIN ---
 function PaymentsPage() {
     const searchParams = useSearchParams();
     const condoId = useParams()?.condoId as string;
     const router = useRouter();
     const activeTab = searchParams?.get('tab') ?? 'verify';
+    
+    const [calcData, setCalcData] = useState<any>(null);
+
+    const handleCalcReport = (data: any) => {
+        setCalcData(data);
+        router.push(`/${condoId}/admin/payments?tab=report`);
+    };
 
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic">
             <div className="mb-10">
                 <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
                 <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
-                <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">Control de Ingresos y Liquidación Atómica.</p>
+                <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">Control de Ingresos y Liquidación Cronológica.</p>
             </div>
             <Tabs value={activeTab} onValueChange={(v) => router.push(`/${condoId}/admin/payments?tab=${v}`)}>
                 <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 h-16 rounded-2xl p-1 border border-white/5">
@@ -513,11 +1070,9 @@ function PaymentsPage() {
                     <TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Reporte Manual</TabsTrigger>
                     <TabsTrigger value="calculator" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Calculadora</TabsTrigger>
                 </TabsList>
-                <div className="mt-8">
-                    <TabsContent value="verify"><VerificationComponent condoId={condoId} /></TabsContent>
-                    <TabsContent value="report"><ReportPaymentComponent /></TabsContent>
-                    <TabsContent value="calculator"><CalculatorComponent condoId={condoId} onReport={(d) => router.push(`/${condoId}/admin/payments?tab=report`)} /></TabsContent>
-                </div>
+                <TabsContent value="verify" className="mt-8"><VerificationComponent condoId={condoId} /></TabsContent>
+                <TabsContent value="report" className="mt-8"><ReportPaymentComponent /></TabsContent>
+                <TabsContent value="calculator" className="mt-8"><CalculatorComponent condoId={condoId} onReport={handleCalcReport} /></TabsContent>
             </Tabs>
         </div>
     );
