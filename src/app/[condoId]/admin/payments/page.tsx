@@ -699,7 +699,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
 const getFilteredOwners = (searchTerm: string, allOwners: Owner[]) => {
     if (!searchTerm || searchTerm.length < 2) return [];
-    return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
+    return allOwners.filter(owner => 
+        owner.name?.toLowerCase().includes(searchTerm.toLowerCase()) && 
+        owner.email?.toLowerCase() !== 'vallecondo@gmail.com'
+    );
 };
 
 function ReportPaymentComponent() {
@@ -744,7 +747,7 @@ function ReportPaymentComponent() {
          if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, email: authUser.email || undefined },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -819,7 +822,7 @@ function ReportPaymentComponent() {
         if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, email: authUser.email || undefined },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -863,9 +866,12 @@ function ReportPaymentComponent() {
         if (!isCashPayment && (!bank || reference.length < 4)) {
             return { isValid: false, error: 'Complete el banco y la referencia (mín. 4 dígitos) para pagos bancarios.' };
         }
+        // Subir comprobante es ahora OPCIONAL
+        /* 
         if (!receiptImage) {
             return { isValid: false, error: 'Debe adjuntar una imagen del comprobante de pago.' };
         }
+        */
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) {
             return { isValid: false, error: 'Complete la información para cada beneficiario (propietario, propiedad y monto).' };
         }
@@ -924,7 +930,7 @@ function ReportPaymentComponent() {
                 status: 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: authUser.uid,
-                receiptUrl: receiptImage,
+                receiptUrl: receiptImage || null,
             };
             
             const paymentRef = await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
@@ -1021,7 +1027,7 @@ function ReportPaymentComponent() {
                                 </Popover>
                             </div>
                             <div className="space-y-2 md:col-span-2">
-                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante</Label>
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante (Opcional)</Label>
                                 <div className="relative flex items-center">
                                     <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
                                     <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />

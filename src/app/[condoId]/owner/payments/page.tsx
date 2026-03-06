@@ -25,14 +25,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 type Owner = {
     id: string;
     name: string;
+    email?: string;
     properties: { street: string, house: string }[];
-};
-
-type ExchangeRate = {
-    id: string;
-    date: string;
-    rate: number;
-    active: boolean;
 };
 
 type BeneficiaryRow = {
@@ -45,6 +39,13 @@ type BeneficiaryRow = {
 
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
 
+const getFilteredOwners = (searchTerm: string, allOwners: Owner[]) => {
+    if (!searchTerm || searchTerm.length < 2) return [];
+    return allOwners.filter(owner => 
+        owner.name?.toLowerCase().includes(searchTerm.toLowerCase()) && 
+        owner.email?.toLowerCase() !== 'vallecondo@gmail.com'
+    );
+};
 
 function ReportPaymentComponent() {
     const { toast } = useToast();
@@ -88,7 +89,7 @@ function ReportPaymentComponent() {
          if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, email: authUser.email || undefined },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -107,7 +108,7 @@ function ReportPaymentComponent() {
                     if (paymentDate) {
                         setExchangeRate(null);
                         setExchangeRateMessage('Buscando tasa...');
-                        const allRates = (settings.exchangeRates || []) as ExchangeRate[];
+                        const allRates = (settings.exchangeRates || []) as any[];
                         const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
                         const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
                         if (applicableRates.length > 0) {
@@ -163,7 +164,7 @@ function ReportPaymentComponent() {
         if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, email: authUser.email || undefined },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -199,10 +200,6 @@ function ReportPaymentComponent() {
              toast({ variant: "destructive", title: "Acción no permitida", description: "Debe haber al menos un beneficiario." });
         }
     };
-    const getFilteredOwners = (searchTerm: string) => {
-        if (!searchTerm || searchTerm.length < 2) return [];
-        return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
-    };
 
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         if (!paymentDate || !exchangeRate || !paymentMethod || !totalAmount || Number(totalAmount) <= 0) {
@@ -211,9 +208,7 @@ function ReportPaymentComponent() {
         if (!isCashPayment && (!bank || reference.length < 4)) {
             return { isValid: false, error: 'Complete el banco y la referencia (mín. 4 dígitos) para pagos bancarios.' };
         }
-        if (!receiptImage) {
-            return { isValid: false, error: 'Debe adjuntar una imagen del comprobante de pago.' };
-        }
+        // Subir comprobante es ahora OPCIONAL
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) {
             return { isValid: false, error: 'Complete la información para cada beneficiario (propietario, propiedad y monto).' };
         }
@@ -272,7 +267,7 @@ function ReportPaymentComponent() {
                 status: 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: authUser.uid,
-                receiptUrl: receiptImage,
+                receiptUrl: receiptImage || null,
             };
             
             const paymentRef = await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
@@ -369,7 +364,7 @@ function ReportPaymentComponent() {
                                 </Popover>
                             </div>
                             <div className="space-y-2 md:col-span-2">
-                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante</Label>
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante (Opcional)</Label>
                                 <div className="relative flex items-center">
                                     <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
                                     <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
@@ -400,34 +395,36 @@ function ReportPaymentComponent() {
                                     <Card key={row.id} className="p-4 bg-muted/50 relative">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
-                                                {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
+                                                {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm, allOwners).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm, allOwners).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
                                                 : (
                                                     <div className="p-3 bg-background rounded-md space-y-3">
                                                         <div className="flex items-center justify-between">
                                                             <p className="font-semibold text-primary">{row.owner.name}</p>
                                                             <Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading || beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button>
                                                         </div>
-                                                        <div className="space-y-1">
-                                                            <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
-                                                            <Select 
-                                                                onValueChange={(v) => {
-                                                                    const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
-                                                                    updateBeneficiaryRow(row.id, { selectedProperty: found || null });
-                                                                }} 
-                                                                value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
-                                                            >
-                                                                <SelectTrigger className="rounded-xl h-10 bg-slate-50 border-slate-200 text-slate-900">
-                                                                    <SelectValue placeholder="Seleccione propiedad..." />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {row.owner.properties.map((p, pIdx) => (
-                                                                        <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
-                                                                            {p.street} - {p.house}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
+                                                        {row.owner.properties && (
+                                                            <div className="space-y-1">
+                                                                <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
+                                                                <Select 
+                                                                    onValueChange={(v) => {
+                                                                        const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                                    }} 
+                                                                    value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
+                                                                >
+                                                                    <SelectTrigger className="rounded-xl h-10 bg-slate-50 border-slate-200 text-slate-900">
+                                                                        <SelectValue placeholder="Seleccione propiedad..." />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {row.owner.properties.map((p, pIdx) => (
+                                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
+                                                                                {p.street} - {p.house}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
