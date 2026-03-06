@@ -17,7 +17,7 @@ import {
     UserPlus, CheckCircle2, WalletCards, Trash2, 
     Hash, FileText, Save, Share2, FileDown,
     Calculator, Minus, Equal, Check, Receipt, X, DollarSign,
-    PlusCircle, FileUp
+    PlusCircle, FileUp, Info
 } from 'lucide-react';
 import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
