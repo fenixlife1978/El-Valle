@@ -16,8 +16,7 @@ import {
     Download, Loader2, Calendar as CalendarIcon, Banknote, 
     UserPlus, CheckCircle2, WalletCards, Trash2, 
     Hash, FileText, Save, Share2, FileDown,
-    Calculator, Minus, Equal, Check, Receipt, X, DollarSign,
-    PlusCircle, Info
+    Calculator, Minus, Equal, Receipt, Check, Info, DollarSign
 } from 'lucide-react';
 import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -35,8 +34,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { 
@@ -46,6 +43,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import Decimal from 'decimal.js';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Separator } from '@/components/ui/separator';
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
@@ -63,7 +62,7 @@ const formatToTwoDecimals = (num: number) => {
 };
 
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
-const CAJA_PRINCIPAL_ID = "fS0hdoWOyZBuTVuUJSic";
+const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
@@ -150,16 +149,24 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
                 await runTransaction(db, async (transaction) => {
+                    // 1. REGLA DE ORO: TODAS LAS LECTURAS (READS) ANTES DE LAS ESCRITURAS (WRITES)
+                    const ownerRefs = payment.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
+                    const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
+                    
                     const receiptNumbers: { [ownerId: string]: string } = {};
                     const liquidatedConcepts: LiquidatedConcept[] = [];
 
-                    for (const beneficiary of payment.beneficiaries) {
-                        const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
-                        const ownerSnap = await transaction.get(ownerRef);
+                    // 2. PROCESAMIENTO LÓGICO Y ESCRITURAS
+                    for (let i = 0; i < payment.beneficiaries.length; i++) {
+                        const beneficiary = payment.beneficiaries[i];
+                        const ownerSnap = ownerSnaps[i];
+                        const ownerRef = ownerRefs[i];
+
                         if (!ownerSnap.exists()) continue;
 
                         let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
                         
+                        // Consultas externas (getDocs) no bloquean la transacción si no se usa transaction.get() después
                         const debtsSnap = await getDocs(query(
                             collection(db, 'condominios', condoId, 'debts'),
                             where('ownerId', '==', beneficiary.ownerId),
@@ -182,7 +189,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 });
                                 liquidatedConcepts.push({
                                     ownerId: beneficiary.ownerId,
-                                    description: debt.description,
+                                    description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`,
                                     amountUSD: debt.amountUSD,
                                     period: `${monthsLocale[debt.month]} ${debt.year}`,
                                     type: 'deuda'
@@ -190,6 +197,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             } else break;
                         }
 
+                        // Lógica de Adelantos
                         const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
                         if (funds.gte(advanceAmountBs)) {
                             const allDebtsSnap = await getDocs(query(
@@ -230,7 +238,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                                 liquidatedConcepts.push({
                                     ownerId: beneficiary.ownerId,
-                                    description: 'CUOTA ADELANTADA',
+                                    description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`,
                                     amountUSD: currentFee,
                                     period: `${monthsLocale[month]} ${year}`,
                                     type: 'adelanto'
@@ -244,7 +252,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (funds.gt(0)) {
                             liquidatedConcepts.push({
                                 ownerId: beneficiary.ownerId,
-                                description: 'ABONO A SALDO A FAVOR',
+                                description: `ABONO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
                                 amountUSD: funds.div(payment.exchangeRate).toNumber(),
                                 period: 'SALDO',
                                 type: 'abono'
@@ -255,6 +263,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
 
+                    // Actualización de Cuentas y Tesorería
                     const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                     transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
@@ -325,7 +334,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!beneficiary) return;
 
             let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
-            
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const ownerData = ownerSnap.exists() ? ownerSnap.data() : null;
+            const propString = beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : (ownerData?.properties?.[0] ? `${ownerData.properties[0].street} - ${ownerData.properties[0].house}` : 'N/A');
+
             if (ownerConcepts.length === 0) {
                 const debtsSnap = await getDocs(query(
                     collection(db, 'condominios', condoId, 'debts'),
@@ -333,16 +345,16 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     where('ownerId', '==', ownerId)
                 ));
                 
-                const debts = debtsSnap.docs.map(d => d.data());
-                if (debts.length > 0) {
-                    ownerConcepts = debts.map((d: any) => ({
+                ownerConcepts = debtsSnap.docs.map((d: any) => {
+                    const data = d.data();
+                    return {
                         ownerId: ownerId,
-                        description: d.description,
-                        amountUSD: d.paidAmountUSD || d.amountUSD,
-                        period: `${monthsLocale[d.month] || 'Mes'} ${d.year}`,
+                        description: `${data.description} (${propString})`,
+                        amountUSD: data.paidAmountUSD || data.amountUSD,
+                        period: `${monthsLocale[data.month] || 'Mes'} ${data.year}`,
                         type: 'deuda'
-                    }));
-                }
+                    } as LiquidatedConcept;
+                });
                 
                 const totalPaidInDebtsUSD = ownerConcepts.reduce((sum, c) => sum + c.amountUSD, 0);
                 const totalPaidInDebtsBs = totalPaidInDebtsUSD * payment.exchangeRate;
@@ -351,29 +363,30 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 if (remainderBs > 0.05) {
                     ownerConcepts.push({
                         ownerId: ownerId,
-                        description: 'ABONO A SALDO A FAVOR',
+                        description: `ABONO A SALDO A FAVOR (${propString})`,
                         amountUSD: remainderBs / payment.exchangeRate,
                         period: 'SALDO',
                         type: 'abono'
                     });
                 }
+            } else {
+                ownerConcepts = ownerConcepts.map(c => ({
+                    ...c,
+                    description: c.description.includes('(') ? c.description : `${c.description} (${propString})`
+                }));
             }
 
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
-            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
-            const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
+            const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
             const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
             const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
 
             const concepts = ownerConcepts.map(c => {
                 const isAbono = c.type === 'abono' || c.description.includes('ABONO');
-                const propertyPart = (beneficiary.street && beneficiary.house) 
-                    ? ` (${beneficiary.street} - ${beneficiary.house})` 
-                    : '';
                 return [
                     c.period,
-                    `${c.description}${propertyPart}`,
-                    isAbono ? '-' : `$${c.amountUSD.toFixed(2)}`,
+                    c.description.toUpperCase(),
+                    isAbono ? '' : `$${c.amountUSD.toFixed(2)}`,
                     formatCurrency(c.amountUSD * payment.exchangeRate)
                 ];
             });
@@ -383,7 +396,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
-                property: beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : 'N/A',
+                property: propString,
                 method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
@@ -415,7 +428,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!beneficiary) return;
 
             let ownerConcepts = (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId);
-            
+            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
+            const ownerData = ownerSnap.exists() ? ownerSnap.data() : null;
+            const propString = beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : (ownerData?.properties?.[0] ? `${ownerData.properties[0].street} - ${ownerData.properties[0].house}` : 'N/A');
+
             if (ownerConcepts.length === 0) {
                 const debtsSnap = await getDocs(query(
                     collection(db, 'condominios', condoId, 'debts'),
@@ -423,16 +439,16 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     where('ownerId', '==', ownerId)
                 ));
                 
-                const debts = debtsSnap.docs.map(d => d.data());
-                if (debts.length > 0) {
-                    ownerConcepts = debts.map((d: any) => ({
+                ownerConcepts = debtsSnap.docs.map((d: any) => {
+                    const data = d.data();
+                    return {
                         ownerId: ownerId,
-                        description: d.description,
-                        amountUSD: d.paidAmountUSD || d.amountUSD,
-                        period: `${monthsLocale[d.month] || 'Mes'} ${d.year}`,
+                        description: `${data.description} (${propString})`,
+                        amountUSD: data.paidAmountUSD || data.amountUSD,
+                        period: `${monthsLocale[data.month] || 'Mes'} ${data.year}`,
                         type: 'deuda'
-                    }));
-                }
+                    } as LiquidatedConcept;
+                });
                 
                 const totalPaidInDebtsUSD = ownerConcepts.reduce((sum, c) => sum + c.amountUSD, 0);
                 const totalPaidInDebtsBs = totalPaidInDebtsUSD * payment.exchangeRate;
@@ -441,29 +457,30 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 if (remainderBs > 0.05) {
                     ownerConcepts.push({
                         ownerId: ownerId,
-                        description: 'ABONO A SALDO A FAVOR',
+                        description: `ABONO A SALDO A FAVOR (${propString})`,
                         amountUSD: remainderBs / payment.exchangeRate,
                         period: 'SALDO',
                         type: 'abono'
                     });
                 }
+            } else {
+                ownerConcepts = ownerConcepts.map(c => ({
+                    ...c,
+                    description: c.description.includes('(') ? c.description : `${c.description} (${propString})`
+                }));
             }
 
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
-            const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
-            const currentBalance = ownerSnap.exists() ? (ownerSnap.data().balance || 0) : 0;
+            const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
             const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
             const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
 
             const concepts = ownerConcepts.map(c => {
                 const isAbono = c.type === 'abono' || c.description.includes('ABONO');
-                const propertyPart = (beneficiary.street && beneficiary.house) 
-                    ? ` (${beneficiary.street} - ${beneficiary.house})` 
-                    : '';
                 return [
                     c.period,
-                    `${c.description}${propertyPart}`,
-                    isAbono ? '-' : `$${c.amountUSD.toFixed(2)}`,
+                    c.description.toUpperCase(),
+                    isAbono ? '' : `$${c.amountUSD.toFixed(2)}`,
                     formatCurrency(c.amountUSD * payment.exchangeRate)
                 ];
             });
@@ -473,7 +490,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 rif: localCompanyInfo.rif || 'J-40587208-0',
                 receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
                 ownerName: beneficiary.ownerName,
-                property: beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : 'N/A',
+                property: propString,
                 method: payment.paymentMethod?.toLowerCase() || 'N/A',
                 bank: payment.bank || 'N/A',
                 reference: payment.reference || 'N/A',
@@ -753,7 +770,7 @@ function ReportPaymentComponent() {
         });
     };
 
-    const getFilteredOwners = (searchTerm: string) => {
+    const getFilteredOwnersFn = (searchTerm: string) => {
         if (searchTerm.length < 2) return [];
         return allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase()));
     };
@@ -819,7 +836,7 @@ function ReportPaymentComponent() {
                                                 {row.searchTerm.length >= 2 && (
                                                     <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
                                                         <ScrollArea className="h-48">
-                                                            {getFilteredOwners(row.searchTerm).map(o => (
+                                                            {getFilteredOwnersFn(row.searchTerm).map(o => (
                                                                 <div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">
                                                                     {o.name}
                                                                 </div>
