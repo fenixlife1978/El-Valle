@@ -18,7 +18,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 const SUPER_ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -26,7 +25,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ownerData, setOwnerData] = useState<any | null>(null);
   const [companyInfo, setCompanyInfo] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  
   const [role, setUserRole] = useState<string | null>(null);
   const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
   const [workingCondoId, setWorkingCondoId] = useState<string | null>(null);
@@ -34,20 +32,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isSuperAdmin = user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
 
   useEffect(() => {
-    // 1. Cargar estados desde localStorage al montar
-    const savedCondo = localStorage.getItem('activeCondoId');
-    const savedRole = localStorage.getItem('userRole');
-    
-    // Sanitizar valores de localStorage
-    const validCondo = (savedCondo && savedCondo !== 'null' && savedCondo !== 'undefined' && savedCondo !== '[condoId]') ? savedCondo : null;
-    const validRole = (savedRole && savedRole !== 'null' && savedRole !== 'undefined') ? savedRole : null;
-
-    if (validCondo) {
-        setActiveCondoId(validCondo);
-        setWorkingCondoId(validCondo);
-    }
-    if (validRole) setUserRole(validRole);
-
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (!firebaseUser) {
@@ -62,63 +46,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUser(firebaseUser);
 
-        // Caso Super Admin: Prioridad absoluta y retorno rápido
+        // Caso Super Admin
         if (firebaseUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL) {
           const sAdminRole = 'super-admin';
-          setUserRole(sAdminRole);
-          localStorage.setItem('userRole', sAdminRole);
+          const savedCondo = localStorage.getItem('activeCondoId');
+          const targetCondo = (savedCondo && savedCondo !== 'null') ? savedCondo : 'condo_01';
           
-          const targetCondo = validCondo || 'condo_01';
+          setUserRole(sAdminRole);
           setActiveCondoId(targetCondo);
           setWorkingCondoId(targetCondo);
-          
-          setOwnerData({ 
-            name: 'Super Administrador', 
-            role: sAdminRole, 
-            email: firebaseUser.email,
-            uid: firebaseUser.uid 
-          });
-          
+          localStorage.setItem('userRole', sAdminRole);
+          setOwnerData({ name: 'Super Admin', role: sAdminRole, email: firebaseUser.email, uid: firebaseUser.uid });
           setLoading(false);
           return;
         }
 
-        // Caso Usuario Regular
-        if (validCondo) {
-          // Búsqueda en Doble Estructura (Owners vs Propietarios)
-          const oldRef = doc(db, 'condominios', validCondo, 'owners', firebaseUser.uid);
-          const newRef = doc(db, 'condominios', validCondo, 'propietarios', firebaseUser.uid);
-          
-          const [oldSnap, newSnap] = await Promise.all([getDoc(oldRef), getDoc(newRef)]);
+        // Recuperar persistencia sanitizada
+        const savedCondo = localStorage.getItem('activeCondoId');
+        const validCondo = (savedCondo && savedCondo !== 'null' && savedCondo !== 'undefined') ? savedCondo : null;
 
-          let userData = null;
-          if (newSnap.exists()) userData = newSnap.data();
-          else if (oldSnap.exists()) userData = oldSnap.data();
+        if (validCondo) {
+          // 1. INTENTO EN SUBCOLECCIONES DEL CONDOMINIO (NUEVA Y VIEJA)
+          const newRef = doc(db, 'condominios', validCondo, 'propietarios', firebaseUser.uid);
+          const oldRef = doc(db, 'condominios', validCondo, 'owners', firebaseUser.uid);
+          
+          const [newSnap, oldSnap] = await Promise.all([getDoc(newRef), getDoc(oldRef)]);
+          let userData = newSnap.exists() ? newSnap.data() : (oldSnap.exists() ? oldSnap.data() : null);
+
+          // 2. RESPALDO: SI NO EXISTE EN CONDOMINIO, BUSCAR EN COLECCIONES RAÍZ
+          if (!userData) {
+            const rootUsuariosRef = doc(db, 'usuarios', firebaseUser.uid);
+            const rootUsersRef = doc(db, 'users', firebaseUser.uid);
+            
+            const [rootSnap1, rootSnap2] = await Promise.all([getDoc(rootUsuariosRef), getDoc(rootUsersRef)]);
+            userData = rootSnap1.exists() ? rootSnap1.data() : (rootSnap2.exists() ? rootSnap2.data() : null);
+          }
 
           if (userData) {
             setOwnerData(userData);
+            const rawRole = (userData.role || '').toLowerCase();
+            const finalRole = ['admin', 'administrador', 'junta'].includes(rawRole) ? 'admin' : 'owner';
             
-            const rawRole = (userData.role || validRole || '').toLowerCase();
-            let finalRole = 'owner';
-            if (['admin', 'administrador', 'junta'].includes(rawRole)) {
-              finalRole = 'admin';
-            }
-
             setUserRole(finalRole);
+            setActiveCondoId(validCondo);
+            setWorkingCondoId(validCondo);
             localStorage.setItem('userRole', finalRole);
 
-            // Suscripción a Configuración
             const settingsRef = doc(db, 'condominios', validCondo, 'config', 'mainSettings');
             onSnapshot(settingsRef, (s) => {
               if (s.exists()) setCompanyInfo(s.data().companyInfo);
-            }, (err) => console.warn("Error leyendo mainSettings:", err));
+            });
           }
         }
       } catch (error) {
         console.error("EFAS Sync Error:", error);
       } finally {
-        // Asegurar que loading siempre sea false después de un breve delay para estabilidad
-        setTimeout(() => setLoading(false), 200);
+        setTimeout(() => setLoading(false), 400);
       }
     });
 
@@ -127,15 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, 
-      ownerData, 
-      userProfile: ownerData, 
-      companyInfo, 
-      loading, 
-      role, 
-      isSuperAdmin, 
-      activeCondoId, 
-      workingCondoId 
+      user, ownerData, userProfile: ownerData, companyInfo, 
+      loading, role, isSuperAdmin, activeCondoId, workingCondoId 
     }}>
       {!loading ? children : (
         <div className="h-screen flex flex-col items-center justify-center bg-[#1A1D23] font-montserrat">
@@ -145,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               <div className="absolute inset-0 bg-[#F28705]/5 blur-xl rounded-full animate-pulse"></div>
             </div>
             <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40 animate-pulse">
-              EFAS CONDOSYS: SINCRONIZANDO
+              EFASCondoSys: VERIFICANDO CREDENCIALES
             </p>
           </div>
         </div>

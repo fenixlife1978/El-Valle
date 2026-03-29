@@ -1,99 +1,59 @@
 'use client';
 
-import { type ReactNode, useEffect } from 'react';
-import { usePathname, useRouter, useParams } from 'next/navigation';
-import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { useAuth } from '@/hooks/use-auth';
-import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import { 
-  Loader2, 
-  Home, 
-  Plus, 
-  FileSearch, 
-  Banknote, 
-  ClipboardList, 
-  Calculator, 
-  Award, 
-  Receipt, 
-  Wrench 
-} from 'lucide-react';
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter, useParams } from "next/navigation";
+import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 
-export default function OwnerLayout({ children }: { children: ReactNode }) {
-  const { user, ownerData, role, loading } = useAuth();
-  const rawPathname = usePathname();
-  const pathname: string = rawPathname ?? '';
+export default function OwnerLayout({ children }: { children: React.ReactNode }) {
+  const { user, role, loading, activeCondoId } = useAuth();
   const router = useRouter();
   const params = useParams();
-  const condoId = params?.condoId as string;
-
-  // Se agregaron los iconos faltantes a los objetos raíz para cumplir con el tipo NavItem
-  const ownerNavItems: NavItem[] = [
-    { 
-      href: `/${condoId}/owner/dashboard`, 
-      icon: Home, 
-      label: "Inicio" 
-    },
-    { 
-      href: "#", 
-      icon: Receipt, // Icono agregado para corregir el error TS2741
-      label: "Pagos",
-      items: [
-        { href: `/${condoId}/owner/payments`, label: "Reportar Pago" },
-        { href: `/${condoId}/owner/payment-methods`, label: "Métodos de Pago" },
-        { href: `/${condoId}/owner/payments/calculator`, label: "Calculadora de Pagos" },
-      ]
-    },
-    { 
-      href: "#", 
-      icon: Wrench, // Icono agregado para corregir el error TS2741
-      label: "Utilidades",
-      items: [
-          { href: `/${condoId}/owner/reports`, label: "Publicaciones" },
-          { href: `/${condoId}/owner/certificates`, label: "Constancias" },
-          { href: `/${condoId}/owner/surveys`, label: "Encuestas" },
-      ]
-    },
-  ];
-
-  const ownerBottomNavItems: BottomNavItem[] = [
-    { href: `/${condoId}/owner/dashboard`, icon: Home, label: 'Inicio' },
-    { href: `/${condoId}/owner/payment-methods`, icon: Banknote, label: 'Pagar' },
-    { 
-      href: '#', 
-      icon: Plus, 
-      label: 'Reportar', 
-      isCentral: true,
-      subMenu: [
-          { href: `/${condoId}/owner/payments`, icon: Plus, label: "Reportar Pago" },
-          { href: `/${condoId}/owner/payments/calculator`, icon: Calculator, label: "Calculadora" },
-          { href: `/${condoId}/owner/certificates`, icon: Award, label: "Constancias" },
-          { href: `/${condoId}/owner/surveys`, icon: ClipboardList, label: "Encuestas" },
-      ]
-    },
-    { href: `/${condoId}/owner/reports`, icon: FileSearch, label: 'Publicaciones' },
-  ];
+  const condoId = params.condoId as string;
 
   useEffect(() => {
-    // Protección de ruta: Si no es propietario, fuera.
-    if (!loading && role !== 'propietario') {
+    if (loading) return;
+
+    // Si no hay usuario, fuera
+    if (!user) {
       router.replace('/welcome');
+      return;
     }
-  }, [role, loading, router]);
-  
-  if (loading || role !== 'propietario') {
+
+    // VALIDACIÓN FLEXIBLE DE ROL (Igual que en el Hook)
+    // Aceptamos 'owner' (normalizado) y variantes de base de datos
+    const userRole = role?.toLowerCase() || '';
+    const isValidOwner = ['owner', 'propietario', 'residente', 'usuarios', 'users'].includes(userRole);
+
+    if (!isValidOwner) {
+      console.warn("Acceso denegado: Rol no válido para área de propietarios", userRole);
+      router.replace('/welcome');
+      return;
+    }
+
+    // Si el condo de la URL no es el activo, corregimos la ruta
+    if (activeCondoId && condoId !== activeCondoId) {
+      router.replace(`/${activeCondoId}/owner/dashboard`);
+    }
+  }, [user, role, loading, activeCondoId, condoId, router]);
+
+  if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 font-bold uppercase text-[10px] tracking-widest">Verificando acceso EFAS...</p>
+      <div className="h-screen flex flex-col items-center justify-center bg-[#1A1D23]">
+        <Loader2 className="animate-spin text-[#F28705] h-12 w-12" />
+        <p className="mt-4 font-black uppercase text-[10px] tracking-[0.3em] text-white/60">
+          Cargando Entorno EFAS...
+        </p>
       </div>
     );
   }
 
-  return (
-    <DashboardLayout ownerData={ownerData} userRole={role} navItems={ownerNavItems}>
-      {/* El padding bottom asegura que el BottomNavBar no tape el contenido en móviles */}
-      <div className="pb-20 sm:pb-0">{children}</div>
-      <BottomNavBar items={ownerBottomNavItems} pathname={pathname} />
-    </DashboardLayout>
-  );
+  // Si no está cargando pero no hay usuario o el rol es incorrecto, 
+  // no renderizamos nada mientras el useEffect redirige
+  const userRole = role?.toLowerCase() || '';
+  const isValidOwner = ['owner', 'propietario', 'residente', 'usuarios', 'users'].includes(userRole);
+  
+  if (!user || !isValidOwner) return null;
+
+  return <>{children}</>;
 }

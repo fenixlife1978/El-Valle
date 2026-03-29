@@ -102,7 +102,8 @@ export default function RootLayout({
             </AuthorizationProvider>
           </ThemeProvider>
         </AuthProvider>
-      </body>
+        <Toaster position="top-right" expand={false} richColors />
+  </body>
     </html>
   );
 }

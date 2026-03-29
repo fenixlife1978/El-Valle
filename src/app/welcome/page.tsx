@@ -12,26 +12,22 @@ export default function WelcomePage() {
     const isRedirecting = useRef(false);
 
     useEffect(() => {
-        // Solo actuar si ya terminó de cargar y hay un usuario logueado
+        // NO HACER NADA si el AuthProvider está trabajando o ya estamos redirigiendo
         if (loading || !user || isRedirecting.current) return;
 
-        // 1. Caso Super Admin (Email fijo de EFAS)
-        if (user.email === 'vallecondo@gmail.com') {
+        // Caso Super Admin
+        if (user.email?.toLowerCase() === 'vallecondo@gmail.com') {
             isRedirecting.current = true;
             router.replace('/super-admin');
             return;
         }
 
-        // 2. Obtener datos de persistencia
-        const condoId = activeCondoId || localStorage.getItem('activeCondoId');
-        const savedRole = role || localStorage.getItem('userRole');
-
-        // 3. Redirección automática si ya tenemos la sesión completa
-        if (condoId && savedRole) {
+        // Redirección basada en el ESTADO del Contexto, no solo del localStorage
+        if (activeCondoId && role) {
             let pathSegment = '';
-            const normalizedRole = savedRole.toLowerCase();
+            const normalizedRole = role.toLowerCase();
 
-            if (['admin', 'administrador'].includes(normalizedRole)) {
+            if (['admin', 'administrador', 'junta'].includes(normalizedRole)) {
                 pathSegment = 'admin';
             } else if (['owner', 'propietario', 'residente'].includes(normalizedRole)) {
                 pathSegment = 'owner';
@@ -39,16 +35,13 @@ export default function WelcomePage() {
 
             if (pathSegment) {
                 isRedirecting.current = true;
-                // Pequeño timeout para asegurar que el router está listo
-                setTimeout(() => {
-                    router.replace(`/${condoId}/${pathSegment}/dashboard`);
-                }, 100);
+                router.replace(`/${activeCondoId}/${pathSegment}/dashboard`);
             }
         }
+        // Si hay usuario pero no hay activeCondoId o role, nos quedamos aquí para que elija.
     }, [user, role, loading, activeCondoId, router]);
 
-    // UI DE CARGA: Solo mostramos el loader si realmente estamos cargando 
-    // o si el proceso de redirección ya comenzó.
+    // Pantalla de carga mientras se sincroniza el estado
     if (loading || (user && isRedirecting.current)) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-[#1A1D23]">
@@ -60,7 +53,6 @@ export default function WelcomePage() {
         );
     }
 
-    // Si llegamos aquí, es porque el usuario debe elegir un portal
     return (
         <div className="min-h-screen w-full font-montserrat bg-background">
             <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-center w-full">
@@ -72,7 +64,6 @@ export default function WelcomePage() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 h-screen">
-                {/* PORTAL ADMINISTRADOR */}
                 <div 
                     onClick={() => router.push('/login?role=admin')}
                     className="relative bg-card text-foreground flex flex-col items-center justify-center p-12 text-center group cursor-pointer transition-all duration-300 hover:bg-slate-900"
@@ -86,7 +77,6 @@ export default function WelcomePage() {
                     </div>
                 </div>
 
-                {/* PORTAL PROPIETARIO */}
                 <div 
                     onClick={() => router.push('/login?role=owner')}
                     className="relative bg-secondary text-foreground flex flex-col items-center justify-center p-12 text-center group cursor-pointer transition-all duration-300 hover:bg-[#F28705]"

@@ -165,12 +165,13 @@
         "properties": {
             "description": { "type": "string" },
             "amount": { "type": "number" },
+            "paymentSource": { "type": "string", "enum": ["banco", "efectivo_bs", "efectivo_usd"]},
             "category": { "type": "string", "enum": ["Servicios", "Mantenimientos y Servicios", "Nomina", "Administracion", "Telefonia e Internet", "Gastos ExtraOrdinarios", "Reparaciones Generales", "Caja Chica", "Otros Gastos"] },
             "date": { "type": "string", "format": "date-time" },
             "createdAt": { "type": "string", "format": "date-time" },
             "reference": { "type": "string" }
         },
-        "required": ["description", "amount", "category", "date"]
+        "required": ["description", "amount", "category", "date", "paymentSource"]
     },
     "Certificate": {
         "title": "Certificate",

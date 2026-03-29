@@ -99,7 +99,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
             const userRole = role?.toLowerCase();
             const isSuperAdmin = user.email === 'vallecondo@gmail.com';
-            const isAdmin = userRole === 'administrador' || userRole === 'super-admin';
+            // Corregido: Ahora incluye 'admin' para coincidir con el sistema [cite: 8, 13]
+            const isAdmin = userRole === 'admin' || userRole === 'administrador' || userRole === 'super-admin';
 
             if (!isSuperAdmin && !isAdmin) {
                 console.warn("Acceso denegado: Usuario sin rol administrativo");
@@ -115,7 +116,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
     const userRoleLower = role?.toLowerCase();
-    const isAdmin = userRoleLower === 'administrador' || userRoleLower === 'super-admin';
+    // Corregido: Sincronización de constantes con la nueva lógica de validación [cite: 8, 13]
+    const isAdmin = userRoleLower === 'admin' || userRoleLower === 'administrador' || userRoleLower === 'super-admin';
     const authorized = isSuperAdmin || isAdmin;
 
     if (loading || !user || !authorized) {
