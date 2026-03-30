@@ -25,7 +25,8 @@ export default function Header() {
     const isSupportMode = !!(isSuperAdmin && (sId || urlCondoId));
 
     useEffect(() => {
-        if (!workingCondoId) return;
+        // Blindaje contra IDs de condominio no resueltos o nulos
+        if (!workingCondoId || workingCondoId === "[condoId]") return;
 
         if (isSupportMode || urlCondoId) {
             getDoc(doc(db, 'condominios', workingCondoId)).then(docSnap => {
@@ -48,6 +49,8 @@ export default function Header() {
                     }
                 }
             }
+        }, (error) => {
+            console.warn("Header: Error en listener de configuración:", error.message);
         });
         return () => unsubscribe();
     }, [workingCondoId, isSupportMode, urlCondoId]);

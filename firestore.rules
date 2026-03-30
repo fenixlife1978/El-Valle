@@ -7,10 +7,11 @@ service cloud.firestore {
     }
 
     function isCondoAdmin(condoId) {
+      let adminRoles = ['admin', 'administrador', 'junta'];
       let isOwnersAdmin = exists(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)) &&
-                           get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)).data.role == 'admin';
+                           get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)).data.role in adminRoles;
       let isPropietariosAdmin = exists(/databases/$(database)/documents/condominios/$(condoId)/propietarios/$(request.auth.uid)) &&
-                               get(/databases/$(database)/documents/condominios/$(condoId)/propietarios/$(request.auth.uid)).data.role == 'admin';
+                               get(/databases/$(database)/documents/condominios/$(condoId)/propietarios/$(request.auth.uid)).data.role in adminRoles;
       return request.auth != null && (isOwnersAdmin || isPropietariosAdmin);
     }
 

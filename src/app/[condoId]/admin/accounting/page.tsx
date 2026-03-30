@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -55,11 +54,13 @@ const AccountingPage = () => {
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
     useEffect(() => {
-        if (!workingCondoId) return;
+        if (!workingCondoId || workingCondoId === "[condoId]") return;
         setLoading(true);
         
         const unsubAccounts = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), snap => {
             setAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Account)));
+        }, (error) => {
+            console.error("Accounting: Error cargando cuentas:", error.message);
         });
 
         const unsubTx = onSnapshot(query(collection(db, 'condominios', workingCondoId, 'transacciones'), orderBy('fecha', 'asc')), snap => {
@@ -67,6 +68,9 @@ const AccountingPage = () => {
                 ...tx,
                 descripcion: tx.descripcion || tx.description || 'SIN CONCEPTO'
             })));
+            setLoading(false);
+        }, (error) => {
+            console.error("Accounting: Error cargando transacciones:", error.message);
             setLoading(false);
         });
 
@@ -358,7 +362,7 @@ const AccountingPage = () => {
                                 <CardHeader className="bg-slate-950 border-b border-white/5 p-8">
                                     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                                         <CardTitle className="uppercase italic text-white font-black flex items-center gap-2">
-                                            <BookCopy className="text-primary"/> Libro Diario: {acc.nombre}
+                                            < BookCopy className="text-primary"/> Libro Diario: {acc.nombre}
                                         </CardTitle>
                                         <div className="flex gap-2">
                                             <Button onClick={() => handleExportDailyBook(acc, 'download')} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] h-10 bg-white/5 hover:bg-white/10 italic">

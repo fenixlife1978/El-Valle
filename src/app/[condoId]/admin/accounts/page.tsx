@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -115,10 +114,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [dateRange, setDateRange] = useState({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
 
     useEffect(() => {
-        if (!condoId) return;
+        if (!condoId || condoId === "[condoId]") return;
         const unsubAccounts = onSnapshot(collection(db, 'condominios', condoId, 'cuentas'), (snap) => {
             setAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Account)));
             setLoading(false);
+        }, (error) => {
+            console.warn("Accounts: Error en listener de cuentas:", error.message);
         });
         const qTx = query(collection(db, 'condominios', condoId, 'transacciones'), orderBy('fecha', 'desc'));
         const unsubTx = onSnapshot(qTx, (snap) => {
@@ -126,6 +127,8 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 ...tx,
                 descripcion: tx.descripcion || tx.description || 'SIN CONCEPTO'
             })));
+        }, (error) => {
+            console.warn("Accounts: Error en listener de transacciones:", error.message);
         });
         return () => { unsubAccounts(); unsubTx(); };
     }, [condoId]);
@@ -565,7 +568,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Dialog>
 
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Eliminar Cuenta?</DialogTitle>
                         <DialogDescription className="font-bold text-white/40 italic">Se borrará la cuenta "{accountToDelete?.nombre}". Los movimientos históricos permanecerán en el sistema pero no estarán asociados a una cuenta activa.</DialogDescription>
