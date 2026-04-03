@@ -1,5 +1,7 @@
 'use client';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, AreaChart, Area, CartesianGrid } from 'recharts';
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';

@@ -26,7 +26,6 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
 
-  // Protección de rutas
   useEffect(() => {
     if (loading) return;
     const isPublic = publicPaths.includes(pathname);
@@ -35,7 +34,6 @@ function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  // Registro de Service Worker para PWA
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -102,8 +100,7 @@ export default function RootLayout({
             </AuthorizationProvider>
           </ThemeProvider>
         </AuthProvider>
-        <Toaster position="top-right" expand={false} richColors />
-  </body>
+      </body>
     </html>
   );
 }
