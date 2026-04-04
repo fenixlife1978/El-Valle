@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -12,11 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText, Scale, CalendarClock } from "lucide-react";
+import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, CalendarClock } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
-import JsBarcode from 'jsbarcode';
+import { downloadPDF } from '@/lib/print-pdf';
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -36,6 +35,349 @@ interface FinancialAccount {
     saldoActual: number;
 }
 
+interface EgresoConFecha {
+    fecha: string;
+    concepto: string;
+    monto: number;
+    cuenta: string;
+}
+
+// Función para generar código de barras en SVG
+const generarCodigoBarrasSVG = (texto: string): string => {
+    const chars = texto.split('');
+    let patron = '';
+    for (let i = 0; i < chars.length; i++) {
+        const code = chars[i].charCodeAt(0);
+        for (let j = 0; j < 8; j++) {
+            patron += ((code >> j) & 1) ? '1' : '0';
+        }
+    }
+    const anchoBarra = 3;
+    const alto = 50;
+    let svg = `<svg width="${patron.length * anchoBarra}" height="${alto}" xmlns="http://www.w3.org/2000/svg">`;
+    svg += `<rect width="100%" height="100%" fill="white"/>`;
+    for (let i = 0; i < patron.length; i++) {
+        if (patron[i] === '1') {
+            svg += `<rect x="${i * anchoBarra}" y="0" width="${anchoBarra}" height="${alto}" fill="black"/>`;
+        }
+    }
+    svg += `</svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+};
+
+const generarNumeroDocumento = (periodo: string, condoId: string) => {
+    return `BAL-${periodo.replace(/-/g, '')}-${condoId.substring(0, 6).toUpperCase()}`;
+};
+
+// Función para generar el PDF del Balance
+const generateBalanceHTML = (
+    condominioData: any,
+    periodo: string,
+    saldoInicBDV: number,
+    saldoInicCaja: number,
+    saldoInicChica: number,
+    ingresosMesBDV: number,
+    ingresosMesCaja: number,
+    egresos: EgresoConFecha[],
+    saldoFinBDV: number,
+    saldoFinCaja: number,
+    saldoFinChica: number,
+    totalIngresos: number,
+    totalEgresos: number,
+    totalDisponible: number,
+    lastDayOfMonthStr: string,
+    notas: string
+): string => {
+    
+    const condominioNombre = condominioData?.nombre || condominioData?.name || "CONJUNTO RESIDENCIAL EL VALLE";
+    const condominioRif = condominioData?.rif || "J-40587208-0";
+    const condominioLogo = condominioData?.logo || "/logo-condominio-el-valle.png";
+    const numeroDocumento = generarNumeroDocumento(periodo.replace(/ /g, ''), condominioData?.id || 'CONDO');
+    const codigoBarrasSVG = generarCodigoBarrasSVG(numeroDocumento);
+
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Balance de Ingresos y Egresos - ${condominioNombre}</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'Helvetica', 'Arial', sans-serif;
+                margin: 20px;
+                padding: 20px;
+                background: white;
+            }
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                background: white;
+            }
+            .top-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #e2e8f0;
+            }
+            .condominio-section {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+            }
+            .logo-circle {
+                width: 65px;
+                height: 65px;
+                border-radius: 50%;
+                overflow: hidden;
+                background: #FFFFFF;
+                border: 3px solid #F5A623;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .logo-circle img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+            .condominio-nombre {
+                font-size: 14px;
+                font-weight: 900;
+                color: #1A1D23;
+                text-transform: uppercase;
+            }
+            .condominio-rif {
+                font-size: 10px;
+                color: #64748b;
+                font-weight: 600;
+                margin-top: 3px;
+            }
+            .system-logo {
+                height: 40px;
+                width: auto;
+                object-fit: contain;
+            }
+            .title-section {
+                text-align: center;
+                margin: 20px 0;
+            }
+            .title-section h1 {
+                color: #1e293b;
+                font-size: 22px;
+                font-weight: 900;
+                letter-spacing: 2px;
+            }
+            .info-row {
+                display: flex;
+                align-items: center;
+                gap: 20px;
+                margin: 20px 0;
+            }
+            .info-card {
+                flex: 1;
+                background: #f8fafc;
+                padding: 12px;
+                border-radius: 8px;
+                border-left: 4px solid #F28705;
+            }
+            .info-card label {
+                font-size: 9px;
+                font-weight: 700;
+                text-transform: uppercase;
+                color: #64748b;
+                display: block;
+                margin-bottom: 5px;
+            }
+            .info-card value {
+                font-size: 14px;
+                font-weight: 900;
+                color: #1e293b;
+            }
+            .barcode-box {
+                background: #f8fafc;
+                padding: 8px 12px;
+                border-radius: 8px;
+                border-right: 4px solid #F28705;
+                text-align: center;
+                min-width: 180px;
+            }
+            .barcode-box img {
+                max-width: 180px;
+                height: auto;
+            }
+            .barcode-number {
+                font-size: 8px;
+                color: #64748b;
+                margin-top: 5px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                font-size: 10px;
+            }
+            th {
+                background: #1A1D23;
+                color: white;
+                padding: 10px 8px;
+                font-weight: 700;
+                text-transform: uppercase;
+                font-size: 9px;
+            }
+            td {
+                padding: 8px 6px;
+                border-bottom: 1px solid #e2e8f0;
+            }
+            .text-right { text-align: right; }
+            .text-left { text-align: left; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: 900; }
+            .bg-gray { background: #f1f5f9; }
+            .footer {
+                margin-top: 30px;
+                padding-top: 15px;
+                text-align: center;
+                font-size: 8px;
+                color: #94a3b8;
+                border-top: 1px solid #e2e8f0;
+            }
+            .notas {
+                margin-top: 30px;
+                padding: 15px;
+                background: #f8fafc;
+                border-radius: 8px;
+                font-size: 9px;
+                color: #475569;
+            }
+            @media print {
+                body { margin: 0; padding: 0; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <!-- HEADER -->
+            <div class="top-header">
+                <div class="condominio-section">
+                    <div class="logo-circle">
+                        <img src="${condominioLogo}" alt="${condominioNombre}" onerror="this.style.display='none'">
+                    </div>
+                    <div>
+                        <div class="condominio-nombre">${condominioNombre}</div>
+                        <div class="condominio-rif">RIF: ${condominioRif}</div>
+                    </div>
+                </div>
+                <div>
+                    <img class="system-logo" src="/logos/efascondosys-logo.png" alt="EFASCondoSys">
+                </div>
+            </div>
+
+            <!-- TÍTULO -->
+            <div class="title-section">
+                <h1>BALANCE DE INGRESOS Y EGRESOS</h1>
+            </div>
+
+            <!-- FILA DE INFORMACIÓN -->
+            <div class="info-row">
+                <div class="info-card">
+                    <label>Período</label>
+                    <value>${periodo}</value>
+                </div>
+                <div class="info-card">
+                    <label>Corte al</label>
+                    <value>${lastDayOfMonthStr}</value>
+                </div>
+                <div class="barcode-box">
+                    <img src="${codigoBarrasSVG}" alt="Código de barras">
+                    <div class="barcode-number">${numeroDocumento}</div>
+                </div>
+            </div>
+
+            <!-- I. SALDOS INICIALES -->
+            <table>
+                <thead><tr><th colspan="2">I. SALDOS INICIALES</th></tr></thead>
+                <tbody>
+                    <tr><td>Banco de Venezuela</td><td class="text-right">Bs. ${formatCurrency(saldoInicBDV)}</td></tr>
+                    <tr><td>Caja Principal</td><td class="text-right">Bs. ${formatCurrency(saldoInicCaja)}</td></tr>
+                    <tr><td>Caja Chica (Fondo Fijo Inicial)</td><td class="text-right">Bs. ${formatCurrency(saldoInicChica)}</td></tr>
+                    <tr class="bg-gray font-bold"><td>TOTAL SALDOS INICIALES</td><td class="text-right">Bs. ${formatCurrency(saldoInicBDV + saldoInicCaja + saldoInicChica)}</td></tr>
+                </tbody>
+            </table>
+
+            <!-- II. INGRESOS DEL MES -->
+            <table>
+                <thead><tr><th colspan="2">II. INGRESOS DEL MES</th></tr></thead>
+                <tbody>
+                    <tr><td>Banco de Venezuela (Ingresos Ordinarios)</td><td class="text-right">Bs. ${formatCurrency(ingresosMesBDV)}</td></tr>
+                    <tr><td>Caja Principal (Efectivo)</td><td class="text-right">Bs. ${formatCurrency(ingresosMesCaja)}</td></tr>
+                    <tr class="bg-gray font-bold"><td>TOTAL INGRESOS</td><td class="text-right">Bs. ${formatCurrency(ingresosMesBDV + ingresosMesCaja)}</td></tr>
+                </tbody>
+            </table>
+
+            <!-- III. EGRESOS DEL MES (CON FECHA, CONCEPTO, CUENTA Y MONTO) -->
+            <table>
+                <thead>
+                    <tr>
+                        <th>FECHA</th>
+                        <th>CONCEPTO</th>
+                        <th>CUENTA</th>
+                        <th class="text-right">MONTO (Bs.)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${egresos.map(e => `
+                        <tr>
+                            <td class="text-left">${e.fecha}</td>
+                            <td class="text-left">${e.concepto.toUpperCase()}</td>
+                            <td class="text-left">${e.cuenta}</td>
+                            <td class="text-right">Bs. ${formatCurrency(e.monto)}</td>
+                        </tr>
+                    `).join('')}
+                    ${egresos.length === 0 ? '<tr><td colspan="4" class="text-center">No hay egresos registrados</td></tr>' : ''}
+                    <tr class="bg-gray font-bold">
+                        <td colspan="3" class="text-right">TOTAL EGRESOS</td>
+                        <td class="text-right">Bs. ${formatCurrency(totalEgresos)}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- IV. SALDOS FINALES -->
+            <table>
+                <thead><tr><th colspan="2">IV. SALDOS FINALES AL ${lastDayOfMonthStr}</th></tr></thead>
+                <tbody>
+                    <tr><td>Banco de Venezuela (Cierre)</td><td class="text-right">Bs. ${formatCurrency(saldoFinBDV)}</td></tr>
+                    <tr><td>Caja Principal (Cierre)</td><td class="text-right">Bs. ${formatCurrency(saldoFinCaja)}</td></tr>
+                    <tr><td>Caja Chica (Cierre)</td><td class="text-right">Bs. ${formatCurrency(saldoFinChica)}</td></tr>
+                </tbody>
+            </table>
+
+            <!-- V. VALIDACIÓN DE TESORERÍA -->
+            <table>
+                <thead><tr><th colspan="2">V. VALIDACIÓN DE TESORERÍA</th></tr></thead>
+                <tbody>
+                    <tr><td>Total Ingresos (Saldos + Mes)</td><td class="text-right">Bs. ${formatCurrency(totalIngresos)}</td></tr>
+                    <tr><td>(-) Total Egresos</td><td class="text-right">Bs. ${formatCurrency(totalEgresos)}</td></tr>
+                    <tr class="bg-gray font-bold"><td>TOTAL DISPONIBLE</td><td class="text-right">Bs. ${formatCurrency(totalDisponible)}</td></tr>
+                </tbody>
+            </table>
+
+            <!-- NOTAS -->
+            ${notas ? `<div class="notas"><strong>NOTAS Y OBSERVACIONES:</strong><br/>${notas}</div>` : ''}
+
+            <!-- FOOTER -->
+            <div class="footer">
+                <p>Documento generado por <strong>EFASCondoSys</strong> - Sistema de Autogestión de Condominios</p>
+                <p>Este balance refleja los movimientos financieros del período</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+};
+
 export default function FinancialBalancePage({ params }: { params: Promise<{ condoId: string }> }) {
     const resolvedParams = use(params);
     const { condoId: urlCondoId } = resolvedParams;
@@ -49,23 +391,35 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1)); 
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
-    // Saldos Iniciales Editables
     const [saldoInicBDV, setSaldoInicBDV] = useState(0.00);
     const [saldoInicCaja, setSaldoInicCaja] = useState(0.00);
     const [saldoInicChica, setSaldoInicChica] = useState(0.00);
-
-    // Saldos Finales Editables
     const [saldoFinBDV, setSaldoFinBDV] = useState(0.00);
     const [saldoFinCaja, setSaldoFinCaja] = useState(0.00);
     const [saldoFinChica, setSaldoFinChica] = useState(0.00);
-
-    const [egresosTesorería, setEgresosTesorería] = useState<{ concepto: string, monto: number, cuenta: string }[]>([]);
+    const [egresosTesorería, setEgresosTesorería] = useState<EgresoConFecha[]>([]);
     const [ingresosMesBDV, setIngresosMesBDV] = useState(0);
     const [ingresosMesCaja, setIngresosMesCaja] = useState(0);
     const [notas, setNotas] = useState("");
-
-    // Saldos Reales de las Cuentas
     const [cuentasReales, setCuentasReales] = useState<FinancialAccount[]>([]);
+    const [condominioData, setCondominioData] = useState<any>(null);
+
+    // Cargar datos del condominio desde Firestore
+    useEffect(() => {
+        if (!workingCondoId || workingCondoId === "[condoId]") return;
+        const fetchCondominioData = async () => {
+            try {
+                const docRef = doc(db, 'condominios', workingCondoId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setCondominioData(docSnap.data());
+                }
+            } catch (error) {
+                console.error("Error cargando datos del condominio:", error);
+            }
+        };
+        fetchCondominioData();
+    }, [workingCondoId]);
 
     useEffect(() => {
         if (!workingCondoId) return;
@@ -84,7 +438,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             
             setCuentasReales(data);
             
-            // Sincronizar automáticamente saldos finales con tesorería en carga inicial
             const bdv = data.find(a => a.id === BDV_ACCOUNT_ID || a.nombre.toUpperCase().includes('BANCO'));
             const caja = data.find(a => a.nombre.toUpperCase().includes('CAJA PRINCIPAL'));
             const chica = data.find(a => a.nombre.toUpperCase().includes('CAJA CHICA'));
@@ -133,6 +486,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 });
 
                 const egresos = txs.filter(t => t.tipo === 'egreso').map(t => ({ 
+                    fecha: t.fecha?.toDate ? format(t.fecha.toDate(), 'dd/MM/yy') : format(new Date(), 'dd/MM/yy'),
                     concepto: t.descripcion, 
                     monto: t.monto, 
                     cuenta: t.nombreCuenta 
@@ -170,113 +524,31 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         return format(endOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth)-1)), 'dd/MM/yyyy');
     }, [selectedMonth, selectedYear]);
 
-    const generatePdfBlob = async (output: 'download' | 'share' = 'download') => {
-        const { default: jsPDF } = await import('jspdf');
-        const { default: autoTable } = await import('jspdf-autotable');
-        const doc = new jsPDF();
-        const info = authCompanyInfo || { name: 'CONJUNTO RESIDENCIAL EL VALLE', RIF: 'J-40587208-0', logo: '' };
-        const period = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
-        const margin = 14;
-        const pageWidth = doc.internal.pageSize.getWidth();
+    const periodLabel = useMemo(() => {
+        return `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
+    }, [selectedMonth, selectedYear]);
 
-        const canvas = document.createElement('canvas');
-        const barcodeValue = `BAL-${selectedYear}${selectedMonth.padStart(2, '0')}-${workingCondoId.substring(0, 6).toUpperCase()}`;
-        try {
-            JsBarcode(canvas, barcodeValue, { format: "CODE128", height: 40, width: 2, displayValue: false, margin: 0 });
-        } catch (e) { console.error("Error barcode:", e); }
-        const barcodeData = canvas.toDataURL("image/png");
-
-        doc.setFillColor(15, 23, 42); 
-        doc.rect(0, 0, 210, 30, 'F');
-        
-        if (info.logo) {
-            try { 
-                doc.setFillColor(255, 255, 255);
-                doc.roundedRect(margin, 5, 20, 20, 2, 2, 'F');
-                doc.addImage(info.logo, 'JPEG', margin + 1, 6, 18, 18); 
-            } catch(e){}
-        }
-        
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(12).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 38 : margin, 14);
-        doc.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: J-40587208-0`, info.logo ? 38 : margin, 20);
-        
-        doc.setFillColor(255, 255, 255);
-        doc.rect(pageWidth - margin - 45, 7, 45, 10, 'F');
-        doc.addImage(barcodeData, 'PNG', pageWidth - margin - 44, 8, 43, 8);
-        doc.setFontSize(7).setTextColor(255, 255, 255).text(barcodeValue, pageWidth - margin, 21, { align: 'right' });
-
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(14).setFont('helvetica', 'bold').text(`BALANCE GENERAL: ${period}`, margin, 45);
-
-        autoTable(doc, {
-            startY: 55,
-            head: [['I. SALDOS INICIALES', 'MONTO (BS.)']],
-            body: [
-                ['Banco de Venezuela', formatCurrency(saldoInicBDV)],
-                ['Caja Principal', formatCurrency(saldoInicCaja)],
-                ['Caja Chica (Fondo Fijo Inicial)', formatCurrency(saldoInicChica)]
-            ],
-            headStyles: { fillColor: [15, 23, 42] },
-            styles: { fontSize: 9, cellPadding: 2 }
-        });
-
-        autoTable(doc, {
-            startY: (doc as any).lastAutoTable.finalY + 4,
-            head: [['II. INGRESOS DEL MES', 'MONTO (BS.)']],
-            body: [
-                ['Banco de Venezuela (Ingresos Ordinarios)', formatCurrency(ingresosMesBDV)],
-                ['Caja Principal (Efectivo)', formatCurrency(ingresosMesCaja)]
-            ],
-            headStyles: { fillColor: [15, 23, 42] },
-            styles: { fontSize: 9, cellPadding: 2 },
-            foot: [['TOTAL INGRESOS (SALDOS + MES)', formatCurrency(totalIngresos)]],
-            footStyles: { fillColor: [15, 23, 42], textColor: 255 }
-        });
-
-        autoTable(doc, {
-            startY: (doc as any).lastAutoTable.finalY + 8,
-            head: [['III. EGRESOS DEL MES', 'CUENTA', 'MONTO (BS.)']],
-            body: egresosTesorería.map(e => [e.concepto.toUpperCase(), e.cuenta.toUpperCase(), formatCurrency(e.monto)]),
-            headStyles: { fillColor: [220, 38, 38] },
-            styles: { fontSize: 8, cellPadding: 2 },
-            foot: [['TOTAL EGRESOS DEL PERIODO', '', formatCurrency(totalEgresos)]],
-            footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' }
-        });
-
-        autoTable(doc, {
-            startY: (doc as any).lastAutoTable.finalY + 8,
-            head: [[`IV. SALDOS FINALES AL ${lastDayOfMonthStr}`, 'MONTO (BS.)']],
-            body: [
-                ['Banco de Venezuela (Cierre)', formatCurrency(saldoFinBDV)],
-                ['Caja Principal (Cierre)', formatCurrency(saldoFinCaja)],
-                ['Caja Chica (Cierre)', formatCurrency(saldoFinChica)]
-            ],
-            headStyles: { fillColor: [30, 80, 180] },
-            styles: { fontSize: 9, cellPadding: 2 },
-            foot: [['VALIDACIÓN DE TESORERÍA (DISPONIBILIDAD)', formatCurrency(totalDisponible)]],
-            footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' }
-        });
-
-        let finalY = (doc as any).lastAutoTable.finalY + 10;
-        doc.setFontSize(10).setFont('helvetica', 'bold');
-        doc.text('TOTAL INGRESOS:', 130, finalY); doc.text(`Bs. ${formatCurrency(totalIngresos)}`, 196, finalY, { align: 'right' });
-        doc.text('(-) TOTAL EGRESOS:', 130, finalY + 6); doc.text(`Bs. ${formatCurrency(totalEgresos)}`, 196, finalY + 6, { align: 'right' });
-        doc.setFillColor(241, 245, 249); doc.rect(125, finalY + 8, 75, 10, 'F');
-        doc.setTextColor(30, 80, 180).setFontSize(11);
-        doc.text('TOTAL DISPONIBLE:', 130, finalY + 15); doc.text(`Bs. ${formatCurrency(totalDisponible)}`, 196, finalY + 15, { align: 'right' });
-
-        if (output === 'share') {
-            const blob = doc.output('blob');
-            const file = new File([blob], `Balance_General_${info.name.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
-            if (navigator.share) {
-                await navigator.share({ files: [file], title: `Balance General - ${info.name}`, text: `Balance Financiero correspondiente a ${period}` });
-            } else {
-                toast({ title: "Compartir no disponible", description: "Su navegador no soporta la función de compartir archivos." });
-            }
-        } else {
-            doc.save(`Balance_General_${info.name.replace(/ /g, '_')}.pdf`);
-        }
+    const handleGeneratePDF = async () => {
+        const html = generateBalanceHTML(
+            condominioData || { nombre: authCompanyInfo?.name, rif: authCompanyInfo?.rif },
+            periodLabel,
+            saldoInicBDV,
+            saldoInicCaja,
+            saldoInicChica,
+            ingresosMesBDV,
+            ingresosMesCaja,
+            egresosTesorería,
+            saldoFinBDV,
+            saldoFinCaja,
+            saldoFinChica,
+            totalIngresos,
+            totalEgresos,
+            totalDisponible,
+            lastDayOfMonthStr,
+            notas
+        );
+        const fileName = `Balance_Ingresos_Egresos_${periodLabel.replace(/ /g, '_')}.pdf`;
+        downloadPDF(html, fileName);
     };
 
     const handleSave = async () => {
@@ -295,14 +567,18 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 updatedAt: serverTimestamp()
             });
             toast({ title: "Balance Guardado" });
-        } catch (e) { toast({ variant: 'destructive', title: "Error" }); } finally { setSaving(false); }
+        } catch (e) { 
+            toast({ variant: 'destructive', title: "Error al guardar" }); 
+        } finally { 
+            setSaving(false); 
+        }
     };
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-8 bg-[#1A1D23] min-h-screen font-montserrat text-white italic">
             <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-10 border-b border-white/5 pb-6">
                 <div>
-                    <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Balance <span className="text-primary">General</span></h1>
+                    <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Balance de <span className="text-primary">Ingresos y Egresos</span></h1>
                     <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">{authCompanyInfo?.name?.toUpperCase() || "EL VALLE"}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -313,11 +589,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                         </SelectContent>
                     </Select>
                     <Input className="w-24 bg-slate-900 border-white/5 font-black rounded-xl" type="number" value={selectedYear} onChange={e => setSelectedYear(e.target.value)} />
-                    <Button onClick={() => generatePdfBlob('download')} variant="outline" className="rounded-xl border-white/10 text-white h-10 font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
+                    <Button onClick={handleGeneratePDF} variant="outline" className="rounded-xl border-white/10 text-white h-10 font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
                         <Download className="mr-2 h-4 w-4" /> Exportar PDF
                     </Button>
-                    <Button onClick={() => generatePdfBlob('share')} variant="secondary" className="rounded-xl bg-primary text-slate-900 h-10 font-black uppercase text-[10px] italic">
-                        <Share2 className="mr-2 h-4 w-4" /> Compartir
+                    <Button onClick={handleSave} disabled={saving} className="rounded-xl bg-primary text-slate-900 h-10 font-black uppercase text-[10px] italic">
+                        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Guardar
                     </Button>
                 </div>
             </div>
@@ -360,21 +636,23 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                         </CardHeader>
                         <CardContent className="p-0">
                             <Table>
-                                <TableHeader><TableRow className="bg-slate-950/50 border-white/5"><TableHead className="text-white/40 font-black text-[10px] uppercase px-8 py-4">Concepto</TableHead><TableHead className="text-right text-white/40 font-black text-[10px] pr-8">Monto</TableHead></TableRow></TableHeader>
+                                <TableHeader><TableRow className="bg-slate-950/50 border-white/5"><TableHead className="text-white/40 font-black text-[10px] uppercase px-8 py-4">Fecha</TableHead><TableHead className="text-white/40 font-black text-[10px] uppercase">Concepto</TableHead><TableHead className="text-white/40 font-black text-[10px] uppercase">Cuenta</TableHead><TableHead className="text-right text-white/40 font-black text-[10px] pr-8">Monto</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {egresosTesorería.map((e, i) => (
                                         <TableRow key={i} className="border-white/5 hover:bg-white/5">
-                                            <TableCell className="py-4 px-8">
-                                                <div className="text-white font-black uppercase text-[10px] italic">{e.concepto}</div>
-                                                <div className="text-[8px] font-black text-white/20 uppercase">ORIGEN: {e.cuenta}</div>
-                                            </TableCell>
+                                            <TableCell className="py-4 px-8 font-bold text-white/40 text-xs italic">{e.fecha}</TableCell>
+                                            <TableCell className="py-4"><div className="text-white font-black uppercase text-[10px] italic">{e.concepto}</div></TableCell>
+                                            <TableCell className="py-4"><div className="text-[8px] font-black text-white/20 uppercase">{e.cuenta}</div></TableCell>
                                             <TableCell className="text-right font-black text-red-500 italic pr-8">Bs. {formatCurrency(e.monto)}</TableCell>
                                         </TableRow>
                                     ))}
+                                    {egresosTesorería.length === 0 && (
+                                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-white/30 italic">No hay egresos registrados</TableCell></TableRow>
+                                    )}
                                 </TableBody>
                                 <TableFooter className="bg-red-50/10 border-none">
                                     <TableRow className="border-none">
-                                        <TableCell className="font-black text-red-400 text-[10px] uppercase italic px-8 py-6">Total Egresos</TableCell>
+                                        <TableCell colSpan={3} className="font-black text-red-400 text-[10px] uppercase italic px-8 py-6">Total Egresos</TableCell>
                                         <TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresos)}</TableCell>
                                     </TableRow>
                                 </TableFooter>
@@ -413,7 +691,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 </div>
 
                 <div className="pt-10"><Label className="text-[10px] font-black uppercase text-white/40 ml-4 italic">Notas y Observaciones del Balance</Label><Textarea className="rounded-[2rem] bg-slate-900 border-white/5 text-white font-bold p-6 min-h-[120px] shadow-2xl italic mt-2 uppercase text-xs focus-visible:ring-primary" value={notas} onChange={e => setNotas(e.target.value)} placeholder="Escriba aquí los detalles relevantes..." /></div>
-                <div className="flex justify-end pt-6"><Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 h-14 rounded-2xl font-black uppercase px-12 shadow-2xl shadow-primary/20 italic">{saving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance Oficial</Button></div>
             </> }
         </div>
     );
