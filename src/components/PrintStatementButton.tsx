@@ -1,8 +1,8 @@
 'use client';
 
 import { Printer } from 'lucide-react';
-import { generateBankStatementHTML } from './BankStatementPDF';
-import { printPDF } from '@/lib/print-pdf';
+import { PDFContent } from './BankStatementPDF';
+import { downloadPDF } from '@/lib/print-pdf';
 
 interface Transaction {
   fecha: string;
@@ -33,14 +33,15 @@ export const PrintStatementButton = ({
 }: PrintStatementButtonProps) => {
   
   const handlePrint = () => {
-    const html = generateBankStatementHTML({
+    const html = PDFContent({
       transactions,
       companyInfo,
       periodo,
       saldoInicial,
       bancoInfo
     });
-    printPDF(html);
+    const fileName = `Estado_Cuenta_${periodo.replace(/ /g, '_')}.pdf`;
+    downloadPDF(html, fileName);
   };
 
   return (
