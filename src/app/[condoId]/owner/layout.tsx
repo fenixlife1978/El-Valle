@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import Header from "@/components/Header";
 
 export default function OwnerLayout({ children }: { children: React.ReactNode }) {
   const { user, role, loading, activeCondoId } = useAuth();
@@ -20,8 +21,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
       return;
     }
 
-    // VALIDACIÓN FLEXIBLE DE ROL (Igual que en el Hook)
-    // Aceptamos 'owner' (normalizado) y variantes de base de datos
+    // VALIDACIÓN FLEXIBLE DE ROL
     const userRole = role?.toLowerCase() || '';
     const isValidOwner = ['owner', 'propietario', 'residente', 'usuarios', 'users'].includes(userRole);
 
@@ -48,12 +48,18 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // Si no está cargando pero no hay usuario o el rol es incorrecto, 
-  // no renderizamos nada mientras el useEffect redirige
+  // Si no está cargando pero no hay usuario o el rol es incorrecto
   const userRole = role?.toLowerCase() || '';
   const isValidOwner = ['owner', 'propietario', 'residente', 'usuarios', 'users'].includes(userRole);
   
   if (!user || !isValidOwner) return null;
 
-  return <>{children}</>;
+  return (
+    <>
+      <Header />
+      <div className="pt-4">
+        {children}
+      </div>
+    </>
+  );
 }

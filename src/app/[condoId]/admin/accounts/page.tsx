@@ -107,7 +107,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     // Formularios
     const [accountForm, setAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoInicial: '0' });
     const [editAccountForm, setEditAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoActual: '0' });
-    const [transForm, setTransactionForm] = useState({ monto: '', tipo: 'egreso' as 'ingreso' | 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date() });
+    const [transForm, setTransactionForm] = useState({ monto: '', tipo: 'egreso' as 'ingreso' | 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date(), categoria: 'ordinaria' });
     const [transferForm, setTransferForm] = useState({ origenId: '', destinoId: '', monto: '', descripcion: 'Transferencia entre cuentas', fecha: new Date() });
     const [editTxData, setEditTxData] = useState({ descripcion: '', referencia: '' });
 
@@ -204,6 +204,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 
                 const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                 transaction.set(newTransRef, {
+                    categoria: transForm.categoria || 'ordinaria', 
                     monto: montoNum, tipo: transForm.tipo, cuentaId: transForm.cuentaId,
                     nombreCuenta: accountDoc.data().nombre, descripcion: transForm.descripcion.toUpperCase(),
                     referencia: transForm.referencia.toUpperCase(), fecha: Timestamp.fromDate(transForm.fecha),
@@ -213,7 +214,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             });
             toast({ title: "Movimiento procesado con éxito" });
             setIsTransactionDialogOpen(false);
-            setTransactionForm({ monto: '', tipo: 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date() });
+            setTransactionForm({ monto: '', tipo: 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date(), categoria: 'ordinaria' });
         } catch (error: any) { toast({ variant: 'destructive', title: "Fallo en transacción", description: error.message }); }
         finally { setIsSubmitting(false); }
     };
@@ -502,6 +503,17 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Registrar <span className="text-primary">Movimiento</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Categoría</Label>
+                                <Select value={transForm.categoria || "ordinaria"} onValueChange={(v) => setTransactionForm({...transForm, categoria: v})}>
+                                    <SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic">
+                                        <SelectValue placeholder="Seleccionar categoría..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 border-white/10 text-white italic">
+                                        <SelectItem value="ordinaria" className="font-black uppercase text-[10px] italic">General</SelectItem>
+                                        <SelectItem value="extraordinaria" className="font-black uppercase text-[10px] italic">Cuota Extraordinaria</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Tipo</Label><Select value={transForm.tipo} onValueChange={(v: any) => setTransactionForm({...transForm, tipo: v})}><SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic"><SelectItem value="ingreso" className="text-emerald-500 font-black italic">INGRESO (+)</SelectItem><SelectItem value="egreso" className="text-red-500 font-black italic">EGRESO (-)</SelectItem></SelectContent></Select></div>
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta</Label><Select value={transForm.cuentaId} onValueChange={v => setTransactionForm({...transForm, cuentaId: v})}><SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-white font-black italic">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
                         </div>

@@ -42,6 +42,7 @@ import {
     DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal
 } from '@/components/ui/dropdown-menu';
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
+import { registerExtraordinaryIncome } from '@/lib/extraordinaryFunds';
 import Decimal from 'decimal.js';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
@@ -84,6 +85,7 @@ type Payment = {
     observations?: string; 
     receiptNumbers?: { [ownerId: string]: string };
     liquidatedConcepts?: LiquidatedConcept[];
+    paymentCategory?: string; // 'ordinaria' | 'extraordinaria'
 };
 
 function VerificationComponent({ condoId }: { condoId: string }) {
@@ -144,161 +146,235 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
                 const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
                 const monthId = format(payment.paymentDate.toDate(), 'yyyy-MM');
+                const isExtraordinary = payment.paymentCategory === 'extraordinaria';
 
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
                 await runTransaction(db, async (transaction) => {
-                    // 1. REGLA DE ORO: TODAS LAS LECTURAS (READS) ANTES DE LAS ESCRITURAS (WRITES)
-                    const ownerRefs = payment.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
-                    const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
-                    
                     const receiptNumbers: { [ownerId: string]: string } = {};
                     const liquidatedConcepts: LiquidatedConcept[] = [];
 
-                    // 2. PROCESAMIENTO LÓGICO Y ESCRITURAS
-                    for (let i = 0; i < payment.beneficiaries.length; i++) {
-                        const beneficiary = payment.beneficiaries[i];
-                        const ownerSnap = ownerSnaps[i];
-                        const ownerRef = ownerRefs[i];
-
-                        if (!ownerSnap.exists()) continue;
-
-                        let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
+                    if (isExtraordinary) {
+                        // ============================================
+                        // CUOTA EXTRAORDINARIA: Solo registrar en extraordinary_funds
+                        // NO afecta deudas ordinarias, NO afecta balances de propietarios
+                        // ============================================
                         
-                        // Consultas externas (getDocs) no bloquean la transacción si no se usa transaction.get() después
-                        const debtsSnap = await getDocs(query(
-                            collection(db, 'condominios', condoId, 'debts'),
-                            where('ownerId', '==', beneficiary.ownerId),
-                            where('status', 'in', ['pending', 'vencida'])
-                        ));
+                        // Registrar ingreso extraordinario
+                        await registerExtraordinaryIncome(condoId, {
+                            monto: payment.totalAmount,
+                            exchangeRate: payment.exchangeRate,
+                            descripcion: `PAGO EXTRAORDINARIO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
+                            referencia: payment.reference,
+                            fecha: payment.paymentDate.toDate(),
+                            sourcePaymentId: payment.id,
+                            ownerId: payment.beneficiaries[0]?.ownerId
+                        });
                         
-                        const pendingDebts = debtsSnap.docs
-                            .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
-                            .sort((a, b) => a.year - b.year || a.month - b.month);
-
-                        for (const debt of pendingDebts) {
-                            const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
-                            if (funds.gte(debtAmountBs)) {
-                                funds = funds.minus(debtAmountBs);
-                                transaction.update(debt.ref, {
-                                    status: 'paid',
-                                    paidAmountUSD: debt.amountUSD,
-                                    paymentDate: payment.paymentDate,
-                                    paymentId: payment.id
-                                });
-                                liquidatedConcepts.push({
-                                    ownerId: beneficiary.ownerId,
-                                    description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                    amountUSD: debt.amountUSD,
-                                    period: `${monthsLocale[debt.month]} ${debt.year}`,
-                                    type: 'deuda'
-                                });
-                            } else break;
-                        }
-
-                        // Lógica de Adelantos
-                        const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
-                        if (funds.gte(advanceAmountBs)) {
-                            const allDebtsSnap = await getDocs(query(
-                                collection(db, 'condominios', condoId, 'debts'),
-                                where('ownerId', '==', beneficiary.ownerId)
-                            ));
-                            const allDebtsSorted = allDebtsSnap.docs
-                                .map(d => d.data())
-                                .sort((a, b) => a.year - b.year || a.month - b.month);
-                            
-                            let nextMonthDate = addMonths(new Date(), 1);
-                            if (allDebtsSorted.length > 0) {
-                                const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
-                                nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
-                            }
-
-                            while (funds.gte(advanceAmountBs)) {
-                                const year = nextMonthDate.getFullYear();
-                                const month = nextMonthDate.getMonth() + 1;
-                                
-                                const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
-                                transaction.set(newDebtRef, {
-                                    ownerId: beneficiary.ownerId,
-                                    property: { 
-                                        street: beneficiary.street || '',
-                                        house: beneficiary.house || '' 
-                                    },
-                                    year,
-                                    month,
-                                    amountUSD: currentFee,
-                                    description: 'Cuota de Condominio (Adelantado)',
-                                    status: 'paid',
-                                    paidAmountUSD: currentFee,
-                                    paymentDate: payment.paymentDate,
-                                    paymentId: payment.id,
-                                    published: true
-                                });
-
-                                liquidatedConcepts.push({
-                                    ownerId: beneficiary.ownerId,
-                                    description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                    amountUSD: currentFee,
-                                    period: `${monthsLocale[month]} ${year}`,
-                                    type: 'adelanto'
-                                });
-
-                                funds = funds.minus(advanceAmountBs);
-                                nextMonthDate = addMonths(nextMonthDate, 1);
-                            }
-                        }
-
-                        if (funds.gt(0)) {
-                            liquidatedConcepts.push({
-                                ownerId: beneficiary.ownerId,
-                                description: `ABONO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                amountUSD: funds.div(payment.exchangeRate).toNumber(),
-                                period: 'SALDO',
+                        // Solo actualizar la cuenta bancaria (sin afectar propietarios)
+                        const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
+                        transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
+                        
+                        // Registrar en financial_stats
+                        const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                        transaction.set(statsRef, {
+                            periodo: monthId,
+                            saldoBancarioReal: increment(isDigital ? payment.totalAmount : 0),
+                            saldoCajaReal: increment(!isDigital ? payment.totalAmount : 0),
+                            totalIngresosMes: increment(payment.totalAmount),
+                            updatedAt: serverTimestamp()
+                        }, { merge: true });
+                        
+                        // Registrar transacción contable
+                        const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
+                        transaction.set(transRef, {
+                            monto: payment.totalAmount, 
+                            tipo: 'ingreso', 
+                            cuentaId: targetAccountId, 
+                            nombreCuenta: targetAccountName,
+                            descripcion: `INGRESO EXTRAORDINARIO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(),
+                            referencia: payment.reference, 
+                            fecha: payment.paymentDate, 
+                            sourcePaymentId: payment.id,
+                            categoria: 'extraordinaria',
+                            createdAt: serverTimestamp(), 
+                            createdBy: user?.email
+                        });
+                        
+                        // Generar números de recibo (sin afectar balances)
+                        payment.beneficiaries.forEach(beneficiary => {
+                            receiptNumbers[beneficiary.ownerId] = `REC-EXT-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                        });
+                        
+                        // Actualizar estado del pago
+                        transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
+                            status: 'aprobado', 
+                            receiptNumbers, 
+                            liquidatedConcepts: [{
+                                ownerId: payment.beneficiaries[0]?.ownerId || '',
+                                description: `PAGO EXTRAORDINARIO`,
+                                amountUSD: payment.totalAmount / payment.exchangeRate,
+                                period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
                                 type: 'abono'
-                            });
+                            }],
+                            observations: 'PAGO EXTRAORDINARIO APROBADO - NO AFECTA DEUDAS ORDINARIAS.'
+                        });
+                        
+                    } else {
+                        // ============================================
+                        // CUOTA ORDINARIA: Lógica normal de deudas
+                        // ============================================
+                        
+                        const ownerRefs = payment.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
+                        const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
+
+                        for (let i = 0; i < payment.beneficiaries.length; i++) {
+                            const beneficiary = payment.beneficiaries[i];
+                            const ownerSnap = ownerSnaps[i];
+                            const ownerRef = ownerRefs[i];
+
+                            if (!ownerSnap.exists()) continue;
+
+                            let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
+                            
+                            const debtsSnap = await getDocs(query(
+                                collection(db, 'condominios', condoId, 'debts'),
+                                where('ownerId', '==', beneficiary.ownerId),
+                                where('status', 'in', ['pending', 'vencida'])
+                            ));
+                            
+                            const pendingDebts = debtsSnap.docs
+                                .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
+                                .sort((a, b) => a.year - b.year || a.month - b.month);
+
+                            for (const debt of pendingDebts) {
+                                const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
+                                if (funds.gte(debtAmountBs)) {
+                                    funds = funds.minus(debtAmountBs);
+                                    transaction.update(debt.ref, {
+                                        status: 'paid',
+                                        paidAmountUSD: debt.amountUSD,
+                                        paymentDate: payment.paymentDate,
+                                        paymentId: payment.id
+                                    });
+                                    liquidatedConcepts.push({
+                                        ownerId: beneficiary.ownerId,
+                                        description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                        amountUSD: debt.amountUSD,
+                                        period: `${monthsLocale[debt.month]} ${debt.year}`,
+                                        type: 'deuda'
+                                    });
+                                } else break;
+                            }
+
+                            const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
+                            if (funds.gte(advanceAmountBs)) {
+                                const allDebtsSnap = await getDocs(query(
+                                    collection(db, 'condominios', condoId, 'debts'),
+                                    where('ownerId', '==', beneficiary.ownerId)
+                                ));
+                                const allDebtsSorted = allDebtsSnap.docs
+                                    .map(d => d.data())
+                                    .sort((a, b) => a.year - b.year || a.month - b.month);
+                                
+                                let nextMonthDate = addMonths(new Date(), 1);
+                                if (allDebtsSorted.length > 0) {
+                                    const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
+                                    nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
+                                }
+
+                                while (funds.gte(advanceAmountBs)) {
+                                    const year = nextMonthDate.getFullYear();
+                                    const month = nextMonthDate.getMonth() + 1;
+                                    
+                                    const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
+                                    transaction.set(newDebtRef, {
+                                        ownerId: beneficiary.ownerId,
+                                        property: { 
+                                            street: beneficiary.street || '',
+                                            house: beneficiary.house || '' 
+                                        },
+                                        year,
+                                        month,
+                                        amountUSD: currentFee,
+                                        description: 'Cuota de Condominio (Adelantado)',
+                                        status: 'paid',
+                                        paidAmountUSD: currentFee,
+                                        paymentDate: payment.paymentDate,
+                                        paymentId: payment.id,
+                                        published: true
+                                    });
+
+                                    liquidatedConcepts.push({
+                                        ownerId: beneficiary.ownerId,
+                                        description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                        amountUSD: currentFee,
+                                        period: `${monthsLocale[month]} ${year}`,
+                                        type: 'adelanto'
+                                    });
+
+                                    funds = funds.minus(advanceAmountBs);
+                                    nextMonthDate = addMonths(nextMonthDate, 1);
+                                }
+                            }
+
+                            if (funds.gt(0)) {
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: `ABONO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                    amountUSD: funds.div(payment.exchangeRate).toNumber(),
+                                    period: 'SALDO',
+                                    type: 'abono'
+                                });
+                            }
+
+                            receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                            transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                         }
 
-                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
-                        transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
+                        // Actualización de Cuentas y Tesorería
+                        const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
+                        transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
+
+                        const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                        transaction.set(statsRef, {
+                            periodo: monthId,
+                            saldoBancarioReal: increment(isDigital ? payment.totalAmount : 0),
+                            saldoCajaReal: increment(!isDigital ? payment.totalAmount : 0),
+                            totalIngresosMes: increment(payment.totalAmount),
+                            updatedAt: serverTimestamp()
+                        }, { merge: true });
+
+                        const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
+                        transaction.set(transRef, {
+                            monto: payment.totalAmount, 
+                            tipo: 'ingreso', 
+                            cuentaId: targetAccountId, 
+                            nombreCuenta: targetAccountName,
+                            descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(),
+                            referencia: payment.reference, 
+                            fecha: payment.paymentDate, 
+                            sourcePaymentId: payment.id,
+                            createdAt: serverTimestamp(), 
+                            createdBy: user?.email
+                        });
+                        
+                        transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
+                            status: 'aprobado', 
+                            receiptNumbers, 
+                            liquidatedConcepts,
+                            observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' 
+                        });
                     }
-
-                    // Actualización de Cuentas y Tesorería
-                    const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
-                    transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
-
-                    const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
-                    transaction.set(statsRef, {
-                        periodo: monthId,
-                        saldoBancarioReal: increment(isDigital ? payment.totalAmount : 0),
-                        saldoCajaReal: increment(!isDigital ? payment.totalAmount : 0),
-                        totalIngresosMes: increment(payment.totalAmount),
-                        updatedAt: serverTimestamp()
-                    }, { merge: true });
-
-                    const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
-                    transaction.set(transRef, {
-                        monto: payment.totalAmount, 
-                        tipo: 'ingreso', 
-                        cuentaId: targetAccountId, 
-                        nombreCuenta: targetAccountName,
-                        descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(),
-                        referencia: payment.reference, 
-                        fecha: payment.paymentDate, 
-                        sourcePaymentId: payment.id,
-                        createdAt: serverTimestamp(), 
-                        createdBy: user?.email
-                    });
-
-                    transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
-                        status: 'aprobado', 
-                        receiptNumbers, 
-                        liquidatedConcepts,
-                        observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' 
-                    });
                 });
 
-                toast({ title: "Pago Validado", description: "Deudas liquidadas y sincronizadas con Tesorería." });
+                toast({ 
+                    title: isExtraordinary ? "Pago Extraordinario Validado" : "Pago Validado", 
+                    description: isExtraordinary 
+                        ? "Ingreso registrado en fondo extraordinario. No afecta deudas ordinarias." 
+                        : "Deudas liquidadas y sincronizadas con Tesorería." 
+                });
                 setSelectedPayment(null);
             } catch (error: any) { 
                 console.error(error);
@@ -719,6 +795,7 @@ function ReportPaymentComponent() {
     const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('movil');
+    const [paymentCategory, setPaymentCategory] = useState<string>('ordinaria');
     const [bank, setBank] = useState('');
     const [reference, setReference] = useState('');
     const [totalAmount, setTotalAmount] = useState<string>('');
@@ -793,6 +870,7 @@ function ReportPaymentComponent() {
                 amount: Number(row.amount) 
             }));
             await addDoc(collection(db, "condominios", condoId, "payments"), { 
+                paymentCategory,
                 reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), 
                 totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), 
                 paymentMethod, bank: paymentMethod === 'efectivo_bs' ? 'Efectivo' : bank, 
@@ -814,6 +892,17 @@ function ReportPaymentComponent() {
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Fecha Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa Bs.</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Categoría</Label>
+                            <Select value={paymentCategory} onValueChange={setPaymentCategory}>
+                                <SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs">
+                                    <SelectValue placeholder="Seleccionar categoría..." />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                    <SelectItem value="ordinaria" className="font-black uppercase text-[10px] italic">Cuota de Condominio</SelectItem>
+                                    <SelectItem value="extraordinaria" className="font-black uppercase text-[10px] italic">Cuota Extraordinaria</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left" onClick={() => setIsBankModalOpen(true)} disabled={paymentMethod === 'efectivo_bs'}>{paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={paymentMethod === 'efectivo_bs'} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic" placeholder="6 DÍGITOS" /></div>
                         <div className="grid grid-cols-2 gap-4">

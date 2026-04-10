@@ -11,7 +11,7 @@ import { SupportBanner } from '@/components/support-banner';
 import { Loader2 } from 'lucide-react';
 import { Montserrat } from 'next/font/google';
 import { cn } from '@/lib/utils';
-import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
+import { COMPANY_NAME } from '@/lib/constants';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -19,30 +19,37 @@ const montserrat = Montserrat({
   weight: ['400', '700', '900'],
 });
 
+// Rutas públicas que no requieren autenticación
 const publicPaths = ['/', '/welcome', '/login', '/forgot-password', '/register', '/onboarding'];
 
 function AuthGuard({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, activeCondoId } = useAuth();
   const pathname = usePathname() ?? '';
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
-    const isPublic = publicPaths.includes(pathname);
+    
+    // Verificar si la ruta actual es pública
+    const isPublic = publicPaths.some(path => pathname === path);
+    
+    // Si no hay usuario y no es ruta pública, redirigir a welcome
     if (!user && !isPublic) {
       router.replace('/welcome');
     }
-  }, [user, loading, pathname, router]);
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then((reg) => console.log('SW registrado:', reg.scope))
-          .catch((err) => console.warn('Error SW:', err));
-      });
+    
+    // Si hay usuario y está en ruta pública, redirigir a su dashboard
+    if (user && isPublic) {
+      // Redirigir según el email del usuario (super admin)
+      if (user.email === 'vallecondo@gmail.com') {
+        router.replace('/super-admin');
+      } else if (activeCondoId) {
+        router.replace(`/${activeCondoId}/admin/dashboard`);
+      } else {
+        router.replace('/welcome');
+      }
     }
-  }, []);
+  }, [user, loading, pathname, router, activeCondoId]);
 
   if (loading) {
     return (

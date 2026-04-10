@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,8 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Banknote, Info, Save, FileUp, UserPlus, Trash2, Search, ChevronDown, Minus, Equal, Receipt, Calculator, XCircle } from 'lucide-react';
-import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
+import { CalendarIcon, CheckCircle2, DollarSign, FileText, Hash, Loader2, Banknote, Info, Save, FileUp, UserPlus, Trash2, Search, XCircle, Calculator, Receipt, ArrowLeft } from 'lucide-react';
+import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
@@ -39,12 +38,9 @@ type BeneficiaryRow = {
 
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
 
-const getFilteredOwners = (searchTerm: string, allOwners: Owner[]) => {
-    if (!searchTerm || searchTerm.length < 2) return [];
-    return allOwners.filter(owner => 
-        owner.name?.toLowerCase().includes(searchTerm.toLowerCase()) && 
-        owner.email?.toLowerCase() !== 'vallecondo@gmail.com'
-    );
+const formatCurrency = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 function ReportPaymentComponent() {
@@ -52,6 +48,7 @@ function ReportPaymentComponent() {
     const params = useParams();
     const condoId = (params?.condoId as string) || "";
     const { user: authUser, ownerData: authOwnerData } = useAuth();
+    const router = useRouter();
     
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
@@ -61,6 +58,7 @@ function ReportPaymentComponent() {
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [exchangeRateMessage, setExchangeRateMessage] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('movil');
+    const [paymentCategory, setPaymentCategory] = useState<string>('ordinaria');
     const [bank, setBank] = useState('');
     const [otherBank, setOtherBank] = useState('');
     const [reference, setReference] = useState('');
@@ -72,7 +70,6 @@ function ReportPaymentComponent() {
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
 
     const isCashPayment = paymentMethod === 'efectivo_bs';
-
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
     useEffect(() => {
@@ -142,7 +139,6 @@ function ReportPaymentComponent() {
         }
     }, [isCashPayment]);
 
-
     useEffect(() => {
         const bs = parseFloat(totalAmount);
         if (!isNaN(bs) && exchangeRate && exchangeRate > 0) {
@@ -187,8 +183,8 @@ function ReportPaymentComponent() {
         }
     };
     
-    const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
-    const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
+    const assignedTotal = beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0);
+    const balance = (Number(totalAmount) || 0) - assignedTotal;
 
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
     const handleOwnerSelect = (rowId: string, owner: Owner) => updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: owner.properties?.[0] || null });
@@ -201,6 +197,14 @@ function ReportPaymentComponent() {
         }
     };
 
+    const getFilteredOwnersFn = (searchTerm: string) => {
+        if (!searchTerm || searchTerm.length < 2) return [];
+        return allOwners.filter(owner => 
+            owner.name?.toLowerCase().includes(searchTerm.toLowerCase()) && 
+            owner.email?.toLowerCase() !== 'vallecondo@gmail.com'
+        );
+    };
+
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         if (!paymentDate || !exchangeRate || !paymentMethod || !totalAmount || Number(totalAmount) <= 0) {
             return { isValid: false, error: 'Por favor, complete los campos de fecha, tasa, método y monto.' };
@@ -208,7 +212,6 @@ function ReportPaymentComponent() {
         if (!isCashPayment && (!bank || reference.length < 4)) {
             return { isValid: false, error: 'Complete el banco y la referencia (mín. 4 dígitos) para pagos bancarios.' };
         }
-        // Subir comprobante es ahora OPCIONAL
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) {
             return { isValid: false, error: 'Complete la información para cada beneficiario (propietario, propiedad y monto).' };
         }
@@ -256,6 +259,7 @@ function ReportPaymentComponent() {
             }));
 
             const paymentData: any = {
+                paymentCategory,
                 paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate: exchangeRate,
                 paymentMethod: paymentMethod,
@@ -280,7 +284,7 @@ function ReportPaymentComponent() {
                 const notificationsRef = doc(collection(db, `condominios/${condoId}/${ownersCollectionName}/${adminDoc.id}/notifications`));
                 batch.set(notificationsRef, {
                     title: "Nuevo Pago Reportado",
-                    body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago por Bs. ${totalAmount}.`,
+                    body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago por Bs. ${formatCurrency(Number(totalAmount))}.`,
                     createdAt: serverTimestamp(),
                     read: false,
                     href: `/${condoId}/admin/payments?tab=verify`,
@@ -301,205 +305,357 @@ function ReportPaymentComponent() {
     };
     
     return (
-        <Card className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl mx-auto">
-            <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <Banknote className="w-7 h-7" />
-                    <CardTitle className="text-2xl font-bold tracking-wider">REPORTAR PAGO</CardTitle>
+        <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
+            {/* HEADER */}
+            <div className="mb-10">
+                <div className="flex items-center justify-between">
+                    <Button 
+                        variant="outline" 
+                        onClick={() => router.push(`/${condoId}/owner/dashboard`)}
+                        className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic"
+                    >
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver al Dashboard
+                    </Button>
+                    <div>
+                        <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">
+                            Reportar <span className="text-primary">Pago</span>
+                        </h2>
+                        <div className="h-1.5 w-20 bg-primary mt-2 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.3)]"></div>
+                        <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">
+                            Completa el formulario para notificar tu pago a la administración.
+                        </p>
+                    </div>
+                    <Button 
+                        variant="outline" 
+                        onClick={() => router.push(`/${condoId}/owner/payments/calculator`)}
+                        className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic"
+                    >
+                        <Calculator className="mr-2 h-4 w-4" /> Usar Calculadora
+                    </Button>
                 </div>
-            </CardHeader>
-            <form onSubmit={handleSubmit}>
-                <CardContent className="p-8 grid grid-cols-1 gap-y-10">
-                    
-                    <div className="space-y-6">
-                        <CardTitle className="text-xl">1. Detalles de la Transacción</CardTitle>
-                        <div className="grid md:grid-cols-2 gap-x-8 gap-y-6 pt-4">
+            </div>
+
+            <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden">
+                <CardHeader className="bg-white/5 p-8 border-b border-white/5">
+                    <CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">1. Detalles de la <span className="text-primary">Transacción</span></CardTitle>
+                </CardHeader>
+                <form onSubmit={handleSubmit}>
+                    <CardContent className="p-8 space-y-10">
+                        <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
+                            {/* Método de Pago */}
                             <div className="space-y-2">
-                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Método de Pago</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método de Pago</Label>
                                 <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={isSubmitting}>
-                                    <SelectTrigger className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base focus:ring-primary">
-                                        <FileText className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                    <SelectTrigger className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs">
+                                        <FileText className="mr-3 h-5 w-5 text-primary" />
                                         <SelectValue placeholder="Seleccione un método..." />
                                     </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="transferencia">Transferencia</SelectItem>
-                                        <SelectItem value="movil">Pago Móvil</SelectItem>
-                                        <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
+                                    <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                        <SelectItem value="transferencia" className="font-black uppercase text-[10px] italic">Transferencia</SelectItem>
+                                        <SelectItem value="movil" className="font-black uppercase text-[10px] italic">Pago Móvil</SelectItem>
+                                        <SelectItem value="efectivo_bs" className="font-black uppercase text-[10px] italic">Efectivo Bs.</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {/* Categoría */}
                             <div className="space-y-2">
-                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Banco Emisor</Label>
-                                <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting || isCashPayment}>
-                                    <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    {isCashPayment ? 'No Aplica' : bank || "Seleccione un banco..."}
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Categoría</Label>
+                                <Select value={paymentCategory} onValueChange={setPaymentCategory}>
+                                    <SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs">
+                                        <SelectValue placeholder="Seleccionar categoría..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                        <SelectItem value="ordinaria" className="font-black uppercase text-[10px] italic">Cuota de Condominio</SelectItem>
+                                        <SelectItem value="extraordinaria" className="font-black uppercase text-[10px] italic">Cuota Extraordinaria</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Fecha del Pago */}
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Fecha del Pago</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-14 rounded-2xl bg-slate-800 border-none text-white uppercase italic text-xs hover:bg-slate-800", !paymentDate && "text-muted-foreground")} disabled={isSubmitting}>
+                                            <CalendarIcon className="mr-3 h-5 w-5 text-primary" />
+                                            {paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione una fecha"}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10">
+                                        <Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} />
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+
+                            {/* Tasa BCV (solo lectura) */}
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa BCV</Label>
+                                <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
+                                    <Input 
+                                        type="text" 
+                                        value={exchangeRate ? formatCurrency(exchangeRate) : exchangeRateMessage || 'Seleccione fecha'} 
+                                        readOnly 
+                                        className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic text-right pr-6"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Banco Emisor */}
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label>
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    className="w-full justify-start text-left font-normal h-14 rounded-2xl bg-slate-800 border-none text-white uppercase italic text-xs hover:bg-slate-800"
+                                    onClick={() => setIsBankModalOpen(true)} 
+                                    disabled={isSubmitting || isCashPayment}
+                                >
+                                    <Banknote className="mr-3 h-5 w-5 text-primary" />
+                                    {isCashPayment ? 'No Aplica' : (bank || "Seleccione un banco...")}
                                 </Button>
                             </div>
+
                             {bank === 'Otro' && !isCashPayment && (
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Nombre del Otro Banco</Label>
-                                    <div className="relative flex items-center">
-                                    <Banknote className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                    <Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Especifique el banco" disabled={isSubmitting}/>
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Nombre del Otro Banco</Label>
+                                    <div className="relative">
+                                        <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
+                                        <Input 
+                                            value={otherBank} 
+                                            onChange={(e) => setOtherBank(e.target.value)} 
+                                            className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic"
+                                            disabled={isSubmitting}
+                                        />
                                     </div>
                                 </div>
                             )}
+
+                            {/* Referencia */}
                             <div className="space-y-2">
-                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Referencia</Label>
-                                <div className="relative flex items-center">
-                                    <Hash className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                    <Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Últimos 6 dígitos" disabled={isSubmitting || isCashPayment} />
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia</Label>
+                                <div className="relative">
+                                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
+                                    <Input 
+                                        value={reference} 
+                                        onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                                        maxLength={6} 
+                                        className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic text-center text-xl tracking-widest"
+                                        placeholder="######" 
+                                        disabled={isSubmitting || isCashPayment} 
+                                    />
                                 </div>
                             </div>
+
+                            {/* Monto Bs. */}
                             <div className="space-y-2">
-                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Fecha del Pago</Label>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input", !paymentDate && "text-muted-foreground")} disabled={isSubmitting}>
-                                            <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
-                                </Popover>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Bs.</Label>
+                                <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
+                                    <Input 
+                                        type="number" 
+                                        value={totalAmount} 
+                                        onChange={(e) => setTotalAmount(e.target.value)} 
+                                        className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" 
+                                        placeholder="0,00" 
+                                        disabled={isSubmitting} 
+                                    />
+                                </div>
                             </div>
+
+                            {/* Equivalente USD */}
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equivalente USD</Label>
+                                <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+                                    <Input 
+                                        type="text" 
+                                        value={amountUSD ? `$ ${amountUSD}` : ''} 
+                                        readOnly 
+                                        className="pl-12 h-14 rounded-2xl bg-slate-800/50 border-none text-emerald-500 font-black text-xl italic text-right pr-6" 
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Adjuntar Comprobante */}
                             <div className="space-y-2 md:col-span-2">
-                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante (Opcional)</Label>
-                                <div className="relative flex items-center">
-                                    <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                    <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Adjuntar Comprobante (Opcional)</Label>
+                                <div className="relative">
+                                    <FileUp className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary" />
+                                    <Input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={handleImageUpload} 
+                                        className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-slate-900 hover:file:bg-primary/90" 
+                                        disabled={isSubmitting} 
+                                    />
                                 </div>
-                                {receiptImage && <p className="text-xs text-primary flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
+                                {receiptImage && (
+                                    <p className="text-[10px] font-black text-emerald-500 flex items-center gap-2 mt-2">
+                                        <CheckCircle2 className="h-3 w-3" /> Comprobante cargado correctamente.
+                                    </p>
+                                )}
                             </div>
                         </div>
-                    </div>
 
-                    <div className="space-y-6">
-                         <CardTitle className="text-xl">2. Monto y Beneficiarios</CardTitle>
-                        <div className="space-y-6 pt-4">
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total del Pago (Bs.)</Label>
-                                    <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading} className="py-6 bg-input/80 rounded-2xl"/>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Equivalente (USD)</Label>
-                                    <div className="relative">
-                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50 py-6 rounded-2xl" placeholder="0.00" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
-                                {beneficiaryRows.map((row, index) => (
-                                    <Card key={row.id} className="p-4 bg-muted/50 relative">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
-                                                {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm, allOwners).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm, allOwners).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                                : (
-                                                    <div className="p-3 bg-background rounded-md space-y-3">
-                                                        <div className="flex items-center justify-between">
-                                                            <p className="font-semibold text-primary">{row.owner.name}</p>
-                                                            <Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading || beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button>
-                                                        </div>
-                                                        {row.owner.properties && (
-                                                            <div className="space-y-1">
-                                                                <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
-                                                                <Select 
-                                                                    onValueChange={(v) => {
-                                                                        const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
-                                                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
-                                                                    }} 
-                                                                    value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
-                                                                >
-                                                                    <SelectTrigger className="rounded-xl h-10 bg-slate-50 border-slate-200 text-slate-900">
-                                                                        <SelectValue placeholder="Seleccione propiedad..." />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {row.owner.properties.map((p, pIdx) => (
-                                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
-                                                                                {p.street} - {p.house}
-                                                                            </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                            </div>
+                        {/* ASIGNACIÓN DE BENEFICIARIOS */}
+                        <div className="space-y-6">
+                            <Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-2">Asignación de Beneficiarios</Label>
+                            
+                            {beneficiaryRows.map((row, index) => (
+                                <Card key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] relative">
+                                    <div className="grid md:grid-cols-2 gap-8">
+                                        <div className="space-y-4">
+                                            {!row.owner ? (
+                                                <div className="relative">
+                                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                                                    <Input 
+                                                        placeholder="Buscar Residente..." 
+                                                        className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" 
+                                                        value={row.searchTerm} 
+                                                        onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} 
+                                                    />
+                                                    {row.searchTerm.length >= 2 && getFilteredOwnersFn(row.searchTerm).length > 0 && (
+                                                        <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+                                                            <ScrollArea className="h-48">
+                                                                {getFilteredOwnersFn(row.searchTerm).map(owner => (
+                                                                    <div 
+                                                                        key={owner.id} 
+                                                                        onClick={() => handleOwnerSelect(row.id, owner)} 
+                                                                        className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5"
+                                                                    >
+                                                                        {owner.name}
+                                                                    </div>
+                                                                ))}
+                                                            </ScrollArea>
+                                                        </Card>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center">
+                                                    <div>
+                                                        <p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p>
+                                                        {row.selectedProperty && (
+                                                            <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">
+                                                                {row.selectedProperty.street} - {row.selectedProperty.house}
+                                                            </p>
                                                         )}
                                                     </div>
-                                                )}
-                                            </div>
-                                            <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
+                                                    <Button 
+                                                        type="button" 
+                                                        variant="ghost" 
+                                                        size="icon" 
+                                                        onClick={() => removeBeneficiaryRow(row.id)} 
+                                                        className="text-red-500 hover:bg-red-500/10 rounded-full"
+                                                    >
+                                                        <XCircle className="h-5 w-5" />
+                                                    </Button>
+                                                </div>
+                                            )}
+                                            
+                                            {row.owner && row.owner.properties && row.owner.properties.length > 0 && (
+                                                <Select 
+                                                    onValueChange={(v) => {
+                                                        const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                    }} 
+                                                    value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
+                                                >
+                                                    <SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]">
+                                                        <SelectValue placeholder="Seleccionar propiedad..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-slate-900 text-white border-white/10 italic">
+                                                        {row.owner.properties.map((p, idx) => (
+                                                            <SelectItem key={idx} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase italic">
+                                                                {p.street} - {p.house}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
                                         </div>
-                                        {beneficiaryRows.length > 1 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
-                                    </Card>
-                                ))}
-                                <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
-                                <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
-                                    <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
-                                    <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
-                                </CardFooter>
-                            </div>
+                                        
+                                        <div className="space-y-2">
+                                            <Label className="text-[9px] font-black uppercase text-slate-500 ml-2">Monto Individual (Bs.)</Label>
+                                            <Input 
+                                                type="number" 
+                                                value={row.amount} 
+                                                onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} 
+                                                className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" 
+                                                placeholder="0,00" 
+                                            />
+                                        </div>
+                                    </div>
+                                </Card>
+                            ))}
+                            
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={addBeneficiaryRow} 
+                                className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"
+                            >
+                                <UserPlus className="mr-2 h-4 w-4 text-primary" /> Añadir Beneficiario
+                            </Button>
                         </div>
-                    </div>
-                </CardContent>
+                    </CardContent>
+                    
+                    <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+                        <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>
+                            Diferencia: Bs. {formatCurrency(balance)}
+                        </div>
+                        <Button 
+                            type="submit" 
+                            disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} 
+                            className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95"
+                        >
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}
+                            REGISTRAR PAGO Y ASENTAR
+                        </Button>
+                    </CardFooter>
+                </form>
+            </Card>
 
-                <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
-                    <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
-                        CANCELAR
-                    </Button>
-                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold rounded-xl" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                        Enviar Reporte
-                    </Button>
-                </CardFooter>
-            </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
+            
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
-                <DialogContent>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle className="flex items-center gap-2 text-2xl font-black uppercase italic">
                             <Info className="h-6 w-6 text-primary" />
                             Reporte Enviado para Revisión
                         </DialogTitle>
-                         <div className="pt-4 text-sm text-muted-foreground space-y-4">
-                            <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
+                        <div className="pt-4 text-sm text-slate-400 space-y-4">
+                            <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong className="text-primary">24 horas</strong>.</p>
                             <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
                             <ul className="list-disc list-inside space-y-1">
-                               <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
-                               <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                                <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                                <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
                             </ul>
                         </div>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+                        <Button onClick={() => setIsInfoDialogOpen(false)} className="bg-primary text-slate-900 font-black uppercase text-[10px] h-12 rounded-xl italic">
+                            Entendido
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </Card>
+        </div>
     );
 }
 
-
 function PaymentsPage() {
     return (
-        <div className="space-y-6">
-            <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Reportar <span className="text-primary">Pago</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Completa el formulario para notificar tu pago a la administración.
-                </p>
-            </div>
-            <ReportPaymentComponent />
-        </div>
+        <ReportPaymentComponent />
     );
 }
 
 export default function PaymentsPageWrapper() {
     return (
-        <Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+        <Suspense fallback={<div className="flex h-64 items-center justify-center bg-[#1A1D23]"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
             <PaymentsPage />
         </Suspense>
     );
