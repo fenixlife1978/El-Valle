@@ -16,7 +16,7 @@ import {
     Download, Loader2, Calendar as CalendarIcon, Banknote, 
     UserPlus, CheckCircle2, WalletCards, Trash2, 
     Hash, FileText, Save, Share2, FileDown,
-    Calculator, Minus, Equal, Receipt, Check, Info, DollarSign
+    Calculator, Minus, Equal, Receipt, Check, Info, DollarSign, Plus
 } from 'lucide-react';
 import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -42,7 +42,6 @@ import {
     DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal
 } from '@/components/ui/dropdown-menu';
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
-import { registerExtraordinaryIncome } from '@/lib/extraordinaryFunds';
 import Decimal from 'decimal.js';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
@@ -62,16 +61,22 @@ const formatToTwoDecimals = (num: number) => {
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const formatUSD = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0.00';
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
-const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
+const CAJA_PRINCIPAL_ID = "fS0hdoWOyZBuTVuUJSic";
 
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
-type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
+type DistributionLine = { id: string; category: 'ordinaria' | 'extraordinaria'; amount: number; extraordinaryDebtId?: string; isOwn?: boolean; };
+type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; selectedProperty: { street: string, house: string } | null; distributionLines: DistributionLine[]; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
-type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string; type: 'deuda' | 'adelanto' | 'abono'; };
+type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string; type: 'deuda' | 'adelanto' | 'abono' | 'extraordinaria' | 'abono_extraordinaria'; };
 type Payment = { 
     id: string; 
-    beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; 
+    beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; category?: string; extraordinaryDebtId?: string; isOwn?: boolean; }[]; 
     beneficiaryIds: string[]; 
     totalAmount: number; 
     exchangeRate: number; 
@@ -85,7 +90,6 @@ type Payment = {
     observations?: string; 
     receiptNumbers?: { [ownerId: string]: string };
     liquidatedConcepts?: LiquidatedConcept[];
-    paymentCategory?: string; // 'ordinaria' | 'extraordinaria'
 };
 
 function VerificationComponent({ condoId }: { condoId: string }) {
@@ -146,235 +150,240 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
                 const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
                 const monthId = format(payment.paymentDate.toDate(), 'yyyy-MM');
-                const isExtraordinary = payment.paymentCategory === 'extraordinaria';
 
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
                 await runTransaction(db, async (transaction) => {
+                    const ownerRefs = payment.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
+                    const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
+                    
                     const receiptNumbers: { [ownerId: string]: string } = {};
                     const liquidatedConcepts: LiquidatedConcept[] = [];
 
-                    if (isExtraordinary) {
-                        // ============================================
-                        // CUOTA EXTRAORDINARIA: Solo registrar en extraordinary_funds
-                        // NO afecta deudas ordinarias, NO afecta balances de propietarios
-                        // ============================================
-                        
-                        // Registrar ingreso extraordinario
-                        await registerExtraordinaryIncome(condoId, {
-                            monto: payment.totalAmount,
-                            exchangeRate: payment.exchangeRate,
-                            descripcion: `PAGO EXTRAORDINARIO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
-                            referencia: payment.reference,
-                            fecha: payment.paymentDate.toDate(),
-                            sourcePaymentId: payment.id,
-                            ownerId: payment.beneficiaries[0]?.ownerId
-                        });
-                        
-                        // Solo actualizar la cuenta bancaria (sin afectar propietarios)
-                        const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
-                        transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
-                        
-                        // Registrar en financial_stats
-                        const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
-                        transaction.set(statsRef, {
-                            periodo: monthId,
-                            saldoBancarioReal: increment(isDigital ? payment.totalAmount : 0),
-                            saldoCajaReal: increment(!isDigital ? payment.totalAmount : 0),
-                            totalIngresosMes: increment(payment.totalAmount),
-                            updatedAt: serverTimestamp()
-                        }, { merge: true });
-                        
-                        // Registrar transacción contable
-                        const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
-                        transaction.set(transRef, {
-                            monto: payment.totalAmount, 
-                            tipo: 'ingreso', 
-                            cuentaId: targetAccountId, 
-                            nombreCuenta: targetAccountName,
-                            descripcion: `INGRESO EXTRAORDINARIO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(),
-                            referencia: payment.reference, 
-                            fecha: payment.paymentDate, 
-                            sourcePaymentId: payment.id,
-                            categoria: 'extraordinaria',
-                            createdAt: serverTimestamp(), 
-                            createdBy: user?.email
-                        });
-                        
-                        // Generar números de recibo (sin afectar balances)
-                        payment.beneficiaries.forEach(beneficiary => {
-                            receiptNumbers[beneficiary.ownerId] = `REC-EXT-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
-                        });
-                        
-                        // Actualizar estado del pago
-                        transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
-                            status: 'aprobado', 
-                            receiptNumbers, 
-                            liquidatedConcepts: [{
-                                ownerId: payment.beneficiaries[0]?.ownerId || '',
-                                description: `PAGO EXTRAORDINARIO`,
-                                amountUSD: payment.totalAmount / payment.exchangeRate,
-                                period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
-                                type: 'abono'
-                            }],
-                            observations: 'PAGO EXTRAORDINARIO APROBADO - NO AFECTA DEUDAS ORDINARIAS.'
-                        });
-                        
-                    } else {
-                        // ============================================
-                        // CUOTA ORDINARIA: Lógica normal de deudas
-                        // ============================================
-                        
-                        const ownerRefs = payment.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
-                        const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
+                    for (let i = 0; i < payment.beneficiaries.length; i++) {
+                        const beneficiary = payment.beneficiaries[i];
+                        const ownerSnap = ownerSnaps[i];
+                        const ownerRef = ownerRefs[i];
 
-                        for (let i = 0; i < payment.beneficiaries.length; i++) {
-                            const beneficiary = payment.beneficiaries[i];
-                            const ownerSnap = ownerSnaps[i];
-                            const ownerRef = ownerRefs[i];
+                        if (!ownerSnap.exists()) continue;
 
-                            if (!ownerSnap.exists()) continue;
-
-                            let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
+                        // ============================================
+                        // CUOTA EXTRAORDINARIA - Manejo de pagos parciales
+                        // ============================================
+                        if (beneficiary.category === 'extraordinaria' && beneficiary.extraordinaryDebtId) {
+                            const debtRef = doc(db, 'condominios', condoId, 'owner_extraordinary_debts', beneficiary.extraordinaryDebtId);
+                            const debtSnap = await getDoc(debtRef);
                             
-                            const debtsSnap = await getDocs(query(
-                                collection(db, 'condominios', condoId, 'debts'),
-                                where('ownerId', '==', beneficiary.ownerId),
-                                where('status', 'in', ['pending', 'vencida'])
-                            ));
-                            
-                            const pendingDebts = debtsSnap.docs
-                                .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
-                                .sort((a, b) => a.year - b.year || a.month - b.month);
-
-                            for (const debt of pendingDebts) {
-                                const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
-                                if (funds.gte(debtAmountBs)) {
-                                    funds = funds.minus(debtAmountBs);
-                                    transaction.update(debt.ref, {
-                                        status: 'paid',
-                                        paidAmountUSD: debt.amountUSD,
-                                        paymentDate: payment.paymentDate,
-                                        paymentId: payment.id
-                                    });
-                                    liquidatedConcepts.push({
-                                        ownerId: beneficiary.ownerId,
-                                        description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                        amountUSD: debt.amountUSD,
-                                        period: `${monthsLocale[debt.month]} ${debt.year}`,
-                                        type: 'deuda'
-                                    });
-                                } else break;
-                            }
-
-                            const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
-                            if (funds.gte(advanceAmountBs)) {
-                                const allDebtsSnap = await getDocs(query(
-                                    collection(db, 'condominios', condoId, 'debts'),
-                                    where('ownerId', '==', beneficiary.ownerId)
-                                ));
-                                const allDebtsSorted = allDebtsSnap.docs
-                                    .map(d => d.data())
-                                    .sort((a, b) => a.year - b.year || a.month - b.month);
+                            if (debtSnap.exists()) {
+                                const debtData = debtSnap.data();
+                                const totalAmountUSD = debtData.amountUSD;
+                                const paidAmountUSD = beneficiary.amount / payment.exchangeRate;
+                                const pendingUSD = totalAmountUSD - paidAmountUSD;
                                 
-                                let nextMonthDate = addMonths(new Date(), 1);
-                                if (allDebtsSorted.length > 0) {
-                                    const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
-                                    nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
-                                }
-
-                                while (funds.gte(advanceAmountBs)) {
-                                    const year = nextMonthDate.getFullYear();
-                                    const month = nextMonthDate.getMonth() + 1;
-                                    
-                                    const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
-                                    transaction.set(newDebtRef, {
-                                        ownerId: beneficiary.ownerId,
-                                        property: { 
-                                            street: beneficiary.street || '',
-                                            house: beneficiary.house || '' 
-                                        },
-                                        year,
-                                        month,
-                                        amountUSD: currentFee,
-                                        description: 'Cuota de Condominio (Adelantado)',
+                                const partialPayment = {
+                                    amountUSD: paidAmountUSD,
+                                    amountBs: beneficiary.amount,
+                                    date: payment.paymentDate,
+                                    paymentId: payment.id
+                                };
+                                
+                                const existingPartialPayments = debtData.partialPayments || [];
+                                
+                                if (pendingUSD <= 0.01) {
+                                    transaction.update(debtRef, {
                                         status: 'paid',
-                                        paidAmountUSD: currentFee,
-                                        paymentDate: payment.paymentDate,
+                                        paidAt: payment.paymentDate,
                                         paymentId: payment.id,
-                                        published: true
+                                        pendingUSD: 0,
+                                        partialPayments: [...existingPartialPayments, partialPayment]
                                     });
-
+                                    
                                     liquidatedConcepts.push({
                                         ownerId: beneficiary.ownerId,
-                                        description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                        amountUSD: currentFee,
-                                        period: `${monthsLocale[month]} ${year}`,
-                                        type: 'adelanto'
+                                        description: beneficiary.isOwn 
+                                            ? `CUOTA EXTRAORDINARIA (PROPIA) - PAGO COMPLETO`
+                                            : `CUOTA EXTRAORDINARIA PAGADA PARA ${beneficiary.ownerName}`,
+                                        amountUSD: paidAmountUSD,
+                                        period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
+                                        type: 'extraordinaria'
                                     });
-
-                                    funds = funds.minus(advanceAmountBs);
-                                    nextMonthDate = addMonths(nextMonthDate, 1);
+                                } else {
+                                    transaction.update(debtRef, {
+                                        status: 'partial',
+                                        pendingUSD: pendingUSD,
+                                        partialPayments: [...existingPartialPayments, partialPayment]
+                                    });
+                                    
+                                    liquidatedConcepts.push({
+                                        ownerId: beneficiary.ownerId,
+                                        description: beneficiary.isOwn 
+                                            ? `ABONO PARCIAL A CUOTA EXTRAORDINARIA (PROPIA) - PENDIENTE: $${pendingUSD.toFixed(2)}`
+                                            : `ABONO PARCIAL A CUOTA EXTRAORDINARIA DE ${beneficiary.ownerName} - PENDIENTE: $${pendingUSD.toFixed(2)}`,
+                                        amountUSD: paidAmountUSD,
+                                        period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
+                                        type: 'abono_extraordinaria'
+                                    });
                                 }
+                                
+                                const extraFundRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
+                                transaction.set(extraFundRef, {
+                                    tipo: 'ingreso',
+                                    monto: beneficiary.amount,
+                                    exchangeRate: payment.exchangeRate,
+                                    descripcion: pendingUSD <= 0.01 
+                                        ? `PAGO CUOTA EXTRAORDINARIA`
+                                        : `ABONO PARCIAL A CUOTA EXTRAORDINARIA - PENDIENTE: $${pendingUSD.toFixed(2)}`,
+                                    referencia: payment.reference,
+                                    fecha: payment.paymentDate,
+                                    categoria: 'extraordinaria',
+                                    sourcePaymentId: payment.id,
+                                    ownerId: beneficiary.ownerId,
+                                    pendingAmountUSD: pendingUSD > 0 ? pendingUSD : null,
+                                    createdAt: serverTimestamp()
+                                });
+                                
+                                receiptNumbers[beneficiary.ownerId] = `REC-EXT-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                                transaction.update(ownerRef, { balance: ownerSnap.data().balance || 0 });
+                                continue;
                             }
+                        }
+                        
+                        // ============================================
+                        // CUOTA ORDINARIA
+                        // ============================================
+                        let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
+                        
+                        const debtsSnap = await getDocs(query(
+                            collection(db, 'condominios', condoId, 'debts'),
+                            where('ownerId', '==', beneficiary.ownerId),
+                            where('status', 'in', ['pending', 'vencida'])
+                        ));
+                        
+                        const pendingDebts = debtsSnap.docs
+                            .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
+                            .sort((a, b) => a.year - b.year || a.month - b.month);
 
-                            if (funds.gt(0)) {
+                        for (const debt of pendingDebts) {
+                            const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
+                            if (funds.gte(debtAmountBs)) {
+                                funds = funds.minus(debtAmountBs);
+                                transaction.update(debt.ref, {
+                                    status: 'paid',
+                                    paidAmountUSD: debt.amountUSD,
+                                    paymentDate: payment.paymentDate,
+                                    paymentId: payment.id
+                                });
                                 liquidatedConcepts.push({
                                     ownerId: beneficiary.ownerId,
-                                    description: `ABONO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                    amountUSD: funds.div(payment.exchangeRate).toNumber(),
-                                    period: 'SALDO',
-                                    type: 'abono'
+                                    description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                    amountUSD: debt.amountUSD,
+                                    period: `${monthsLocale[debt.month]} ${debt.year}`,
+                                    type: 'deuda'
                                 });
-                            }
-
-                            receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
-                            transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
+                            } else break;
                         }
 
-                        // Actualización de Cuentas y Tesorería
-                        const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
-                        transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
+                        const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
+                        if (funds.gte(advanceAmountBs)) {
+                            const allDebtsSnap = await getDocs(query(
+                                collection(db, 'condominios', condoId, 'debts'),
+                                where('ownerId', '==', beneficiary.ownerId)
+                            ));
+                            const allDebtsSorted = allDebtsSnap.docs
+                                .map(d => d.data())
+                                .sort((a, b) => a.year - b.year || a.month - b.month);
+                            
+                            let nextMonthDate = addMonths(new Date(), 1);
+                            if (allDebtsSorted.length > 0) {
+                                const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
+                                nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
+                            }
 
-                        const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
-                        transaction.set(statsRef, {
-                            periodo: monthId,
-                            saldoBancarioReal: increment(isDigital ? payment.totalAmount : 0),
-                            saldoCajaReal: increment(!isDigital ? payment.totalAmount : 0),
-                            totalIngresosMes: increment(payment.totalAmount),
-                            updatedAt: serverTimestamp()
-                        }, { merge: true });
+                            while (funds.gte(advanceAmountBs)) {
+                                const year = nextMonthDate.getFullYear();
+                                const month = nextMonthDate.getMonth() + 1;
+                                
+                                const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
+                                transaction.set(newDebtRef, {
+                                    ownerId: beneficiary.ownerId,
+                                    property: { 
+                                        street: beneficiary.street || '',
+                                        house: beneficiary.house || '' 
+                                    },
+                                    year,
+                                    month,
+                                    amountUSD: currentFee,
+                                    description: 'Cuota de Condominio (Adelantado)',
+                                    status: 'paid',
+                                    paidAmountUSD: currentFee,
+                                    paymentDate: payment.paymentDate,
+                                    paymentId: payment.id,
+                                    published: true
+                                });
 
-                        const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
-                        transaction.set(transRef, {
-                            monto: payment.totalAmount, 
-                            tipo: 'ingreso', 
-                            cuentaId: targetAccountId, 
-                            nombreCuenta: targetAccountName,
-                            descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(),
-                            referencia: payment.reference, 
-                            fecha: payment.paymentDate, 
-                            sourcePaymentId: payment.id,
-                            createdAt: serverTimestamp(), 
-                            createdBy: user?.email
-                        });
-                        
-                        transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
-                            status: 'aprobado', 
-                            receiptNumbers, 
-                            liquidatedConcepts,
-                            observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' 
-                        });
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                    amountUSD: currentFee,
+                                    period: `${monthsLocale[month]} ${year}`,
+                                    type: 'adelanto'
+                                });
+
+                                funds = funds.minus(advanceAmountBs);
+                                nextMonthDate = addMonths(nextMonthDate, 1);
+                            }
+                        }
+
+                        if (funds.gt(0)) {
+                            liquidatedConcepts.push({
+                                ownerId: beneficiary.ownerId,
+                                description: `ABONO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                amountUSD: funds.div(payment.exchangeRate).toNumber(),
+                                period: 'SALDO',
+                                type: 'abono'
+                            });
+                        }
+
+                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                        transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
+
+                    const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
+                    transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
+
+                    const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                    transaction.set(statsRef, {
+                        periodo: monthId,
+                        saldoBancarioReal: increment(isDigital ? payment.totalAmount : 0),
+                        saldoCajaReal: increment(!isDigital ? payment.totalAmount : 0),
+                        totalIngresosMes: increment(payment.totalAmount),
+                        updatedAt: serverTimestamp()
+                    }, { merge: true });
+
+                    const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
+                    transaction.set(transRef, {
+                        monto: payment.totalAmount, 
+                        tipo: 'ingreso', 
+                        cuentaId: targetAccountId, 
+                        nombreCuenta: targetAccountName,
+                        descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(),
+                        referencia: payment.reference, 
+                        fecha: payment.paymentDate, 
+                        sourcePaymentId: payment.id,
+                        createdAt: serverTimestamp(), 
+                        createdBy: user?.email
+                    });
+
+                    transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
+                        status: 'aprobado', 
+                        receiptNumbers, 
+                        liquidatedConcepts,
+                        observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' 
+                    });
                 });
 
-                toast({ 
-                    title: isExtraordinary ? "Pago Extraordinario Validado" : "Pago Validado", 
-                    description: isExtraordinary 
-                        ? "Ingreso registrado en fondo extraordinario. No afecta deudas ordinarias." 
-                        : "Deudas liquidadas y sincronizadas con Tesorería." 
-                });
+                toast({ title: "Pago Validado", description: "Deudas liquidadas y sincronizadas con Tesorería." });
                 setSelectedPayment(null);
             } catch (error: any) { 
                 console.error(error);
@@ -651,15 +660,28 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     {loading ? <div className="text-center p-20"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div> : (
                         <div className="overflow-x-auto">
                             <Table>
-                                <TableHeader className="bg-slate-800/20"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead></TableRow></TableHeader>
+                                <TableHeader className="bg-slate-800/20"><TableRow className="border-white/5">
+                                    <TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400">Beneficiarios</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Fecha</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Monto</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Ref.</TableHead>
+                                    <TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead>
+                                </TableRow></TableHeader>
                                 <TableBody>
                                     {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-40 text-center text-slate-500 font-bold italic uppercase text-[10px]">Sin reportes</TableCell></TableRow>) : 
                                     filteredPayments.map(p => (
                                         <TableRow key={p.id} className="hover:bg-white/5 border-white/5 transition-colors">
-                                            <TableCell className="px-8 py-6"><div className="font-black text-white text-xs uppercase italic">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-1">{p.paymentMethod} • {p.bank}</div></TableCell>
-                                            <TableCell className="text-slate-400 font-bold text-xs">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
+                                            <TableCell className="px-8 py-6">
+                                                <div className="font-black text-white text-xs uppercase italic">
+                                                    {(p.beneficiaries || []).map(b => b.ownerName).filter(n => n).join(", ") || "Sin beneficiario"}
+                                                </div>
+                                                <div className="text-[9px] font-black text-primary uppercase mt-1">
+                                                    {p.paymentMethod || "N/A"} • {p.bank || "N/A"}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-slate-400 font-bold text-xs">{p.paymentDate?.toDate ? format(p.paymentDate.toDate(), 'dd/MM/yy') : 'N/A'}</TableCell>
                                             <TableCell className="font-black text-white text-lg italic">Bs. {formatCurrency(p.totalAmount)}</TableCell>
-                                            <TableCell className="font-mono text-[10px] text-slate-500">{p.reference}</TableCell>
+                                            <TableCell className="font-mono text-[10px] text-slate-500">{p.reference || 'N/A'}</TableCell>
                                             <TableCell className="text-right pr-8">
                                                 <div className="flex justify-end items-center gap-2">
                                                     <DropdownMenu>
@@ -721,8 +743,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         <div className="space-y-6">
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
                                 <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-widest">Distribución de Ingreso</p>
-                                {selectedPayment?.beneficiaries.map((b, i) => (
-                                    <div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
+                                {(selectedPayment?.beneficiaries || []).map((b, i) => (
+                                    <div key={b.ownerId + "_" + i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
                                         <div className="flex flex-col"><span className="font-black text-white text-xs uppercase italic">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span></div>
                                         <span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span>
                                     </div>
@@ -784,6 +806,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     );
 }
 
+// ============================================
+// REPORT PAYMENT COMPONENT (Formulario de reporte)
+// ============================================
+
 function ReportPaymentComponent() {
     const { toast } = useToast();
     const { user: authUser, ownerData: authOwnerData } = useAuth();
@@ -791,11 +817,11 @@ function ReportPaymentComponent() {
     const condoId = params?.condoId as string;
     
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
+    const [extraordinaryDebts, setExtraordinaryDebts] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('movil');
-    const [paymentCategory, setPaymentCategory] = useState<string>('ordinaria');
     const [bank, setBank] = useState('');
     const [reference, setReference] = useState('');
     const [totalAmount, setTotalAmount] = useState<string>('');
@@ -816,6 +842,19 @@ function ReportPaymentComponent() {
 
     useEffect(() => {
         if (!condoId) return;
+        const q = query(
+            collection(db, 'condominios', condoId, 'owner_extraordinary_debts'),
+            where('status', 'in', ['pending', 'partial'])
+        );
+        const unsubscribe = onSnapshot(q, (snap) => {
+            const debts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setExtraordinaryDebts(debts);
+        });
+        return () => unsubscribe();
+    }, [condoId]);
+
+    useEffect(() => {
+        if (!condoId) return;
         const fetchRate = async () => {
             const docSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
             if (docSnap.exists() && paymentDate) {
@@ -828,22 +867,62 @@ function ReportPaymentComponent() {
         fetchRate();
     }, [paymentDate, condoId]);
 
-    const amountUSD = useMemo(() => {
-        const bs = parseFloat(totalAmount);
-        if (!isNaN(bs) && exchangeRate && exchangeRate > 0) return (bs / exchangeRate).toFixed(2);
-        return '0.00';
-    }, [totalAmount, exchangeRate]);
-
-    const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
-    const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
+    const getTotalAssigned = () => {
+        return beneficiaryRows.reduce((total, row) => {
+            const rowTotal = (row.distributionLines || []).reduce((sum, line) => sum + (line.amount || 0), 0);
+            return total + rowTotal;
+        }, 0);
+    };
     
+    const totalAssigned = getTotalAssigned();
+    const balance = (Number(totalAmount) || 0) - totalAssigned;
+
+    const addDistributionLine = (rowId: string) => {
+        setBeneficiaryRows(rows => rows.map(row => {
+            if (row.id !== rowId) return row;
+            const newLine: DistributionLine = {
+                id: Date.now().toString(),
+                category: 'ordinaria',
+                amount: 0
+            };
+            return {
+                ...row,
+                distributionLines: [...(row.distributionLines || []), newLine]
+            };
+        }));
+    };
+
+    const updateDistributionLine = (rowId: string, lineId: string, updates: Partial<DistributionLine>) => {
+        setBeneficiaryRows(rows => rows.map(row => {
+            if (row.id !== rowId) return row;
+            return {
+                ...row,
+                distributionLines: (row.distributionLines || []).map(line =>
+                    line.id === lineId ? { ...line, ...updates } : line
+                )
+            };
+        }));
+    };
+
+    const removeDistributionLine = (rowId: string, lineId: string) => {
+        setBeneficiaryRows(rows => rows.map(row => {
+            if (row.id !== rowId) return row;
+            const newLines = (row.distributionLines || []).filter(line => line.id !== lineId);
+            return {
+                ...row,
+                distributionLines: newLines.length > 0 ? newLines : [{ id: Date.now().toString(), category: 'ordinaria', amount: 0 }]
+            };
+        }));
+    };
+
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
     
     const handleOwnerSelect = (rowId: string, owner: Owner) => {
         updateBeneficiaryRow(rowId, { 
             owner, 
             searchTerm: '', 
-            selectedProperty: owner.properties && owner.properties.length > 0 ? owner.properties[0] : null 
+            selectedProperty: owner.properties && owner.properties.length > 0 ? owner.properties[0] : null,
+            distributionLines: [{ id: Date.now().toString(), category: 'ordinaria', amount: 0 }]
         });
     };
 
@@ -852,35 +931,105 @@ function ReportPaymentComponent() {
         return allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase()));
     };
 
-    const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+    const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { 
+        id: Date.now().toString(), 
+        owner: null, 
+        searchTerm: '', 
+        selectedProperty: null,
+        distributionLines: [{ id: Date.now().toString(), category: 'ordinaria', amount: 0 }]
+    }]);
+    
     const removeBeneficiaryRow = (id: string) => setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!authUser || !condoId || !exchangeRate || !totalAmount) {
+        
+        // Verificar pagos duplicados
+        const duplicateQuery = query(
+            collection(db, 'condominios', condoId, 'payments'),
+            where('reference', '==', reference),
+            where('totalAmount', '==', Number(totalAmount)),
+            where('paymentDate', '==', Timestamp.fromDate(paymentDate!)),
+            where('reportedBy', '==', authUser?.uid)
+        );
+        const duplicateSnap = await getDocs(duplicateQuery);
+        
+        if (!duplicateSnap.empty) {
+            toast({ 
+                variant: 'destructive', 
+                title: 'Pago Duplicado', 
+                description: 'Ya existe un reporte de pago con la misma referencia, fecha y monto. Verifica antes de enviar nuevamente.' 
+            });
+            return;
+        }
+
             toast({ variant: 'destructive', title: 'Faltan datos', description: 'Monto y tasa son obligatorios.' });
             return;
         }
+        
+        const beneficiaries: any[] = [];
+        for (const row of beneficiaryRows) {
+            if (!row.owner) continue;
+            for (const line of (row.distributionLines || [])) {
+                if (line.amount > 0) {
+                    const beneficiary: any = {
+                        ownerId: row.owner.id,
+                        ownerName: row.owner.name,
+                        amount: line.amount,
+                        category: line.category
+                    };
+                    
+                    if (row.selectedProperty?.street) beneficiary.street = row.selectedProperty.street;
+                    if (row.selectedProperty?.house) beneficiary.house = row.selectedProperty.house;
+                    
+                    if (line.category === 'extraordinaria' && line.extraordinaryDebtId) {
+                        beneficiary.extraordinaryDebtId = line.extraordinaryDebtId;
+                        beneficiary.isOwn = line.isOwn || false;
+                    }
+                    
+                    beneficiaries.push(beneficiary);
+                }
+            }
+        }
+        
+        if (beneficiaries.length === 0) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Debe asignar al menos un monto a un beneficiario.' });
+            return;
+        }
+        
+        if (Math.abs(balance) > 0.01) {
+            toast({ variant: 'destructive', title: 'Error de distribución', description: `La suma asignada (Bs. ${formatCurrency(totalAssigned)}) no coincide con el monto total (Bs. ${formatCurrency(Number(totalAmount))}).` });
+            return;
+        }
+        
         setIsSubmitting(true);
         try {
-            const beneficiaries = beneficiaryRows.map(row => ({ 
-                ownerId: row.owner!.id, 
-                ownerName: row.owner!.name, 
-                ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), 
-                amount: Number(row.amount) 
-            }));
             await addDoc(collection(db, "condominios", condoId, "payments"), { 
-                paymentCategory,
-                reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), 
-                totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), 
-                paymentMethod, bank: paymentMethod === 'efectivo_bs' ? 'Efectivo' : bank, 
-                reference: paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : reference, receiptUrl: receiptImage || "", 
-                status: 'pendiente', reportedAt: serverTimestamp() 
+                reportedBy: authUser.uid, 
+                beneficiaries,
+                beneficiaryIds: [...new Set(beneficiaries.map(b => b.ownerId))], 
+                totalAmount: Number(totalAmount), 
+                exchangeRate, 
+                paymentDate: paymentDate ? Timestamp.fromDate(paymentDate) : Timestamp.now(), 
+                paymentMethod, 
+                bank: paymentMethod === 'efectivo_bs' ? 'Efectivo' : bank, 
+                reference: paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : reference, 
+                receiptUrl: receiptImage || "", 
+                status: 'pendiente', 
+                reportedAt: serverTimestamp() 
             });
             toast({ title: 'Reporte Enviado' });
-            setTotalAmount(''); setReference(''); setReceiptImage(null); setBeneficiaryRows([]);
-        } catch (error) { toast({ variant: "destructive", title: "Error" }); } 
-        finally { setIsSubmitting(false); }
+            setTotalAmount(''); 
+            setReference(''); 
+            setReceiptImage(null); 
+            setBeneficiaryRows([]);
+        } catch (error) { 
+            console.error(error);
+            toast({ variant: "destructive", title: "Error" }); 
+        } finally { 
+            setIsSubmitting(false); 
+        }
     };
 
     return (
@@ -892,22 +1041,11 @@ function ReportPaymentComponent() {
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Fecha Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa Bs.</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Categoría</Label>
-                            <Select value={paymentCategory} onValueChange={setPaymentCategory}>
-                                <SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs">
-                                    <SelectValue placeholder="Seleccionar categoría..." />
-                                </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-white/10 text-white">
-                                    <SelectItem value="ordinaria" className="font-black uppercase text-[10px] italic">Cuota de Condominio</SelectItem>
-                                    <SelectItem value="extraordinaria" className="font-black uppercase text-[10px] italic">Cuota Extraordinaria</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left" onClick={() => setIsBankModalOpen(true)} disabled={paymentMethod === 'efectivo_bs'}>{paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={paymentMethod === 'efectivo_bs'} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic" placeholder="6 DÍGITOS" /></div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
-                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equiv. USD</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={amountUSD} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
+                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equiv. USD</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={((parseFloat(totalAmount) || 0) / (exchangeRate || 1)).toFixed(2)} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
                         </div>
                         <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Soporte Digital (Opcional)</Label><Input type="file" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(file) setReceiptImage(await compressImage(file, 800, 800)); }} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
                     </div>
@@ -915,30 +1053,46 @@ function ReportPaymentComponent() {
                     <div className="space-y-6">
                         <Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-2">Asignación de Beneficiarios</Label>
                         {beneficiaryRows.map((row) => (
-                            <div key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] space-y-6 relative">
-                                <div className="grid md:grid-cols-2 gap-8">
-                                    <div className="space-y-4">
-                                        {!row.owner ? (
-                                            <div className="relative">
-                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-                                                <Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />
-                                                {row.searchTerm.length >= 2 && (
-                                                    <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
-                                                        <ScrollArea className="h-48">
-                                                            {getFilteredOwnersFn(row.searchTerm).map(o => (
-                                                                <div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">
-                                                                    {o.name}
-                                                                </div>
-                                                            ))}
-                                                        </ScrollArea>
-                                                    </Card>
+                            <div key={row.id} className="p-6 bg-white/5 border border-white/5 rounded-[2rem] space-y-4">
+                                {!row.owner ? (
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                                        <Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />
+                                        {row.searchTerm.length >= 2 && (
+                                            <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+                                                <ScrollArea className="h-48">
+                                                    {getFilteredOwnersFn(row.searchTerm).map(o => (
+                                                        <div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">
+                                                            {o.name}
+                                                        </div>
+                                                    ))}
+                                                </ScrollArea>
+                                            </Card>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p>
+                                                {row.selectedProperty && (
+                                                    <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">
+                                                        {row.selectedProperty.street} - {row.selectedProperty.house}
+                                                    </p>
                                                 )}
                                             </div>
-                                        ) : (<div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center"><p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500"><XCircle className="h-5 w-5"/></Button></div>)}
-                                        {row.owner && row.owner.properties && (
-                                            <Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}>
-                                                <SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]">
-                                                    <SelectValue placeholder="Unidad..."/>
+                                            <Button type="button" variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500 hover:bg-red-500/10 rounded-full">
+                                                <XCircle className="h-5 w-5" />
+                                            </Button>
+                                        </div>
+                                        
+                                        {row.selectedProperty && row.owner.properties && row.owner.properties.length > 0 && (
+                                            <Select onValueChange={(v) => {
+                                                const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                            }} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}>
+                                                <SelectTrigger className="h-10 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]">
+                                                    <SelectValue placeholder="Seleccionar propiedad..." />
                                                 </SelectTrigger>
                                                 <SelectContent className="bg-slate-900 text-white border-white/10 italic">
                                                     {row.owner.properties.map((p, i) => (
@@ -947,20 +1101,109 @@ function ReportPaymentComponent() {
                                                 </SelectContent>
                                             </Select>
                                         )}
-                                    </div>
-                                    <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-500 ml-2">Monto Individual (Bs.)</Label><Input type="number" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" placeholder="0,00" /></div>
-                                </div>
+                                        
+                                        <div className="space-y-3">
+                                            {(row.distributionLines || []).map((line, lineIdx) => (
+                                                <div key={line.id} className="p-4 bg-slate-800 rounded-xl space-y-3">
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[8px] font-black text-primary bg-primary/20 px-2 py-0.5 rounded-full">Línea {lineIdx + 1}</span>
+                                                            <Select value={line.category} onValueChange={(v: any) => updateDistributionLine(row.id, line.id, { category: v })}>
+                                                                <SelectTrigger className="h-8 w-40 rounded-lg bg-slate-700 border-none text-white text-[10px]">
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent className="bg-slate-800 border-white/10">
+                                                                    <SelectItem value="ordinaria" className="text-[10px]">Cuota de Condominio</SelectItem>
+                                                                    <SelectItem value="extraordinaria" className="text-[10px]">Cuota Extraordinaria</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        {(row.distributionLines?.length || 0) > 1 && (
+                                                            <Button variant="ghost" size="icon" onClick={() => removeDistributionLine(row.id, line.id)} className="text-red-500 h-6 w-6">
+                                                                <Trash2 className="h-3 w-3" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {line.category === 'extraordinaria' && (
+                                                        <div className="space-y-2">
+                                                            <Select value={line.extraordinaryDebtId} onValueChange={(v) => updateDistributionLine(row.id, line.id, { extraordinaryDebtId: v })}>
+                                                                <SelectTrigger className="h-10 rounded-xl bg-slate-700 border-none text-white text-[10px]">
+                                                                    <SelectValue placeholder="Seleccionar cuota extraordinaria..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent className="bg-slate-800 border-white/10">
+                                                                    {extraordinaryDebts.filter(d => d.ownerId === row.owner?.id).map(debt => (
+                                                                        <SelectItem key={debt.id} value={debt.id} className="text-[10px]">
+                                                                            {debt.description} (${formatUSD(debt.amountUSD)} USD) {debt.status === 'partial' ? `- PENDIENTE: $${debt.pendingUSD}` : ''}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <div className="flex items-center gap-2">
+                                                                <Checkbox
+                                                                    checked={line.isOwn || false}
+                                                                    onCheckedChange={(checked) => updateDistributionLine(row.id, line.id, { isOwn: !!checked })}
+                                                                    className="border-primary data-[state=checked]:bg-primary"
+                                                                />
+                                                                <Label className="text-[8px] text-white/60">Es propio (no afecta balance)</Label>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-[8px] font-black uppercase text-slate-500">Monto (Bs.)</Label>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0,00"
+                                                                value={line.amount || ''}
+                                                                onChange={(e) => updateDistributionLine(row.id, line.id, { amount: parseFloat(e.target.value) || 0 })}
+                                                                className="h-10 rounded-xl bg-slate-700 border-none text-white font-black text-right"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-[8px] font-black uppercase text-slate-500">Equivalente (USD)</Label>
+                                                            <div className="h-10 rounded-xl bg-slate-700/50 flex items-center justify-end px-3">
+                                                                <span className="text-emerald-400 font-black text-sm">
+                                                                    ${formatUSD((line.amount || 0) / (exchangeRate || 1))}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            
+                                            <Button type="button" variant="ghost" size="sm" onClick={() => addDistributionLine(row.id)} className="text-[10px] text-primary hover:bg-primary/10 w-full">
+                                                <Plus className="h-3 w-3 mr-1" /> Agregar otra línea de pago
+                                            </Button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         ))}
-                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"><UserPlus className="mr-2 h-4 w-4 text-primary"/>Añadir Beneficiario</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5">
+                            <UserPlus className="mr-2 h-4 w-4 text-primary"/> Añadir Beneficiario
+                        </Button>
                     </div>
                 </CardContent>
-                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6"><div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: Bs. {formatCurrency(balance)}</div><Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">{isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR</Button></CardFooter>
+                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>
+                        Diferencia: Bs. {formatCurrency(balance)}
+                    </div>
+                    <Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">
+                        {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />}
+                        REGISTRAR PAGO Y ASENTAR
+                    </Button>
+                </CardFooter>
             </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
         </Card>
     );
 }
+
+// ============================================
+// CALCULATOR COMPONENT
+// ============================================
 
 function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -1156,6 +1399,10 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
         </div>
     );
 }
+
+// ============================================
+// PAYMENTS PAGE
+// ============================================
 
 function PaymentsPage() {
     const searchParams = useSearchParams();

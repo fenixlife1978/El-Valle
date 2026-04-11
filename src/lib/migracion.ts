@@ -19,6 +19,5 @@ export const migrateDataToCondo = async (targetCondoId: string) => {
     });
     
     await batch.commit();
-    console.log(`Migración completada para: ${colName}`);
   }
 };

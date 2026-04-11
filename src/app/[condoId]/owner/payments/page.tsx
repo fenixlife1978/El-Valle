@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarIcon, CheckCircle2, DollarSign, FileText, Hash, Loader2, Banknote, Info, Save, FileUp, UserPlus, Trash2, Search, XCircle, Calculator, Receipt, ArrowLeft } from 'lucide-react';
 import { format, startOfMonth, addMonths } from 'date-fns';
@@ -34,13 +35,28 @@ type BeneficiaryRow = {
     searchTerm: string;
     amount: string;
     selectedProperty: { street: string, house: string } | null;
+    selectedExtraordinaryDebts?: string[];
+    extraordinaryTotalUSD?: number;
 };
 
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
+type ExtraordinaryDebt = {
+    id: string;
+    description: string;
+    amountUSD: number;
+    ownerId: string;
+    ownerName?: string;
+    property?: string;
+};
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const formatUSD = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0.00';
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 function ReportPaymentComponent() {
@@ -68,9 +84,31 @@ function ReportPaymentComponent() {
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+    
+    // Todas las cuotas extraordinarias pendientes del condominio
+    const [allExtraordinaryDebts, setAllExtraordinaryDebts] = useState<ExtraordinaryDebt[]>([]);
+    
+    // Estado para expandir/colapsar selección de extraordinarias por beneficiario
+    const [expandedExtraordinary, setExpandedExtraordinary] = useState<string | null>(null);
 
     const isCashPayment = paymentMethod === 'efectivo_bs';
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
+    // Cargar todas las cuotas extraordinarias pendientes
+    useEffect(() => {
+        if (!condoId) return;
+        const q = query(
+            collection(db, 'condominios', condoId, 'owner_extraordinary_debts'),
+            where('status', '==', 'pending'),
+            where('ownerId', '==', authUser?.uid)
+        );
+    
+        const unsubscribe = onSnapshot(q, (snap) => {
+            const debts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExtraordinaryDebt));
+            setAllExtraordinaryDebts(debts);
+        });
+        return () => unsubscribe();
+    }, [condoId]);
 
     useEffect(() => {
         if (!condoId) return;
@@ -89,7 +127,8 @@ function ReportPaymentComponent() {
                 owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, email: authUser.email || undefined },
                 searchTerm: '',
                 amount: '',
-                selectedProperty: authOwnerData.properties?.[0] || null
+                selectedProperty: authOwnerData.properties?.[0] || null,
+                selectedExtraordinaryDebts: []
             }]);
         }
     }, [authOwnerData, authUser]);
@@ -100,32 +139,14 @@ function ReportPaymentComponent() {
              try {
                 const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
                 const docSnap = await getDoc(settingsRef);
-                if (docSnap.exists()) {
-                    const settings = docSnap.data();
-                    if (paymentDate) {
-                        setExchangeRate(null);
-                        setExchangeRateMessage('Buscando tasa...');
-                        const allRates = (settings.exchangeRates || []) as any[];
-                        const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
-                        const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
-                        if (applicableRates.length > 0) {
-                             setExchangeRate(applicableRates[0].rate);
-                             setExchangeRateMessage('');
-                        } else {
-                            setExchangeRateMessage('No hay tasa para esta fecha.');
-                        }
-                    } else {
-                        setExchangeRate(null);
-                        setExchangeRateMessage('');
-                    }
-                } else {
-                     setExchangeRateMessage('No hay configuraciones.');
+                if (docSnap.exists() && paymentDate) {
+                    const allRates = (docSnap.data().exchangeRates || []);
+                    const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
+                    const applicable = allRates.filter((r:any) => r.date <= paymentDateString).sort((a:any, b:any) => b.date.localeCompare(a.date));
+                    setExchangeRate(applicable.length > 0 ? applicable[0].rate : null);
                 }
-            } catch (e) {
-                 setExchangeRateMessage('Error al buscar tasa.');
-                 console.error(e);
-            }
-        }
+            } catch (e) { console.error(e); }
+        };
         fetchRate();
     }, [paymentDate, condoId]);
     
@@ -148,6 +169,24 @@ function ReportPaymentComponent() {
         }
     }, [totalAmount, exchangeRate]);
 
+    // Calcular total de extraordinarias seleccionadas por beneficiario
+    const getBeneficiaryExtraordinaryTotal = (rowId: string) => {
+        const row = beneficiaryRows.find(r => r.id === rowId);
+        if (!row || !row.selectedExtraordinaryDebts) return 0;
+        return row.selectedExtraordinaryDebts.reduce((sum, debtId) => {
+            const debt = allExtraordinaryDebts.find(d => d.id === debtId);
+            return sum + (debt?.amountUSD || 0);
+        }, 0);
+    };
+
+    // Calcular total general de extraordinarias
+    const totalExtraordinaryUSD = beneficiaryRows.reduce((sum, row) => {
+        return sum + getBeneficiaryExtraordinaryTotal(row.id);
+    }, 0);
+    
+    const totalExtraordinaryBs = totalExtraordinaryUSD * (exchangeRate || 1);
+    const ordinaryAmountBs = Math.max(0, (parseFloat(totalAmount) || 0) - totalExtraordinaryBs);
+
     const resetForm = () => {
         setPaymentDate(new Date());
         setPaymentMethod('movil');
@@ -163,7 +202,8 @@ function ReportPaymentComponent() {
                 owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, email: authUser.email || undefined },
                 searchTerm: '',
                 amount: '',
-                selectedProperty: authOwnerData.properties?.[0] || null
+                selectedProperty: authOwnerData.properties?.[0] || null,
+                selectedExtraordinaryDebts: []
             }]);
         }
     }
@@ -187,8 +227,38 @@ function ReportPaymentComponent() {
     const balance = (Number(totalAmount) || 0) - assignedTotal;
 
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
-    const handleOwnerSelect = (rowId: string, owner: Owner) => updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: owner.properties?.[0] || null });
-    const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+    const handleOwnerSelect = (rowId: string, owner: Owner) => {
+        updateBeneficiaryRow(rowId, { 
+            owner, 
+            searchTerm: '', 
+            selectedProperty: owner.properties && owner.properties.length > 0 ? owner.properties[0] : null,
+            selectedExtraordinaryDebts: []
+        });
+    };
+    
+    const toggleExtraordinaryDebt = (rowId: string, debtId: string) => {
+        const row = beneficiaryRows.find(r => r.id === rowId);
+        if (!row) return;
+        const current = row.selectedExtraordinaryDebts || [];
+        const newSelection = current.includes(debtId) 
+            ? current.filter(id => id !== debtId)
+            : [...current, debtId];
+        updateBeneficiaryRow(rowId, { selectedExtraordinaryDebts: newSelection });
+    };
+
+    const getDebtsForOwner = (ownerId: string) => {
+        return allExtraordinaryDebts.filter(d => d.ownerId === ownerId);
+    };
+
+    const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { 
+        id: Date.now().toString(), 
+        owner: null, 
+        searchTerm: '', 
+        amount: '', 
+        selectedProperty: null,
+        selectedExtraordinaryDebts: []
+    }]);
+    
     const removeBeneficiaryRow = (id: string) => {
         if (beneficiaryRows.length > 1) {
             setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
@@ -198,11 +268,8 @@ function ReportPaymentComponent() {
     };
 
     const getFilteredOwnersFn = (searchTerm: string) => {
-        if (!searchTerm || searchTerm.length < 2) return [];
-        return allOwners.filter(owner => 
-            owner.name?.toLowerCase().includes(searchTerm.toLowerCase()) && 
-            owner.email?.toLowerCase() !== 'vallecondo@gmail.com'
-        );
+        if (searchTerm.length < 2) return [];
+        return allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase()));
     };
 
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
@@ -251,27 +318,44 @@ function ReportPaymentComponent() {
         }
 
         try {
-            const beneficiaries = beneficiaryRows.map(row => ({
-                ownerId: row.owner!.id,
-                ownerName: row.owner!.name,
-                ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }),
-                amount: Number(row.amount)
-            }));
+            // Construir distribución por beneficiario
+            const beneficiaries = beneficiaryRows.map(row => {
+                const selectedDebts = (row.selectedExtraordinaryDebts || []).map(debtId => {
+                    const debt = allExtraordinaryDebts.find(d => d.id === debtId);
+                    return debt ? { id: debtId, amountUSD: debt.amountUSD } : null;
+                }).filter(Boolean);
+                
+                const extraordinaryTotalUSD = selectedDebts.reduce((sum, d) => sum + (d?.amountUSD || 0), 0);
+                
+                return { 
+                    ownerId: row.owner!.id, 
+                    ownerName: row.owner!.name, 
+                    ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), 
+                    amount: Number(row.amount),
+                    extraordinaryDebts: selectedDebts,
+                    extraordinaryTotalUSD
+                };
+            });
 
             const paymentData: any = {
                 paymentCategory,
+                reportedBy: authUser.uid,
+                beneficiaries,
+                beneficiaryIds: beneficiaries.map(b=>b.ownerId),
+                totalAmount: Number(totalAmount),
+                exchangeRate,
                 paymentDate: Timestamp.fromDate(paymentDate!),
-                exchangeRate: exchangeRate,
-                paymentMethod: paymentMethod,
+                paymentMethod,
                 bank: isCashPayment ? 'Efectivo' : (bank === 'Otro' ? otherBank : bank),
                 reference: isCashPayment ? 'EFECTIVO' : reference,
-                totalAmount: Number(totalAmount),
-                beneficiaries: beneficiaries,
-                beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))),
+                receiptUrl: receiptImage || "",
                 status: 'pendiente',
                 reportedAt: serverTimestamp(),
-                reportedBy: authUser.uid,
-                receiptUrl: receiptImage || null,
+                distribution: {
+                    totalExtraordinaryUSD,
+                    totalExtraordinaryBs,
+                    ordinaryAmountBs
+                }
             };
             
             const paymentRef = await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
@@ -388,7 +472,7 @@ function ReportPaymentComponent() {
                                 </Popover>
                             </div>
 
-                            {/* Tasa BCV (solo lectura) */}
+                            {/* Tasa BCV */}
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa BCV</Label>
                                 <div className="relative">
@@ -499,126 +583,206 @@ function ReportPaymentComponent() {
                             </div>
                         </div>
 
-                        {/* ASIGNACIÓN DE BENEFICIARIOS */}
+                        {/* ASIGNACIÓN DE BENEFICIARIOS CON CUOTAS EXTRAORDINARIAS */}
                         <div className="space-y-6">
                             <Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-2">Asignación de Beneficiarios</Label>
                             
-                            {beneficiaryRows.map((row, index) => (
-                                <Card key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] relative">
-                                    <div className="grid md:grid-cols-2 gap-8">
-                                        <div className="space-y-4">
-                                            {!row.owner ? (
-                                                <div className="relative">
-                                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-                                                    <Input 
-                                                        placeholder="Buscar Residente..." 
-                                                        className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" 
-                                                        value={row.searchTerm} 
-                                                        onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} 
-                                                    />
-                                                    {row.searchTerm.length >= 2 && getFilteredOwnersFn(row.searchTerm).length > 0 && (
-                                                        <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
-                                                            <ScrollArea className="h-48">
-                                                                {getFilteredOwnersFn(row.searchTerm).map(owner => (
-                                                                    <div 
-                                                                        key={owner.id} 
-                                                                        onClick={() => handleOwnerSelect(row.id, owner)} 
-                                                                        className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5"
-                                                                    >
-                                                                        {owner.name}
-                                                                    </div>
-                                                                ))}
-                                                            </ScrollArea>
-                                                        </Card>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center">
-                                                    <div>
-                                                        <p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p>
-                                                        {row.selectedProperty && (
-                                                            <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">
-                                                                {row.selectedProperty.street} - {row.selectedProperty.house}
-                                                            </p>
+                            {beneficiaryRows.map((row, index) => {
+                                const ownerExtraordinaryDebts = row.owner ? getDebtsForOwner(row.owner.id) : [];
+                                const selectedCount = (row.selectedExtraordinaryDebts || []).length;
+                                const extraordinaryTotalUSD = getBeneficiaryExtraordinaryTotal(row.id);
+                                
+                                return (
+                                    <Card key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] relative">
+                                        <div className="grid md:grid-cols-2 gap-8">
+                                            <div className="space-y-4">
+                                                {!row.owner ? (
+                                                    <div className="relative">
+                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                                                        <Input 
+                                                            placeholder="Buscar Residente..." 
+                                                            className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" 
+                                                            value={row.searchTerm} 
+                                                            onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} 
+                                                        />
+                                                        {row.searchTerm.length >= 2 && (
+                                                            <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+                                                                <ScrollArea className="h-48">
+                                                                    {getFilteredOwnersFn(row.searchTerm).map(o => (
+                                                                        <div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">
+                                                                            {o.name}
+                                                                        </div>
+                                                                    ))}
+                                                                </ScrollArea>
+                                                            </Card>
                                                         )}
                                                     </div>
-                                                    <Button 
-                                                        type="button" 
-                                                        variant="ghost" 
-                                                        size="icon" 
-                                                        onClick={() => removeBeneficiaryRow(row.id)} 
-                                                        className="text-red-500 hover:bg-red-500/10 rounded-full"
+                                                ) : (
+                                                    <div className="p-5 bg-slate-800 rounded-2xl border border-white/5">
+                                                        <div className="flex justify-between items-start">
+                                                            <div>
+                                                                <p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p>
+                                                                {row.selectedProperty && (
+                                                                    <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">
+                                                                        {row.selectedProperty.street} - {row.selectedProperty.house}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <Button 
+                                                                type="button" 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                onClick={() => removeBeneficiaryRow(row.id)} 
+                                                                className="text-red-500 hover:bg-red-500/10 rounded-full"
+                                                            >
+                                                                <XCircle className="h-5 w-5" />
+                                                            </Button>
+                                                        </div>
+                                                        
+                                                        {/* Cuotas Extraordinarias para este beneficiario */}
+                                                        {ownerExtraordinaryDebts.length > 0 && paymentCategory === 'ordinaria' && (
+                                                            <div className="mt-4 pt-4 border-t border-white/10">
+                                                                <div 
+                                                                    className="flex items-center justify-between cursor-pointer"
+                                                                    onClick={() => setExpandedExtraordinary(expandedExtraordinary === row.id ? null : row.id)}
+                                                                >
+                                                                    <div className="flex items-center gap-2">
+                                                                        <DollarSign className="h-3 w-3 text-primary" />
+                                                                        <span className="text-[9px] font-black uppercase text-white/60">
+                                                                            Cuotas Extraordinarias ({selectedCount} seleccionadas)
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-[8px] text-primary">
+                                                                        {expandedExtraordinary === row.id ? '▲' : '▼'}
+                                                                    </span>
+                                                                </div>
+                                                                
+                                                                {expandedExtraordinary === row.id && (
+                                                                    <div className="mt-3 space-y-2">
+                                                                        {ownerExtraordinaryDebts.map(debt => (
+                                                                            <label key={debt.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-xl cursor-pointer hover:bg-slate-700/50">
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <Checkbox
+                                                                                        checked={(row.selectedExtraordinaryDebts || []).includes(debt.id)}
+                                                                                        onCheckedChange={() => toggleExtraordinaryDebt(row.id, debt.id)}
+                                                                                        className="border-primary data-[state=checked]:bg-primary"
+                                                                                    />
+                                                                                    <div>
+                                                                                        <p className="text-[9px] font-black text-white uppercase">{debt.description}</p>
+                                                                                        <p className="text-[8px] text-white/40">${formatUSD(debt.amountUSD)} USD</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <span className="text-[9px] text-emerald-400">
+                                                                                    ≈ Bs. {formatCurrency(debt.amountUSD * (exchangeRate || 1))}
+                                                                                </span>
+                                                                            </label>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {extraordinaryTotalUSD > 0 && (
+                                                                    <div className="mt-3 p-2 bg-primary/10 rounded-xl">
+                                                                        <p className="text-[8px] font-black uppercase text-white/60 text-center">
+                                                                            Total extraordinarias: <span className="text-primary">${formatUSD(extraordinaryTotalUSD)} USD</span>
+                                                                            ≈ Bs. {formatCurrency(extraordinaryTotalUSD * (exchangeRate || 1))}
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                
+                                                {row.owner && row.owner.properties && row.owner.properties.length > 0 && (
+                                                    <Select 
+                                                        onValueChange={(v) => {
+                                                            const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                            updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                        }} 
+                                                        value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
                                                     >
-                                                        <XCircle className="h-5 w-5" />
-                                                    </Button>
-                                                </div>
-                                            )}
+                                                        <SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]">
+                                                            <SelectValue placeholder="Unidad..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="bg-slate-900 text-white border-white/10 italic">
+                                                            {row.owner.properties.map((p, i) => (
+                                                                <SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase italic">{p.street} - {p.house}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                )}
+                                            </div>
                                             
-                                            {row.owner && row.owner.properties && row.owner.properties.length > 0 && (
-                                                <Select 
-                                                    onValueChange={(v) => {
-                                                        const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
-                                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
-                                                    }} 
-                                                    value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
-                                                >
-                                                    <SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]">
-                                                        <SelectValue placeholder="Seleccionar propiedad..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-slate-900 text-white border-white/10 italic">
-                                                        {row.owner.properties.map((p, idx) => (
-                                                            <SelectItem key={idx} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase italic">
-                                                                {p.street} - {p.house}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            )}
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] font-black uppercase text-slate-500 ml-2">Monto Individual (Bs.)</Label>
+                                                <Input 
+                                                    type="number" 
+                                                    value={row.amount} 
+                                                    onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} 
+                                                    className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" 
+                                                    placeholder="0,00" 
+                                                />
+                                                {extraordinaryTotalUSD > 0 && (
+                                                    <p className="text-right text-[8px] text-white/40 mt-1">
+                                                        Incluye extraordinarias: ${formatUSD(extraordinaryTotalUSD)} ≈ Bs. {formatCurrency(extraordinaryTotalUSD * (exchangeRate || 1))}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
-                                        
-                                        <div className="space-y-2">
-                                            <Label className="text-[9px] font-black uppercase text-slate-500 ml-2">Monto Individual (Bs.)</Label>
-                                            <Input 
-                                                type="number" 
-                                                value={row.amount} 
-                                                onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} 
-                                                className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" 
-                                                placeholder="0,00" 
-                                            />
-                                        </div>
-                                    </div>
-                                </Card>
-                            ))}
+                                    </Card>
+                                );
+                            })}
                             
-                            <Button 
-                                type="button" 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={addBeneficiaryRow} 
-                                className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"
-                            >
-                                <UserPlus className="mr-2 h-4 w-4 text-primary" /> Añadir Beneficiario
+                            <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5">
+                                <UserPlus className="mr-2 h-4 w-4 text-primary"/> Añadir Beneficiario
                             </Button>
                         </div>
                     </CardContent>
                     
                     <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>
-                            Diferencia: Bs. {formatCurrency(balance)}
+                        <div className="space-y-1">
+                            <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>
+                                Diferencia: Bs. {formatCurrency(balance)}
+                            </div>
+                            {totalExtraordinaryUSD > 0 && (
+                                <p className="text-[9px] text-white/40">
+                                    Incluye extraordinarias: <span className="text-primary">${formatUSD(totalExtraordinaryUSD)} USD</span>
+                                    (Bs. {formatCurrency(totalExtraordinaryBs)})
+                                </p>
+                            )}
+                            {ordinaryAmountBs > 0 && (
+                                <p className="text-[9px] text-white/40">
+                                    Aplicará a cuotas ordinarias: Bs. {formatCurrency(ordinaryAmountBs)}
+                                </p>
+                            )}
                         </div>
                         <Button 
                             type="submit" 
                             disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} 
                             className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95"
                         >
-                            {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />}
                             REGISTRAR PAGO Y ASENTAR
                         </Button>
                     </CardFooter>
+            <Button 
+              type="button"
+              onClick={async () => {
+                const q = query(
+                  collection(db, 'condominios', condoId, 'owner_extraordinary_debts'),
+                  where('status', '==', 'pending')
+                );
+                const snapshot = await getDocs(q);
+              }}
+              className="mb-4 bg-yellow-500 text-slate-900"
+            >
+              DEPURAR - Ver Deudas
+            </Button>
+
                 </form>
             </Card>
 
-            <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
+            <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
             
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic">

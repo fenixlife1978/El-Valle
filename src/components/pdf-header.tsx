@@ -27,7 +27,6 @@ export const PDFHeaderComponent = ({ condoId }: PDFHeaderProps) => {
         
         if (docSnap.exists()) {
           setCondominioData(docSnap.data());
-          console.log("Datos del condominio cargados:", docSnap.data());
         } else {
           console.error("No se encontró el documento en:", 'condominios', condoId);
         }

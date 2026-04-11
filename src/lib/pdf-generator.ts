@@ -136,7 +136,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text(`TOTAL PAGADO:`, labelX, finalY, { align: 'right' });
-  doc.text(`Bs. ${paymentData.receivedAmount}`, rightAlignX, finalY, { align: 'right' });
+doc.text(`Bs. ${paymentData.totalDebtPaid}`, rightAlignX, finalY, { align: 'right' });
 
   // 7. Pie de Página y Seguridad
   const footerY = 240;

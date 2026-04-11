@@ -3,7 +3,8 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { memoryCache } from '@/lib/memory-cache';
 
 interface AuthContextType {
   user: User | null;
@@ -15,6 +16,15 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   activeCondoId: string | null;
   workingCondoId: string | null;
+}
+
+interface UserData {
+  role?: string;
+  name?: string;
+  email?: string;
+  properties?: any[];
+  balance?: number;
+  [key: string]: any;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,47 +71,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Recuperar persistencia sanitizada
         const savedCondo = localStorage.getItem('activeCondoId');
         const validCondo = (savedCondo && savedCondo !== 'null' && savedCondo !== 'undefined') ? savedCondo : null;
 
         if (validCondo) {
-          // 1. INTENTO EN SUBCOLECCIONES DEL CONDOMINIO (NUEVA Y VIEJA)
-          const newRef = doc(db, 'condominios', validCondo, 'propietarios', firebaseUser.uid);
-          const oldRef = doc(db, 'condominios', validCondo, 'owners', firebaseUser.uid);
+          const cacheKey = `user_${firebaseUser.uid}_${validCondo}`;
+          let userData: UserData | null = memoryCache.get(cacheKey);
           
-          const [newSnap, oldSnap] = await Promise.all([getDoc(newRef), getDoc(oldRef)]);
-          let userData = newSnap.exists() ? newSnap.data() : (oldSnap.exists() ? oldSnap.data() : null);
-
-          // 2. RESPALDO: SI NO EXISTE EN CONDOMINIO, BUSCAR EN COLECCIONES RAÍZ
           if (!userData) {
-            const rootUsuariosRef = doc(db, 'usuarios', firebaseUser.uid);
-            const rootUsersRef = doc(db, 'users', firebaseUser.uid);
+            const newRef = doc(db, 'condominios', validCondo, 'propietarios', firebaseUser.uid);
+            const oldRef = doc(db, 'condominios', validCondo, 'owners', firebaseUser.uid);
             
-            const [rootSnap1, rootSnap2] = await Promise.all([getDoc(rootUsuariosRef), getDoc(rootUsersRef)]);
-            userData = rootSnap1.exists() ? rootSnap1.data() : (rootSnap2.exists() ? rootSnap2.data() : null);
+            const [newSnap, oldSnap] = await Promise.all([getDoc(newRef), getDoc(oldRef)]);
+            userData = (newSnap.exists() ? newSnap.data() : (oldSnap.exists() ? oldSnap.data() : null)) as UserData | null;
+            
+            if (userData) {
+              memoryCache.set(cacheKey, userData, 3600);
+            }
           }
 
           if (userData) {
             setOwnerData(userData);
             const rawRole = (userData.role || '').toLowerCase();
-            const finalRole = ['admin', 'administrador', 'junta'].includes(rawRole) ? 'admin' : 'owner';
+            const finalRole = (rawRole === 'admin' || rawRole === 'administrador' || rawRole === 'junta') ? 'admin' : 'owner';
             
             setUserRole(finalRole);
             setActiveCondoId(validCondo);
             setWorkingCondoId(validCondo);
             localStorage.setItem('userRole', finalRole);
 
-            const settingsRef = doc(db, 'condominios', validCondo, 'config', 'mainSettings');
-            onSnapshot(settingsRef, (s) => {
-              if (s.exists()) setCompanyInfo(s.data().companyInfo);
-            });
+            // Solo cargar companyInfo si es necesario
+            if (finalRole === 'admin') {
+              const settingsCacheKey = `company_${validCondo}`;
+              let company = memoryCache.get(settingsCacheKey);
+              if (!company) {
+                const settingsRef = doc(db, 'condominios', validCondo, 'config', 'mainSettings');
+                const settingsSnap = await getDoc(settingsRef);
+                if (settingsSnap.exists()) {
+                  company = settingsSnap.data().companyInfo;
+                  memoryCache.set(settingsCacheKey, company, 3600);
+                }
+              }
+              setCompanyInfo(company);
+            } else {
+              const condominioCacheKey = `condominio_${validCondo}`;
+              let condoInfo = memoryCache.get(condominioCacheKey);
+              if (!condoInfo) {
+                const condominioRef = doc(db, 'condominios', validCondo);
+                const condominioSnap = await getDoc(condominioRef);
+                if (condominioSnap.exists()) {
+                  condoInfo = {
+                    name: condominioSnap.data().nombre || condominioSnap.data().name,
+                    rif: condominioSnap.data().rif,
+                    logo: condominioSnap.data().logo
+                  };
+                  memoryCache.set(condominioCacheKey, condoInfo, 3600);
+                }
+              }
+              setCompanyInfo(condoInfo);
+            }
           }
         }
       } catch (error) {
-        console.error("EFAS Sync Error:", error);
+        // Error silencioso
       } finally {
-        setTimeout(() => setLoading(false), 400);
+        setLoading(false);
       }
     });
 

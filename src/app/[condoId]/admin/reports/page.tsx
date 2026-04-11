@@ -258,7 +258,7 @@ const buildIntegralReportData = (
         if (toDate) toDate.setHours(23, 59, 59, 999);
 
         const ownerPayments = allPayments.filter(p => {
-            const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
+            const isOwnerPayment = (p.beneficiaries || []).some(b => b.ownerId === owner.id) && p.status === 'aprobado';
             if (!isOwnerPayment) return false;
             const paymentDate = p.paymentDate.toDate();
             if (fromDate && paymentDate < fromDate) return false;
@@ -686,7 +686,7 @@ export default function ReportsPage() {
         setSelectedIndividual(owner);
         setIndividualSearchTerm('');
 
-        const allApprovedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado')
+        const allApprovedPayments = allPayments.filter(p => (p.beneficiaries || []).some(b => b.ownerId === owner.id) && p.status === 'aprobado')
             .sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
 
         const paymentsWithDebts: PaymentWithDebts[] = [];
@@ -717,7 +717,7 @@ export default function ReportsPage() {
             .sort((a, b) => a.year - b.year || a.month - b.month);
 
         const ownerPayments = allPayments.filter(p => 
-                p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado'
+                (p.beneficiaries || []).some(b => b.ownerId === owner.id) && p.status === 'aprobado'
             ).sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis());
 
         const totalDebtUSD = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').reduce((sum, d) => sum + d.amountUSD, 0);
