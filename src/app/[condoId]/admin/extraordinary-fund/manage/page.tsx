@@ -234,7 +234,7 @@ export default function ManageExtraordinaryFundPage() {
         
         for (const owner of sortedOwners) {
             const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && d.status === 'pending');
-            if (debt || (owner.properties?.length > 0)) {
+            if (debt) {
                 pendingDebts.push({ owner, debt: debt || null, index: counter });
                 counter++;
             }
