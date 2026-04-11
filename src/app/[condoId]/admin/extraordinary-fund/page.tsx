@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, Timestamp, deleteDoc, doc, updateDoc, getDocs, where } from 'firebase/firestore';
@@ -50,9 +50,10 @@ export default function ExtraordinaryFundPage() {
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
 
+        // CAMBIO: orden ascendente para que el saldo acumulado tenga sentido
         const q = query(
             collection(db, 'condominios', condoId, 'extraordinary_funds'),
-            orderBy('fecha', 'desc')
+            orderBy('fecha', 'asc')
         );
 
         const unsubscribe = onSnapshot(q, (snap) => {
@@ -72,6 +73,19 @@ export default function ExtraordinaryFundPage() {
 
         return () => unsubscribe();
     }, [condoId]);
+
+    // Función para agregar el saldo acumulado a cada transacción (respetando el orden ascendente)
+    const getTransactionsWithRunningBalance = () => {
+        let runningBalance = 0;
+        return transactions.map(tx => {
+            if (tx.tipo === 'ingreso') {
+                runningBalance += tx.monto;
+            } else {
+                runningBalance -= tx.monto;
+            }
+            return { ...tx, runningBalance };
+        });
+    };
 
     const handleDeleteTransaction = async () => {
         if (!selectedTransaction || !condoId) return;
@@ -115,13 +129,16 @@ export default function ExtraordinaryFundPage() {
     };
 
     const handleGeneratePDF = async () => {
-        const html = generateReportHTML(transactions, balance);
+        const transactionsWithBalance = getTransactionsWithRunningBalance();
+        const html = generateReportHTML(transactionsWithBalance, balance);
         const fileName = `Fondo_Extraordinario_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
         downloadPDF(html, fileName);
     };
 
-    const generateReportHTML = (txs: ExtraordinaryTransaction[], saldo: number) => {
+    const generateReportHTML = (txs: (ExtraordinaryTransaction & { runningBalance: number })[], saldo: number) => {
         const period = format(new Date(), 'MMMM yyyy', { locale: es }).toUpperCase();
+        const totalIngresos = txs.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
+        const totalEgresos = txs.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
         
         return `
             <!DOCTYPE html>
@@ -154,23 +171,33 @@ export default function ExtraordinaryFundPage() {
                 <div class="container">
                     <div class="header"><h1>FONDO EXTRAORDINARIO</h1><p>Reporte de movimientos - Período: ${period}</p></div>
                     <div class="summary">
-                        <div class="summary-card"><label>Total Ingresos</label><value class="ingreso">Bs. ${formatCurrency(txs.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0))}</value></div>
-                        <div class="summary-card"><label>Total Egresos</label><value class="egreso">Bs. ${formatCurrency(txs.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0))}</value></div>
-                        <div class="summary-card"><label>Saldo Disponible</label><value>Bs. ${formatCurrency(saldo)}</value></div>
+                        <div class="summary-card"><label>Total Ingresos (Debe)</label><value class="ingreso">Bs. ${formatCurrency(totalIngresos)}</value></div>
+                        <div class="summary-card"><label>Total Egresos (Haber)</label><value class="egreso">Bs. ${formatCurrency(totalEgresos)}</value></div>
+                        <div class="summary-card"><label>Saldo Actual</label><value>Bs. ${formatCurrency(saldo)}</value></div>
                     </div>
                     <table>
-                        <thead><tr><th class="text-left">FECHA</th><th class="text-left">DESCRIPCIÓN</th><th class="text-left">REFERENCIA</th><th class="text-right">TIPO</th><th class="text-right">MONTO (Bs.)</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th class="text-left">FECHA</th>
+                                <th class="text-left">DESCRIPCIÓN</th>
+                                <th class="text-left">REFERENCIA</th>
+                                <th class="text-right">DEBE (Bs.)</th>
+                                <th class="text-right">HABER (Bs.)</th>
+                                <th class="text-right">SALDO (Bs.)</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             ${txs.map(t => `
                                 <tr>
                                     <td class="text-left">${t.fecha?.toDate ? format(t.fecha.toDate(), 'dd/MM/yyyy') : 'N/A'}</td>
                                     <td class="text-left">${t.descripcion}</td>
                                     <td class="text-left">${t.referencia || '-'}</td>
-                                    <td class="text-right ${t.tipo === 'ingreso' ? 'ingreso' : 'egreso'}">${t.tipo === 'ingreso' ? 'INGRESO' : 'EGRESO'}</td>
-                                    <td class="text-right ${t.tipo === 'ingreso' ? 'ingreso' : 'egreso'}">Bs. ${formatCurrency(t.monto)}</td>
+                                    <td class="text-right ingreso">${t.tipo === 'ingreso' ? `Bs. ${formatCurrency(t.monto)}` : '-'}</td>
+                                    <td class="text-right egreso">${t.tipo === 'egreso' ? `Bs. ${formatCurrency(t.monto)}` : '-'}</td>
+                                    <td class="text-right">Bs. ${formatCurrency(t.runningBalance)}</td>
                                 </tr>
                             `).join('')}
-                            ${txs.length === 0 ? '<tr><td colspan="5" class="text-center">No hay movimientos registrados</td>' : ''}
+                            ${txs.length === 0 ? '<tr><td colspan="6" class="text-center">No hay movimientos registrados</td></tr>' : ''}
                         </tbody>
                     </table>
                     <div class="footer"><p>Documento generado por <strong>EFASCondoSys</strong> - Sistema de Autogestión de Condominios</p></div>
@@ -188,6 +215,10 @@ export default function ExtraordinaryFundPage() {
             </div>
         );
     }
+
+    const transactionsWithBalance = getTransactionsWithRunningBalance();
+    const totalIngresos = transactions.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
+    const totalEgresos = transactions.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
 
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
@@ -210,10 +241,10 @@ export default function ExtraordinaryFundPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5">
-                    <CardContent className="p-6"><div className="flex items-center gap-3 mb-4"><div className="bg-emerald-500/20 p-3 rounded-2xl"><TrendingUp className="h-6 w-6 text-emerald-500" /></div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Ingresos</p></div><p className="text-3xl font-black text-emerald-400 italic">Bs. {formatCurrency(transactions.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0))}</p></CardContent>
+                    <CardContent className="p-6"><div className="flex items-center gap-3 mb-4"><div className="bg-emerald-500/20 p-3 rounded-2xl"><TrendingUp className="h-6 w-6 text-emerald-500" /></div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Ingresos (Debe)</p></div><p className="text-3xl font-black text-emerald-400 italic">Bs. {formatCurrency(totalIngresos)}</p></CardContent>
                 </Card>
                 <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5">
-                    <CardContent className="p-6"><div className="flex items-center gap-3 mb-4"><div className="bg-red-500/20 p-3 rounded-2xl"><TrendingDown className="h-6 w-6 text-red-500" /></div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Egresos</p></div><p className="text-3xl font-black text-red-400 italic">Bs. {formatCurrency(transactions.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0))}</p></CardContent>
+                    <CardContent className="p-6"><div className="flex items-center gap-3 mb-4"><div className="bg-red-500/20 p-3 rounded-2xl"><TrendingDown className="h-6 w-6 text-red-500" /></div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Egresos (Haber)</p></div><p className="text-3xl font-black text-red-400 italic">Bs. {formatCurrency(totalEgresos)}</p></CardContent>
                 </Card>
                 <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5">
                     <CardContent className="p-6"><div className="flex items-center gap-3 mb-4"><div className="bg-primary/20 p-3 rounded-2xl"><DollarSign className="h-6 w-6 text-primary" /></div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Saldo Disponible</p></div><p className="text-3xl font-black text-white italic">Bs. {formatCurrency(balance)}</p></CardContent>
@@ -231,25 +262,33 @@ export default function ExtraordinaryFundPage() {
                         <Table>
                             <TableHeader className="bg-slate-800/30">
                                 <TableRow className="border-white/5">
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Fecha</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Descripción</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Referencia</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">Tipo</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 pr-8">Monto (Bs.)</TableHead>
-                                    <TableHead className="text-center text-[10px] font-black uppercase text-slate-400">Acción</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">FECHA</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">DESCRIPCIÓN</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">REFERENCIA</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">DEBE (Bs.)</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">HABER (Bs.)</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">SALDO (Bs.)</TableHead>
+                                    <TableHead className="text-center text-[10px] font-black uppercase text-slate-400">ACCIÓN</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {transactions.length === 0 ? (
-                                    <TableRow><TableCell colSpan={6} className="h-40 text-center text-slate-500 font-bold italic uppercase text-[10px]">No hay movimientos en el fondo extraordinario</TableCell></TableRow>
+                                {transactionsWithBalance.length === 0 ? (
+                                    <TableRow><TableCell colSpan={7} className="h-40 text-center text-slate-500 font-bold italic uppercase text-[10px]">No hay movimientos en el fondo extraordinario</TableCell></TableRow>
                                 ) : (
-                                    transactions.map((tx) => (
+                                    transactionsWithBalance.map((tx) => (
                                         <TableRow key={tx.id} className="border-white/5 hover:bg-white/5 transition-colors">
                                             <TableCell className="font-black text-white text-xs italic">{tx.fecha?.toDate ? format(tx.fecha.toDate(), 'dd/MM/yyyy') : 'N/A'}</TableCell>
                                             <TableCell className="text-white font-black uppercase text-[10px]">{tx.descripcion}</TableCell>
                                             <TableCell className="font-mono text-[10px] text-white/60">{tx.referencia || '-'}</TableCell>
-                                            <TableCell className="text-right"><Badge className={tx.tipo === 'ingreso' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-red-500/20 text-red-500'}>{tx.tipo === 'ingreso' ? 'INGRESO' : 'EGRESO'}</Badge></TableCell>
-                                            <TableCell className={cn("text-right font-black italic pr-8", tx.tipo === 'ingreso' ? 'text-emerald-500' : 'text-red-500')}>{tx.tipo === 'ingreso' ? '+' : '-'} Bs. {formatCurrency(tx.monto)}</TableCell>
+                                            <TableCell className="text-right font-black text-emerald-400 italic">
+                                                {tx.tipo === 'ingreso' ? `Bs. ${formatCurrency(tx.monto)}` : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right font-black text-red-400 italic">
+                                                {tx.tipo === 'egreso' ? `Bs. ${formatCurrency(tx.monto)}` : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right font-black text-primary italic">
+                                                Bs. {formatCurrency(tx.runningBalance)}
+                                            </TableCell>
                                             <TableCell className="text-center">
                                                 <Button variant="ghost" size="icon" onClick={() => { setSelectedTransaction(tx); setDeleteDialogOpen(true); }} className="text-red-500 hover:bg-red-500/10 h-8 w-8">
                                                     <Trash2 className="h-4 w-4" />

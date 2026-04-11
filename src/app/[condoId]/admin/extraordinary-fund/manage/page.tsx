@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { 
     collection, query, where, getDocs, addDoc, updateDoc, 
-    doc, serverTimestamp, onSnapshot, Timestamp, writeBatch 
+    doc, getDoc, serverTimestamp, onSnapshot, Timestamp, writeBatch 
 } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Plus, Users, FileText, CheckCircle, XCircle, DollarSign, Calendar, AlertCircle, Download, Share2 } from 'lucide-react';
+import { Loader2, Plus, Users, FileText, AlertCircle, DollarSign, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
 import { downloadPDF } from '@/lib/print-pdf';
 
 interface Owner {
@@ -53,11 +52,6 @@ interface OwnerExtraordinaryDebt {
     paymentId?: string;
 }
 
-const formatCurrency = (num: number) => {
-    if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
 const formatUSD = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0.00';
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -72,14 +66,8 @@ const getHouseNumber = (house: string): number => {
 // Función para ordenar propiedades por calle y casa
 const sortProperties = (properties: { street: string, house: string }[]) => {
     const streetOrder: { [key: string]: number } = {
-        'Calle 1': 1,
-        'Calle 2': 2,
-        'Calle 3': 3,
-        'Calle 4': 4,
-        'Calle 5': 5,
-        'Calle 6': 6,
-        'Calle 7': 7,
-        'Calle 8': 8
+        'Calle 1': 1, 'Calle 2': 2, 'Calle 3': 3, 'Calle 4': 4,
+        'Calle 5': 5, 'Calle 6': 6, 'Calle 7': 7, 'Calle 8': 8
     };
     
     return [...properties].sort((a, b) => {
@@ -156,7 +144,6 @@ export default function ManageExtraordinaryFundPage() {
             sortedProperties: sortProperties(owner.properties || [])
         }));
         
-        // Ordenar todos los propietarios por su primera propiedad
         return ownersWithProps.sort((a, b) => {
             const aProp = a.sortedProperties[0];
             const bProp = b.sortedProperties[0];
@@ -240,7 +227,7 @@ export default function ManageExtraordinaryFundPage() {
         }
     };
 
-    const generateMorososReport = async () => {
+    const generatePorPagarReport = async () => {
         const sortedOwners = getSortedOwnersWithProperties();
         const pendingDebts: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[] = [];
         let counter = 1;
@@ -253,8 +240,8 @@ export default function ManageExtraordinaryFundPage() {
             }
         }
         
-        const html = generateReportHTML(pendingDebts, 'MOROSOS');
-        downloadPDF(html, `Reporte_Morosos_Extraordinario_${format(new Date(), 'yyyy_MM_dd')}.pdf`);
+        const html = generateReportHTML(pendingDebts, 'POR PAGAR');
+        downloadPDF(html, `Reporte_Por_Pagar_Extraordinario_${format(new Date(), 'yyyy_MM_dd')}.pdf`);
     };
 
     const generatePagadosReport = async () => {
@@ -303,7 +290,7 @@ export default function ManageExtraordinaryFundPage() {
                     <p>Generado: ${new Date().toLocaleString('es-VE')}</p>
                 </div>
                 <div class="summary">
-                    <p><strong>Total ${type === 'MOROSOS' ? 'Adeudado' : 'Recaudado'}:</strong> $${formatUSD(totalUSD)}</p>
+                    <p><strong>Total ${type === 'POR PAGAR' ? 'Adeudado' : 'Recaudado'}:</strong> $${formatUSD(totalUSD)}</p>
                     <p><strong>Cantidad de propietarios:</strong> ${items.length}</p>
                 </div>
                 <table>
@@ -423,11 +410,11 @@ export default function ManageExtraordinaryFundPage() {
             {/* BOTONES DE REPORTES */}
             <div className="flex flex-wrap gap-4">
                 <Button 
-                    onClick={generateMorososReport}
+                    onClick={generatePorPagarReport}
                     variant="outline"
                     className="rounded-xl border-yellow-500/30 text-yellow-400 font-black uppercase text-[10px] bg-yellow-500/5 hover:bg-yellow-500/10"
                 >
-                    <FileText className="mr-2 h-4 w-4" /> Reporte de Morosos
+                    <FileText className="mr-2 h-4 w-4" /> Reporte de Por Pagar
                 </Button>
                 <Button 
                     onClick={generatePagadosReport}
