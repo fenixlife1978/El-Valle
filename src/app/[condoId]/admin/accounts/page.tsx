@@ -16,7 +16,8 @@ import {
     updateDoc,
     increment,
     getDocs,
-    where
+    where,
+    getDoc   // ✅ AGREGADO: necesario para obtener tasa de cambio
 } from 'firebase/firestore';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -192,11 +193,20 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         finally { setIsSubmitting(false); }
     };
 
+    // ✅ FUNCIÓN MODIFICADA: ahora duplica egresos con categoría 'extraordinaria' en extraordinary_funds
     const handleSaveTransaction = async () => {
         if (!transForm.cuentaId || !transForm.monto || !transForm.descripcion) return;
         setIsSubmitting(true);
         const montoNum = parseFloat(transForm.monto);
         const cuentaRef = doc(db, 'condominios', condoId, 'cuentas', transForm.cuentaId);
+        
+        // Obtener tasa de cambio actual
+        let exchangeRate = 0;
+        try {
+            const rateDoc = await getDoc(doc(db, 'config', 'exchangeRate'));
+            if (rateDoc.exists()) exchangeRate = rateDoc.data().rate || 0;
+        } catch (e) { console.warn("No se pudo obtener tasa de cambio"); }
+        
         try {
             await runTransaction(db, async (transaction) => {
                 const accountDoc = await transaction.get(cuentaRef);
@@ -210,6 +220,26 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     referencia: transForm.referencia.toUpperCase(), fecha: Timestamp.fromDate(transForm.fecha),
                     createdBy: user?.email, createdAt: serverTimestamp()
                 });
+                
+                // ✅ Si es egreso con categoría "extraordinaria", duplicar en fondo extraordinario
+                if (transForm.categoria === 'extraordinaria' && transForm.tipo === 'egreso') {
+                    const extraordinaryRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
+                    const montoUSD = exchangeRate > 0 ? montoNum / exchangeRate : 0;
+                    transaction.set(extraordinaryRef, {
+                        tipo: 'egreso',
+                        monto: montoNum,
+                        montoUSD: montoUSD,
+                        exchangeRate: exchangeRate,
+                        descripcion: transForm.descripcion.toUpperCase(),
+                        referencia: transForm.referencia?.toUpperCase() || '',
+                        fecha: Timestamp.fromDate(transForm.fecha),
+                        categoria: 'extraordinaria',
+                        sourceTransactionId: newTransRef.id,
+                        createdBy: user?.email,
+                        createdAt: serverTimestamp()
+                    });
+                }
+                
                 transaction.update(cuentaRef, { saldoActual: increment(transForm.tipo === 'ingreso' ? montoNum : -montoNum) });
             });
             toast({ title: "Movimiento procesado con éxito" });
@@ -510,7 +540,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                     </SelectTrigger>
                                     <SelectContent className="bg-slate-900 border-white/10 text-white italic">
                                         <SelectItem value="ordinaria" className="font-black uppercase text-[10px] italic">General</SelectItem>
-                                        <SelectItem value="extraordinaria" className="font-black uppercase text-[10px] italic">Cuota Extraordinaria</SelectItem>
+                                        <SelectItem value="extraordinaria" className="font-black uppercase text-[10px] italic">Fondo Extraordinario</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
