@@ -45,6 +45,7 @@ import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import Decimal from 'decimal.js';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
+import { uploadToImgbb } from '@/lib/imgbb';
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
@@ -941,9 +942,30 @@ function ReportPaymentComponent() {
     
     const removeBeneficiaryRow = (id: string) => setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
 
+    // MODIFICADO: Subir a Imgbb en lugar de Base64
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const imageUrl = await uploadToImgbb(file);
+            if (imageUrl) {
+                setReceiptImage(imageUrl);
+                toast({ title: 'Comprobante subido', description: 'La imagen se ha subido correctamente.' });
+            } else {
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo subir el comprobante.' });
+            }
+        } catch (error) {
+            console.error("Error subiendo comprobante:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Error al procesar el comprobante.' });
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!authUser || !condoId || !exchangeRate || !totalAmount) {
+            toast({ variant: 'destructive', title: 'Faltan datos', description: 'Monto y tasa son obligatorios.' });
+            return;
+        }
         
         // Verificar pagos duplicados
         const duplicateQuery = query(
@@ -961,10 +983,6 @@ function ReportPaymentComponent() {
                 title: 'Pago Duplicado', 
                 description: 'Ya existe un reporte de pago con la misma referencia, fecha y monto. Verifica antes de enviar nuevamente.' 
             });
-            return;
-        }
-
-            toast({ variant: 'destructive', title: 'Faltan datos', description: 'Monto y tasa son obligatorios.' });
             return;
         }
         
@@ -1047,7 +1065,7 @@ function ReportPaymentComponent() {
                             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
                             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equiv. USD</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={((parseFloat(totalAmount) || 0) / (exchangeRate || 1)).toFixed(2)} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
                         </div>
-                        <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Soporte Digital (Opcional)</Label><Input type="file" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(file) setReceiptImage(await compressImage(file, 800, 800)); }} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
+                        <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Soporte Digital (Opcional)</Label><Input type="file" accept="image/*" onChange={handleImageUpload} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
                     </div>
                     
                     <div className="space-y-6">

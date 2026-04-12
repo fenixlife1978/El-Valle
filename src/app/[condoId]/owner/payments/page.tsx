@@ -21,6 +21,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { uploadToImgbb } from '@/lib/imgbb';
 
 type Owner = {
     id: string;
@@ -208,16 +209,22 @@ function ReportPaymentComponent() {
         }
     }
 
+    // MODIFICADO: Subir a Imgbb en lugar de Base64 (sin toast conflictivo)
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         setLoading(true);
         try {
-            const compressedBase64 = await compressImage(file, 800, 800);
-            setReceiptImage(compressedBase64);
-            toast({ title: 'Comprobante cargado', description: 'La imagen se ha optimizado y está lista para ser enviada.' });
+            const imageUrl = await uploadToImgbb(file);
+            if (imageUrl) {
+                setReceiptImage(imageUrl);
+                alert('Comprobante subido correctamente');
+            } else {
+                alert('Error al subir el comprobante');
+            }
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Error de imagen', description: 'No se pudo procesar la imagen.' });
+            console.error("Error subiendo comprobante:", error);
+            alert('Error al procesar el comprobante');
         } finally {
             setLoading(false);
         }
