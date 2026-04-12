@@ -959,7 +959,7 @@ function ReportPaymentComponent() {
             toast({ variant: 'destructive', title: 'Error', description: 'Error al procesar el comprobante.' });
         }
     };
-
+    
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!authUser || !condoId || !exchangeRate || !totalAmount) {
