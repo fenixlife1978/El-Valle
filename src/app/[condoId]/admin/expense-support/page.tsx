@@ -22,6 +22,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { downloadPDF } from '@/lib/print-pdf';
 import { toast } from 'sonner';
+import { uploadToImgbb } from '@/lib/imgbb';
 
 interface ExpenseSupport {
     id: string;
@@ -50,7 +51,7 @@ export default function ExpenseSupportPage() {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [selectedImages, setSelectedImages] = useState<string[]>([]);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [previewImages, setPreviewImages] = useState<string[]>([]);
     const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
@@ -100,36 +101,33 @@ export default function ExpenseSupportPage() {
             return;
         }
         
-        setIsSubmitting(true);
-        try {
-            const compressedBase64 = await compressImage(file, 800, 800);
-            const newImages = [...selectedImages];
+        // Crear preview local
+        const reader = new FileReader();
+        reader.onload = (event) => {
             const newPreviews = [...previewImages];
-            newImages[index] = compressedBase64;
-            newPreviews[index] = compressedBase64;
-            setSelectedImages(newImages);
+            newPreviews[index] = event.target?.result as string;
             setPreviewImages(newPreviews);
-            toast.success(`Imagen ${index + 1} comprimida y lista`);
-        } catch (error) {
-            console.error("Error comprimiendo imagen:", error);
-            toast.error('Error al procesar la imagen');
-        } finally {
-            setIsSubmitting(false);
-        }
+        };
+        reader.readAsDataURL(file);
+        
+        const newFiles = [...selectedFiles];
+        newFiles[index] = file;
+        setSelectedFiles(newFiles);
+        toast.success(`Imagen ${index + 1} seleccionada`);
     };
 
     const removeImage = (index: number) => {
-        const newImages = [...selectedImages];
+        const newFiles = [...selectedFiles];
         const newPreviews = [...previewImages];
-        newImages[index] = '';
+        newFiles[index] = undefined as any;
         newPreviews[index] = '';
-        setSelectedImages(newImages);
+        setSelectedFiles(newFiles);
         setPreviewImages(newPreviews);
     };
 
     const handleSubmit = async () => {
-        const validImages = selectedImages.filter(img => img);
-        if (validImages.length === 0) {
+        const validFiles = selectedFiles.filter(f => f !== undefined);
+        if (validFiles.length === 0) {
             toast.error('Debe seleccionar al menos una imagen');
             return;
         }
@@ -139,22 +137,40 @@ export default function ExpenseSupportPage() {
         }
         
         setIsSubmitting(true);
+        toast.loading('Subiendo imágenes a Imgbb...', { id: 'upload' });
+        
         try {
+            // Subir cada imagen a Imgbb
+            const uploadedUrls: string[] = [];
+            for (const file of validFiles) {
+                const url = await uploadToImgbb(file);
+                if (url) {
+                    uploadedUrls.push(url);
+                } else {
+                    toast.error('Error al subir una imagen a Imgbb');
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+            
+            toast.loading('Guardando en Firestore...', { id: 'upload' });
+            
             await addDoc(collection(db, 'condominios', condoId, 'expense_support'), {
-                images: validImages,
+                images: uploadedUrls,
                 fecha: Timestamp.fromDate(formData.fecha),
                 descripcion: formData.descripcion.toUpperCase(),
                 createdAt: serverTimestamp(),
                 createdBy: user?.email || 'admin'
             });
-            toast.success('Soporte guardado correctamente');
+            
+            toast.success('Soporte guardado correctamente', { id: 'upload' });
             setIsDialogOpen(false);
-            setSelectedImages([]);
+            setSelectedFiles([]);
             setPreviewImages([]);
             setFormData({ fecha: new Date(), descripcion: '' });
         } catch (error) {
             console.error("Error guardando soporte:", error);
-            toast.error('Error al guardar el soporte');
+            toast.error('Error al guardar el soporte', { id: 'upload' });
         } finally {
             setIsSubmitting(false);
         }
@@ -305,7 +321,7 @@ export default function ExpenseSupportPage() {
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Fecha del Gasto</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal h-12 rounded-xl bg-slate-800 border-none text-white uppercase italic text-xs", !formData.fecha && "text-muted-foreground")}><CalendarIcon className="mr-3 h-4 w-4 text-primary" />{formData.fecha ? format(formData.fecha, "PPP", { locale: es }) : "Seleccione una fecha"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><CalendarComponent mode="single" selected={formData.fecha} onSelect={(date) => date && setFormData({ ...formData, fecha: date })} initialFocus locale={es} /></PopoverContent></Popover></div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Descripción</Label><Textarea placeholder="Ej: COMPRA DE MATERIALES DE LIMPIEZA" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} className="rounded-xl bg-slate-800 border-none text-white font-black uppercase text-xs min-h-[80px]" /></div>
                     </div>
-                    <DialogFooter><Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl font-black uppercase text-[10px]">Cancelar</Button><Button onClick={handleSubmit} disabled={isSubmitting || !selectedImages[0]} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] italic">{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Guardar Soporte</Button></DialogFooter>
+                    <DialogFooter><Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl font-black uppercase text-[10px]">Cancelar</Button><Button onClick={handleSubmit} disabled={isSubmitting || !selectedFiles[0]} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] italic">{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Guardar Soporte</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
