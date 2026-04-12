@@ -11,6 +11,7 @@ import { db } from '@/lib/firebase';
 import { PlusCircle, Loader2, Trash2, XCircle, Edit } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { compressImage } from '@/lib/utils';
+import { uploadToImgbb } from '@/lib/imgbb';
 import Image from 'next/image';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -31,6 +32,7 @@ export default function BillboardPage({ params }: { params: Promise<{ condoId: s
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [imagen, setImagen] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Estados para edición
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -59,15 +61,32 @@ export default function BillboardPage({ params }: { params: Promise<{ condoId: s
     return () => unsubscribe();
   }, [workingCondoId]);
 
+  // MODIFICADO: Subir a Imgbb en lugar de Base64
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsSubmitting(true);
+    
+    // Crear preview local
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setPreviewImage(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    
     try {
-        const compressedBase64 = await compressImage(file, 800, 800);
-        setImagen(compressedBase64);
+        const imageUrl = await uploadToImgbb(file);
+        if (imageUrl) {
+            setImagen(imageUrl);
+            toast({ title: 'Imagen subida', description: 'La imagen se ha subido correctamente.' });
+        } else {
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo subir la imagen.' });
+            setPreviewImage(null);
+        }
     } catch (error) {
+        console.error("Error subiendo imagen:", error);
         toast({ variant: 'destructive', title: 'Error de imagen' });
+        setPreviewImage(null);
     } finally {
         setIsSubmitting(false);
     }
@@ -84,10 +103,10 @@ export default function BillboardPage({ params }: { params: Promise<{ condoId: s
                 urlImagen: imagen,
                 createdAt: serverTimestamp(),
                 condoId: workingCondoId,
-                published: true, // Publicado por defecto
+                published: true,
             });
             toast({ title: 'Anuncio publicado' });
-            setTitulo(''); setDescripcion(''); setImagen(null);
+            setTitulo(''); setDescripcion(''); setImagen(null); setPreviewImage(null);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error al guardar' });
         } finally {
@@ -166,10 +185,10 @@ export default function BillboardPage({ params }: { params: Promise<{ condoId: s
             <Textarea placeholder="Descripción..." value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="rounded-xl min-h-[120px]" />
           </div>
           <div className="border-2 border-dashed border-border rounded-[2rem] p-4 flex flex-col items-center justify-center bg-background/50">
-            {imagen ? (
+            {previewImage ? (
               <div className="relative w-full aspect-video">
-                <Image src={imagen} alt="Preview" fill className="object-contain rounded-xl" />
-                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 rounded-full h-8 w-8" onClick={() => setImagen(null)}><XCircle className="h-4 w-4" /></Button>
+                <Image src={previewImage} alt="Preview" fill className="object-contain rounded-xl" />
+                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 rounded-full h-8 w-8" onClick={() => { setImagen(null); setPreviewImage(null); }}><XCircle className="h-4 w-4" /></Button>
               </div>
             ) : (
               <Label className="cursor-pointer text-center w-full py-10">
