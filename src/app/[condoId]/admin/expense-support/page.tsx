@@ -259,7 +259,7 @@ export default function ExpenseSupportPage() {
                         </h2>
                         <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
                         <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">
-                            Administración de comprobantes y facturas (hasta 2 imágenes por soporte)
+                            Administración de comprobantes y facturas (hasta 20 imágenes por soporte)
                         </p>
                     </div>
                     <Button onClick={() => setIsDialogOpen(true)} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-12 px-6 italic">
@@ -305,23 +305,64 @@ export default function ExpenseSupportPage() {
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic max-w-lg">
-                    <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-white flex items-center gap-2"><Upload className="h-5 w-5 text-primary" /> Subir Soporte de Gasto</DialogTitle><p className="text-[9px] text-white/40">Puedes agregar hasta 2 imágenes por soporte</p></DialogHeader>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase italic text-white flex items-center gap-2">
+                            <Upload className="h-5 w-5 text-primary" /> Subir Soporte de Gasto
+                        </DialogTitle>
+                        <p className="text-[9px] text-white/40">Puedes agregar hasta 20 imágenes por soporte</p>
+                    </DialogHeader>
                     <div className="py-6 space-y-4">
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Imagen 1 <span className="text-primary">*</span></Label>
-                            <div className="border-2 border-dashed border-white/20 rounded-2xl p-4 text-center hover:border-primary/50 transition-colors">
-                                {previewImages[0] ? (<div className="relative"><img src={previewImages[0]} alt="Preview 1" className="max-h-40 mx-auto rounded-lg" /><Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/50" onClick={() => removeImage(0)}><X className="h-4 w-4" /></Button></div>) : (<div className="py-4"><Camera className="h-8 w-8 text-white/20 mx-auto mb-2" /><Input type="file" accept="image/*" onChange={(e) => handleImageCapture(e, 0)} className="hidden" id="image-upload-0" /><Label htmlFor="image-upload-0" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary/20 text-primary font-black uppercase text-[8px] cursor-pointer hover:bg-primary/30 transition-colors"><ImagePlus className="h-3 w-3" /> Seleccionar</Label></div>)}
-                            </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto p-2">
+                            {Array.from({ length: 20 }).map((_, idx) => (
+                                <div key={idx} className="space-y-2">
+                                    <Label className="text-[9px] font-black uppercase text-slate-500">Imagen {idx + 1}</Label>
+                                    <div className="border-2 border-dashed border-white/20 rounded-2xl p-3 text-center hover:border-primary/50 transition-colors min-h-[120px]">
+                                        {previewImages[idx] ? (
+                                            <div className="relative">
+                                                <img src={previewImages[idx]} alt={`Preview ${idx + 1}`} className="max-h-24 mx-auto rounded-lg" />
+                                                <Button type="button" variant="ghost" size="icon" className="absolute top-0 right-0 h-6 w-6 rounded-full bg-black/50" onClick={() => removeImage(idx)}>
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="py-3">
+                                                <Camera className="h-6 w-6 text-white/20 mx-auto mb-1" />
+                                                <Input type="file" accept="image/*" onChange={(e) => handleImageCapture(e, idx)} className="hidden" id={`image-upload-${idx}`} />
+                                                <Label htmlFor={`image-upload-${idx}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/20 text-primary font-black uppercase text-[7px] cursor-pointer hover:bg-primary/30 transition-colors">
+                                                    <ImagePlus className="h-2 w-2" /> Seleccionar
+                                                </Label>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Imagen 2 <span className="text-white/40">(Opcional)</span></Label>
-                            <div className="border-2 border-dashed border-white/20 rounded-2xl p-4 text-center hover:border-primary/50 transition-colors">
-                                {previewImages[1] ? (<div className="relative"><img src={previewImages[1]} alt="Preview 2" className="max-h-40 mx-auto rounded-lg" /><Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/50" onClick={() => removeImage(1)}><X className="h-4 w-4" /></Button></div>) : (<div className="py-4"><Camera className="h-8 w-8 text-white/20 mx-auto mb-2" /><Input type="file" accept="image/*" onChange={(e) => handleImageCapture(e, 1)} className="hidden" id="image-upload-1" /><Label htmlFor="image-upload-1" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary/20 text-primary font-black uppercase text-[8px] cursor-pointer hover:bg-primary/30 transition-colors"><ImagePlus className="h-3 w-3" /> Seleccionar</Label></div>)}
-                            </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500">Fecha del Gasto</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-12 rounded-xl bg-slate-800 border-none text-white uppercase italic text-xs", !formData.fecha && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-3 h-4 w-4 text-primary" />
+                                        {formData.fecha ? format(formData.fecha, "PPP", { locale: es }) : "Seleccione una fecha"}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10">
+                                    <CalendarComponent mode="single" selected={formData.fecha} onSelect={(date) => date && setFormData({ ...formData, fecha: date })} initialFocus locale={es} />
+                                </PopoverContent>
+                            </Popover>
                         </div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Fecha del Gasto</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal h-12 rounded-xl bg-slate-800 border-none text-white uppercase italic text-xs", !formData.fecha && "text-muted-foreground")}><CalendarIcon className="mr-3 h-4 w-4 text-primary" />{formData.fecha ? format(formData.fecha, "PPP", { locale: es }) : "Seleccione una fecha"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><CalendarComponent mode="single" selected={formData.fecha} onSelect={(date) => date && setFormData({ ...formData, fecha: date })} initialFocus locale={es} /></PopoverContent></Popover></div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Descripción</Label><Textarea placeholder="Ej: COMPRA DE MATERIALES DE LIMPIEZA" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} className="rounded-xl bg-slate-800 border-none text-white font-black uppercase text-xs min-h-[80px]" /></div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500">Descripción</Label>
+                            <Textarea placeholder="Ej: COMPRA DE MATERIALES DE LIMPIEZA" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} className="rounded-xl bg-slate-800 border-none text-white font-black uppercase text-xs min-h-[80px]" />
+                        </div>
                     </div>
-                    <DialogFooter><Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl font-black uppercase text-[10px]">Cancelar</Button><Button onClick={handleSubmit} disabled={isSubmitting || !selectedFiles[0]} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] italic">{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Guardar Soporte</Button></DialogFooter>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl font-black uppercase text-[10px]">Cancelar</Button>
+                        <Button onClick={handleSubmit} disabled={isSubmitting || !selectedFiles[0]} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] italic">
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Guardar Soporte
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
