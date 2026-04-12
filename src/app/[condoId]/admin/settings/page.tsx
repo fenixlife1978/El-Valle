@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -9,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { Loader2, Save, Upload, DollarSign, KeyRound, PlusCircle, Building2, MoreHorizontal, Edit, Trash2 } from "lucide-react";
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { Loader2, Save, Upload, DollarSign, KeyRound, PlusCircle, Building2, MoreHorizontal, Edit, Trash2, Landmark, Smartphone, Copy, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +21,6 @@ import { useParams } from 'next/navigation';
 import { compressImage } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-
 
 // --- DEFINICIONES DE TIPOS ---
 type CompanyInfo = {
@@ -37,26 +35,37 @@ type LoginSettings = {
   ownerLoginEnabled: boolean; disabledMessage: string;
 };
 
+type BankAccount = {
+  id: string;
+  type: 'transferencia' | 'movil';
+  bank: string;
+  account?: string;       // número de cuenta (solo transferencia)
+  holder?: string;        // titular (solo transferencia)
+  rif?: string;           // RIF del titular (ambos)
+  phone?: string;         // teléfono (solo pago móvil)
+};
+
 type Settings = {
   companyInfo: CompanyInfo;
   exchangeRates: ExchangeRate[];
   condoFee: number;
   loginSettings: LoginSettings;
+  bankAccounts: BankAccount[];
 };
 
 const defaultSettings: Settings = {
   companyInfo: { name: '', address: '', phone: '', email: '', logo: '', rif: '' },
   exchangeRates: [],
   condoFee: 0,
-  loginSettings: { ownerLoginEnabled: true, disabledMessage: 'Mantenimiento.' }
+  loginSettings: { ownerLoginEnabled: true, disabledMessage: 'Mantenimiento.' },
+  bankAccounts: []
 };
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const params = useParams(); // Obtenemos el condoId de la ruta dinámica
+  const params = useParams();
   const { requestAuthorization } = useAuthorization();
   
-  // Definimos workingCondoId basándonos en la URL
   const workingCondoId = params?.condoId as string;
 
   const [loading, setLoading] = useState(true);
@@ -65,6 +74,22 @@ export default function SettingsPage() {
   const [newRate, setNewRate] = useState({ date: format(new Date(), 'yyyy-MM-dd'), rate: '' });
   const [newAuthKey, setNewAuthKey] = useState('');
 
+  // Estados para gestión de cuentas bancarias
+  const [isBankDialogOpen, setIsBankDialogOpen] = useState(false);
+  const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
+  const [bankForm, setBankForm] = useState<BankAccount>({
+    id: '',
+    type: 'transferencia',
+    bank: '',
+    account: '',
+    holder: '',
+    rif: '',
+    phone: ''
+  });
+  const [isDeleteBankDialogOpen, setIsDeleteBankDialogOpen] = useState(false);
+  const [bankToDelete, setBankToDelete] = useState<BankAccount | null>(null);
+
+  // Estados para editar tasas
   const [isEditRateDialogOpen, setIsEditRateDialogOpen] = useState(false);
   const [editingRate, setEditingRate] = useState<ExchangeRate | null>(null);
   const [editRateData, setEditRateData] = useState({ date: '', rate: '' });
@@ -73,15 +98,14 @@ export default function SettingsPage() {
 
   const inputStyle = "rounded-xl h-12 bg-input border-border font-bold text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary";
 
+  // Cargar configuración desde Firestore
   useEffect(() => {
-    // Si no hay ID en la URL, no podemos cargar nada
     if (!workingCondoId) {
       setLoading(false);
       return;
     }
   
     setLoading(true);
-    // Ruta corregida para cumplir con la jerarquía de EFAS CondoSys
     const docRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
   
     const unsubscribe = onSnapshot(docRef, async (snapshot) => {
@@ -91,11 +115,12 @@ export default function SettingsPage() {
           companyInfo: { ...defaultSettings.companyInfo, ...data.companyInfo },
           exchangeRates: data.exchangeRates || [],
           condoFee: data.condoFee || 0,
-          loginSettings: { ...defaultSettings.loginSettings, ...data.loginSettings }
+          loginSettings: { ...defaultSettings.loginSettings, ...data.loginSettings },
+          bankAccounts: data.bankAccounts || []
         });
         setLoading(false);
       } else {
-        // Lógica de migración para condo_01 pre-multiempresa
+        // Migración para condo_01
         let migrated = false;
         if (workingCondoId === 'condo_01') {
           try {
@@ -198,8 +223,6 @@ export default function SettingsPage() {
       let updatedRates = settings.exchangeRates.map(r => 
           r.id === editingRate.id ? { ...r, date: editRateData.date, rate: val } : r
       );
-
-      // Re-sort by date to determine the new active rate
       updatedRates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       updatedRates = updatedRates.map((r, index) => ({ ...r, active: index === 0 }));
 
@@ -207,28 +230,111 @@ export default function SettingsPage() {
       setIsEditRateDialogOpen(false);
       setEditingRate(null);
   };
-
   const handleOpenDeleteDialog = (rate: ExchangeRate) => {
       setRateToDelete(rate);
       setIsDeleteRateDialogOpen(true);
   };
 
   const confirmDeleteRate = () => {
+    if (!rateToDelete) return;
       if (!rateToDelete) return;
       let updatedRates = settings.exchangeRates.filter(r => r.id !== rateToDelete.id);
-
       if (rateToDelete.active && updatedRates.length > 0) {
           updatedRates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           updatedRates = updatedRates.map((r, index) => ({ ...r, active: index === 0 }));
       }
-      
       handleSave('rates', { exchangeRates: updatedRates });
       setIsDeleteRateDialogOpen(false);
       setRateToDelete(null);
       toast({ title: 'Tasa eliminada' });
   };
 
+  // ==================== GESTIÓN DE CUENTAS BANCARIAS ====================
+  const openBankDialog = (account?: BankAccount) => {
+    if (account) {
+      setEditingBankAccount(account);
+      setBankForm({ ...account });
+    } else {
+      setEditingBankAccount(null);
+      setBankForm({
+        id: '',
+        type: 'transferencia',
+        bank: '',
+        account: '',
+        holder: '',
+        rif: '',
+        phone: ''
+      });
+    }
+    setIsBankDialogOpen(true);
+  };
 
+  const saveBankAccount = async () => {
+    if (!bankForm.bank) {
+      toast({ variant: 'destructive', title: 'Error', description: 'El banco es obligatorio.' });
+      return;
+    }
+    if (bankForm.type === 'transferencia' && (!bankForm.account || !bankForm.holder)) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Para transferencia, debe indicar número de cuenta y titular.' });
+      return;
+    }
+    if (bankForm.type === 'movil' && !bankForm.phone) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Para pago móvil, debe indicar el teléfono.' });
+      return;
+    }
+
+    setSaving(prev => ({ ...prev, bank: true }));
+    try {
+      let updatedAccounts: BankAccount[];
+      if (editingBankAccount) {
+        updatedAccounts = settings.bankAccounts.map(acc =>
+          acc.id === editingBankAccount.id ? { ...bankForm, id: editingBankAccount.id } : acc
+        );
+      } else {
+        const newId = Date.now().toString();
+        updatedAccounts = [...settings.bankAccounts, { ...bankForm, id: newId }];
+      }
+      await handleSave('bank', { bankAccounts: updatedAccounts });
+      setIsBankDialogOpen(false);
+      setEditingBankAccount(null);
+      setBankForm({
+        id: '',
+        type: 'transferencia',
+        bank: '',
+        account: '',
+        holder: '',
+        rif: '',
+        phone: ''
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setSaving(prev => ({ ...prev, bank: false }));
+    }
+  };
+
+  const confirmDeleteBank = (account: BankAccount) => {
+    setBankToDelete(account);
+    setIsDeleteBankDialogOpen(true);
+  };
+
+  const deleteBankAccount = async () => {
+    if (!bankToDelete) return;
+    setSaving(prev => ({ ...prev, bank: true }));
+    try {
+      const updatedAccounts = settings.bankAccounts.filter(acc => acc.id !== bankToDelete.id);
+      await handleSave('bank', { bankAccounts: updatedAccounts });
+      setIsDeleteBankDialogOpen(false);
+      setBankToDelete(null);
+      toast({ title: 'Cuenta eliminada' });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setSaving(prev => ({ ...prev, bank: false }));
+    }
+  };
+
+  // ==================== RENDER ====================
   if (loading) return (
     <div className="flex h-[80vh] flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-primary h-12 w-12" />
@@ -249,13 +355,15 @@ export default function SettingsPage() {
       </div>
       
       <Tabs defaultValue="company" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-14 bg-secondary/30 p-1 rounded-2xl">
+        <TabsList className="grid w-full grid-cols-5 h-14 bg-secondary/30 p-1 rounded-2xl">
           <TabsTrigger value="company" className="rounded-xl font-black uppercase text-[10px] md:text-xs">Identidad</TabsTrigger>
           <TabsTrigger value="rates" className="rounded-xl font-black uppercase text-[10px] md:text-xs">Tasas BCV</TabsTrigger>
+          <TabsTrigger value="bank" className="rounded-xl font-black uppercase text-[10px] md:text-xs">Datos de Pago</TabsTrigger>
           <TabsTrigger value="fees" className="rounded-xl font-black uppercase text-[10px] md:text-xs">Acceso</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl font-black uppercase text-[10px] md:text-xs">Seguridad</TabsTrigger>
         </TabsList>
 
+        {/* Pestaña Identidad (sin cambios relevantes) */}
         <TabsContent value="company" className="mt-6">
           <Card className="rounded-[2.5rem] border-border bg-card overflow-hidden">
             <CardHeader className="bg-secondary/20 p-8">
@@ -304,6 +412,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* Pestaña Tasas BCV (sin cambios) */}
         <TabsContent value="rates" className="mt-6">
           <Card className="rounded-[2.5rem] border-border bg-card">
             <CardHeader className="bg-secondary/20 p-8"><CardTitle className="text-xl font-black uppercase">Historial de Tasas</CardTitle></CardHeader>
@@ -362,6 +471,65 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* NUEVA PESTAÑA: DATOS DE PAGO (con campo RIF) */}
+        <TabsContent value="bank" className="mt-6">
+          <Card className="rounded-[2.5rem] border-border bg-card">
+            <CardHeader className="bg-secondary/20 p-8 flex flex-row items-center justify-between">
+              <CardTitle className="text-xl font-black uppercase flex items-center gap-2"><Landmark className="text-primary" /> Cuentas Bancarias y Pago Móvil</CardTitle>
+              <Button onClick={() => openBankDialog()} className="bg-primary hover:bg-primary/90 rounded-xl h-10 px-6 font-black text-[10px] uppercase">
+                <PlusCircle className="mr-2 h-4 w-4" /> Nueva Cuenta
+              </Button>
+            </CardHeader>
+            <CardContent className="p-8">
+              {settings.bankAccounts.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground font-black uppercase italic text-xs">
+                  No hay cuentas registradas. Presione "Nueva Cuenta" para agregar.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {settings.bankAccounts.map((acc) => (
+                    <div key={acc.id} className="p-5 rounded-2xl bg-secondary/20 border border-border flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        {acc.type === 'transferencia' ? <Landmark className="h-8 w-8 text-primary" /> : <Smartphone className="h-8 w-8 text-primary" />}
+                        <div>
+                          <p className="font-black uppercase text-foreground text-sm">{acc.bank}</p>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase">{acc.type === 'transferencia' ? 'Transferencia' : 'Pago Móvil'}</p>
+                          {acc.type === 'transferencia' ? (
+                            <>
+                              <p className="text-xs font-mono mt-1">Cuenta: {acc.account}</p>
+                              <p className="text-xs">Titular: {acc.holder}</p>
+                              {acc.rif && <p className="text-xs">RIF: {acc.rif}</p>}
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xs font-mono mt-1">Teléfono: {acc.phone}</p>
+                              {acc.rif && <p className="text-xs">RIF: {acc.rif}</p>}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => openBankDialog(acc)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" className="text-destructive" onClick={() => confirmDeleteBank(acc)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="p-8 bg-secondary/20 flex justify-end">
+              <Button className="bg-primary hover:bg-primary/90 rounded-full px-10 h-12 font-black shadow-lg" onClick={() => handleSave('bank', { bankAccounts: settings.bankAccounts })} disabled={saving['bank']}>
+                {saving['bank'] ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-4 w-4" />} GUARDAR CAMBIOS
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        {/* Pestaña Acceso (sin cambios) */}
         <TabsContent value="fees" className="mt-6">
           <Card className="rounded-[2.5rem] border-border bg-card">
             <CardHeader className="bg-secondary/20 p-8"><CardTitle className="text-xl font-black uppercase">Cuotas y Acceso</CardTitle></CardHeader>
@@ -387,6 +555,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* Pestaña Seguridad (sin cambios) */}
         <TabsContent value="security" className="mt-6">
           <Card className="rounded-[2.5rem] border-border bg-card overflow-hidden">
             <CardHeader className="bg-destructive text-destructive-foreground p-8">
@@ -407,14 +576,93 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-      
+
+      {/* Diálogo para agregar/editar cuenta bancaria (con RIF) */}
+      <Dialog open={isBankDialogOpen} onOpenChange={setIsBankDialogOpen}>
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingBankAccount ? 'Editar Cuenta' : 'Nueva Cuenta'}</DialogTitle>
+            <DialogDescription>Complete los datos de la cuenta bancaria o pago móvil.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Tipo</Label>
+              <div className="flex gap-4 mt-1">
+                <Button
+                  type="button"
+                  variant={bankForm.type === 'transferencia' ? 'default' : 'outline'}
+                  onClick={() => setBankForm({ ...bankForm, type: 'transferencia', account: '', holder: '', rif: '', phone: '' })}
+                  className="flex-1"
+                >
+                  <Landmark className="mr-2 h-4 w-4" /> Transferencia
+                </Button>
+                <Button
+                  type="button"
+                  variant={bankForm.type === 'movil' ? 'default' : 'outline'}
+                  onClick={() => setBankForm({ ...bankForm, type: 'movil', account: '', holder: '', rif: '', phone: '' })}
+                  className="flex-1"
+                >
+                  <Smartphone className="mr-2 h-4 w-4" /> Pago Móvil
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label>Banco</Label>
+              <Input value={bankForm.bank} onChange={(e) => setBankForm({ ...bankForm, bank: e.target.value })} placeholder="Ej: Banco Mercantil, Banesco, etc." />
+            </div>
+            {bankForm.type === 'transferencia' && (
+              <>
+                <div>
+                  <Label>Número de Cuenta</Label>
+                  <Input value={bankForm.account} onChange={(e) => setBankForm({ ...bankForm, account: e.target.value })} placeholder="Ej: 0105-0000-00-0000000000" />
+                </div>
+                <div>
+                  <Label>Titular de la Cuenta</Label>
+                  <Input value={bankForm.holder} onChange={(e) => setBankForm({ ...bankForm, holder: e.target.value })} placeholder="Nombre del titular" />
+                </div>
+              </>
+            )}
+            {bankForm.type === 'movil' && (
+              <div>
+                <Label>Número de Teléfono</Label>
+                <Input value={bankForm.phone} onChange={(e) => setBankForm({ ...bankForm, phone: e.target.value })} placeholder="Ej: 0412-5551234" />
+              </div>
+            )}
+            <div>
+              <Label>RIF / Cédula (opcional)</Label>
+              <Input value={bankForm.rif} onChange={(e) => setBankForm({ ...bankForm, rif: e.target.value })} placeholder="Ej: J-12345678-9 o V-12345678" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBankDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={saveBankAccount} disabled={saving['bank']}>
+              {saving['bank'] ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-4 w-4" />}
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo para confirmar eliminación de cuenta bancaria */}
+      <Dialog open={isDeleteBankDialogOpen} onOpenChange={setIsDeleteBankDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Eliminar cuenta?</DialogTitle>
+            <DialogDescription>Esta acción no se puede deshacer. Los propietarios ya no verán esta información.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteBankDialogOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={deleteBankAccount}>Eliminar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogos de tasas (sin cambios) */}
       <Dialog open={isEditRateDialogOpen} onOpenChange={setIsEditRateDialogOpen}>
           <DialogContent>
               <DialogHeader>
                   <DialogTitle>Editar Tasa de Cambio</DialogTitle>
-                  <DialogDescription>
-                      Ajuste la fecha o el monto de la tasa registrada.
-                  </DialogDescription>
+                  <DialogDescription>Ajuste la fecha o el monto de la tasa registrada.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                   <div className="space-y-2">

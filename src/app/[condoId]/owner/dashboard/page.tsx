@@ -48,6 +48,16 @@ interface Survey {
     voters: string[];
 }
 
+interface BankAccount {
+    id: string;
+    type: 'transferencia' | 'movil';
+    bank: string;
+    account?: string;
+    holder?: string;
+    rif?: string;
+    phone?: string;
+}
+
 export default function OwnerDashboardPage() {
     const { user, ownerData, companyInfo, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -66,12 +76,9 @@ export default function OwnerDashboardPage() {
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [activeRate, setActiveRate] = useState(1);
+    const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
-    const bankDetails = [
-        { id: 'bank1', type: 'Transferencia', bank: 'Banco Mercantil', account: '0105-0000-00-0000000000', holder: 'Condominio El Valle', rif: 'J-12345678-9' },
-        { id: 'pm1', type: 'Pago Móvil', bank: 'Bancamiga (0172)', phone: '0412-5551234', holder: 'Administración EFAS', rif: 'V-12345678-0' }
-    ];
-
+    // Cargar datos (tasas y cuentas bancarias)
     useEffect(() => {
         if (authLoading || !user?.uid || !condoId) return;
 
@@ -82,6 +89,8 @@ export default function OwnerDashboardPage() {
                 const rates = data.exchangeRates || [];
                 const active = rates.find((r: any) => r.active || r.status === 'active');
                 setActiveRate(active?.rate || active?.value || 1);
+                const accounts = data.bankAccounts || [];
+                setBankAccounts(accounts);
             }
         });
 
@@ -132,10 +141,19 @@ export default function OwnerDashboardPage() {
     const pendingPaymentsCount = payments.filter(p => p.status === 'pendiente').length;
     const approvedPaymentsCount = payments.filter(p => p.status === 'aprobado').length;
 
-    const copyToClipboard = (text: string, id: string) => {
+    // Función mejorada: copia todos los datos de la cuenta formateados
+    const copyAccountDetails = (account: BankAccount) => {
+        let text = '';
+        if (account.type === 'transferencia') {
+            text = `🏦 ${account.bank}\n📋 Transferencia\n🔢 Cuenta: ${account.account}\n👤 Titular: ${account.holder}`;
+            if (account.rif) text += `\n📄 RIF: ${account.rif}`;
+        } else {
+            text = `🏦 ${account.bank}\n📱 Pago Móvil\n📞 Teléfono: ${account.phone}`;
+            if (account.rif) text += `\n📄 RIF: ${account.rif}`;
+        }
         navigator.clipboard.writeText(text);
-        setCopiedId(id);
-        toast.success("Copiado");
+        setCopiedId(account.id);
+        toast.success("Datos copiados al portapapeles");
         setTimeout(() => setCopiedId(null), 2000);
     };
 
@@ -203,7 +221,7 @@ export default function OwnerDashboardPage() {
 
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
-            {/* Sidebar Mobile */}
+            {/* Sidebar Mobile (sin cambios) */}
             <div className={cn("fixed inset-0 z-50 bg-black/80 lg:hidden transition-all", isMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none")}>
                 <div className={cn("absolute left-0 top-0 h-full w-72 bg-[#1A1D23] p-6 transition-transform", isMenuOpen ? "translate-x-0" : "-translate-x-full")}>
                     <div className="flex justify-between items-center mb-10">
@@ -224,7 +242,7 @@ export default function OwnerDashboardPage() {
                 </div>
             </div>
 
-            {/* HEADER */}
+            {/* HEADER (sin cambios) */}
             <div className="mb-6">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
                     <div>
@@ -257,19 +275,19 @@ export default function OwnerDashboardPage() {
                 </div>
             </div>
 
-            {/* MARQUEE */}
+            {/* MARQUEE (sin cambios) */}
             <Marquee className="bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 py-3 rounded-2xl border border-primary/20">
                 <span className="px-4 text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
                     <Zap className="h-4 w-4 animate-pulse" /> BIENVENIDO A EFASCONDOSYS • REPORTE SUS PAGOS DESDE EL MÓDULO DE CALCULADORA
                 </span>
             </Marquee>
 
-            {/* CARTELERA DIGITAL */}
+            {/* CARTELERA DIGITAL (sin cambios) */}
             <div className="bg-card border border-white/10 rounded-[2rem] p-4 shadow-sm overflow-hidden w-full">
                 <CarteleraDigital anuncios={anuncios} />
             </div>
 
-            {/* TARJETAS DE RESUMEN */}
+            {/* TARJETAS DE RESUMEN (sin cambios) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5 hover:scale-[1.02] transition-transform duration-300">
                     <CardContent className="p-6">
@@ -327,7 +345,7 @@ export default function OwnerDashboardPage() {
                 </Card>
             </div>
 
-            {/* DATOS DE PAGO Y ENCUESTA */}
+            {/* DATOS DE PAGO DINÁMICOS (con RIF y copia completa) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <Card className="lg:col-span-2 rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                     <CardHeader className="bg-gradient-to-r from-white/5 to-transparent p-6 border-b border-white/5">
@@ -336,22 +354,46 @@ export default function OwnerDashboardPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {bankDetails.map(item => (
-                                <div key={item.id} className="p-5 rounded-2xl bg-gradient-to-br from-white/5 to-white/10 border border-white/10 relative group hover:bg-white/10 transition-all duration-300 hover:scale-[1.02]">
-                                    <Button size="icon" variant="ghost" className="absolute top-3 right-3 h-7 w-7 rounded-full bg-white/10 hover:bg-primary/20 transition-colors" onClick={() => copyToClipboard(item.account || item.phone || '', item.id)}>
-                                        {copiedId === item.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                                    </Button>
-                                    <p className="text-[10px] font-black text-primary mb-2 uppercase tracking-widest">{item.type}</p>
-                                    <p className="text-sm font-black text-white uppercase">{item.bank}</p>
-                                    <p className="text-[11px] font-mono text-white/60 mt-1">{item.account || item.phone}</p>
-                                </div>
-                            ))}
-                        </div>
+                        {bankAccounts.length === 0 ? (
+                            <div className="text-center py-8 text-white/40 font-black uppercase italic text-[10px]">
+                                No hay datos de pago configurados. Contacte a la administración.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {bankAccounts.map(account => (
+                                    <div key={account.id} className="p-5 rounded-2xl bg-gradient-to-br from-white/5 to-white/10 border border-white/10 relative group hover:bg-white/10 transition-all duration-300 hover:scale-[1.02]">
+                                        <Button 
+                                            size="icon" 
+                                            variant="ghost" 
+                                            className="absolute top-3 right-3 h-7 w-7 rounded-full bg-white/10 hover:bg-primary/20 transition-colors" 
+                                            onClick={() => copyAccountDetails(account)}
+                                        >
+                                            {copiedId === account.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                        </Button>
+                                        <p className="text-[10px] font-black text-primary mb-2 uppercase tracking-widest">
+                                            {account.type === 'transferencia' ? 'Transferencia' : 'Pago Móvil'}
+                                        </p>
+                                        <p className="text-sm font-black text-white uppercase">{account.bank}</p>
+                                        {account.type === 'transferencia' ? (
+                                            <>
+                                                <p className="text-[11px] font-mono text-white/60 mt-1">Cuenta: {account.account}</p>
+                                                <p className="text-[11px] text-white/60">Titular: {account.holder}</p>
+                                                {account.rif && <p className="text-[11px] text-white/60">RIF: {account.rif}</p>}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-[11px] font-mono text-white/60 mt-1">Teléfono: {account.phone}</p>
+                                                {account.rif && <p className="text-[11px] text-white/60">RIF: {account.rif}</p>}
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
-                {/* ENCUESTA ACTIVA */}
+                {/* ENCUESTA ACTIVA (sin cambios) */}
                 <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5">
                     <CardHeader className="bg-gradient-to-r from-primary/10 to-transparent p-6 border-b border-white/5">
                         <CardTitle className="text-white font-black uppercase italic text-lg tracking-tighter flex items-center gap-2">
@@ -402,7 +444,7 @@ export default function OwnerDashboardPage() {
                 </Card>
             </div>
 
-            {/* INFORMACIÓN DEL CONDOMINIO */}
+            {/* INFORMACIÓN DEL CONDOMINIO (sin cambios) */}
             <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5">
                 <CardHeader className="bg-gradient-to-r from-white/5 to-transparent p-6 border-b border-white/5">
                     <CardTitle className="text-white font-black uppercase italic text-lg tracking-tighter flex items-center gap-2">
@@ -437,7 +479,7 @@ export default function OwnerDashboardPage() {
                 </CardContent>
             </Card>
 
-            {/* ACCESOS RÁPIDOS */}
+            {/* ACCESOS RÁPIDOS (sin cambios) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                     { icon: ShieldCheck, label: 'Constancias', path: 'certificates', gradient: 'from-indigo-600 to-purple-600', hover: 'from-purple-600 to-indigo-600' },
@@ -461,7 +503,7 @@ export default function OwnerDashboardPage() {
                 ))}
             </div>
 
-            {/* DIÁLOGO DE VOTACIÓN */}
+            {/* DIÁLOGO DE VOTACIÓN (sin cambios) */}
             <Dialog open={showSurveyDialog} onOpenChange={setShowSurveyDialog}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white font-montserrat italic max-w-md">
                     <DialogHeader>
