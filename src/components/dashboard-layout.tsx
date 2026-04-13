@@ -109,7 +109,7 @@ const CustomHeader = ({
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
+              <DropdownMenuContent align="start" className="max-h-[80vh] overflow-y-auto">
                 {item.items.map(subItem => (
                   <DropdownMenuItem key={subItem.label} onClick={() => router.push(subItem.href)} className="cursor-pointer font-bold">
                     {subItem.label}
@@ -162,7 +162,7 @@ const CustomHeader = ({
               <Menu className="h-6 w-6"/>
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-[300px]">
+          <SheetContent side="right" className="w-[300px] overflow-y-auto">
             <SheetHeader className="text-left border-b pb-6">
               <SheetTitle>
                 <div className="flex items-center gap-3">
