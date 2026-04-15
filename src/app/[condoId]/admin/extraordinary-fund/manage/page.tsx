@@ -303,14 +303,19 @@ export default function ManageExtraordinaryFundPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        ${items.map(item => `
+                        ${items.map(item => {
+                            // Obtener la propiedad ordenada igual que en la tabla principal
+                            const sortedProps = sortProperties(item.owner.properties || []);
+                            const propertyDisplay = sortedProps[0] ? `${sortedProps[0].street} - ${sortedProps[0].house}` : (item.debt?.property || 'N/A');
+                            return `
                             <tr>
                                 <td>${item.index}</td>
                                 <td class="text-left">${item.owner.name}</td>
-                                <td class="text-left">${item.debt?.property || (item.owner.properties?.[0] ? `${item.owner.properties[0].street} - ${item.owner.properties[0].house}` : 'N/A')}</td>
+                                <td class="text-left">${propertyDisplay}</td>
                                 <td class="text-right">$${formatUSD(item.debt?.amountUSD || 0)}</td>
                             </tr>
-                        `).join('')}
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
                 <div class="footer"><p>EFASCondoSys - Sistema de Gestión de Condominios</p></div>

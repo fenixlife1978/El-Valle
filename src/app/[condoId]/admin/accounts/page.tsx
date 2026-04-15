@@ -17,7 +17,7 @@ import {
     increment,
     getDocs,
     where,
-    getDoc   // ✅ AGREGADO: necesario para obtener tasa de cambio
+    getDoc
 } from 'firebase/firestore';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -36,7 +36,9 @@ import {
     MoreVertical,
     ShieldCheck,
     Save,
-    AlertCircle
+    AlertCircle,
+    FileText,
+    Eye
 } from 'lucide-react';
 
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { downloadPDF } from '@/lib/print-pdf';
 
 interface Account {
     id: string;
@@ -99,6 +102,11 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
     const [isEditTxDialogOpen, setIsEditTxDialogOpen] = useState(false);
     const [isDeleteTxDialogOpen, setIsDeleteTxDialogOpen] = useState(false);
+    
+    // Historial de traslados
+    const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+    const [transferHistory, setTransferHistory] = useState<any[]>([]);
+    const [condominioData, setCondominioData] = useState<any>(null);
 
     // Estados de selección
     const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
@@ -131,6 +139,21 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         }, (error) => {
             console.warn("Accounts: Error en listener de transacciones:", error.message);
         });
+        
+        const loadCondominioData = async () => {
+            if (!condoId || condoId === "[condoId]") return;
+            try {
+                const docRef = doc(db, 'condominios', condoId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setCondominioData(docSnap.data());
+                }
+            } catch (error) {
+                console.error("Error cargando datos del condominio:", error);
+            }
+        };
+        loadCondominioData();
+        
         return () => { unsubAccounts(); unsubTx(); };
     }, [condoId]);
 
@@ -193,14 +216,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         finally { setIsSubmitting(false); }
     };
 
-    // ✅ FUNCIÓN MODIFICADA: ahora duplica egresos con categoría 'extraordinaria' en extraordinary_funds
     const handleSaveTransaction = async () => {
         if (!transForm.cuentaId || !transForm.monto || !transForm.descripcion) return;
         setIsSubmitting(true);
         const montoNum = parseFloat(transForm.monto);
         const cuentaRef = doc(db, 'condominios', condoId, 'cuentas', transForm.cuentaId);
         
-        // Obtener tasa de cambio actual
         let exchangeRate = 0;
         try {
             const rateDoc = await getDoc(doc(db, 'config', 'exchangeRate'));
@@ -221,7 +242,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     createdBy: user?.email, createdAt: serverTimestamp()
                 });
                 
-                // ✅ Si es egreso con categoría "extraordinaria", duplicar en fondo extraordinario
                 if (transForm.categoria === 'extraordinaria' && transForm.tipo === 'egreso') {
                     const extraordinaryRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
                     const montoUSD = exchangeRate > 0 ? montoNum / exchangeRate : 0;
@@ -282,6 +302,112 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             setSelectedTx(null);
         } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
         finally { setIsSubmitting(false); }
+    };
+
+    const loadTransferHistory = async () => {
+        if (!condoId) return;
+        const q = query(
+            collection(db, 'condominios', condoId, 'transacciones'),
+            where('descripcion', '>=', 'TRASLADO'),
+            where('descripcion', '<=', 'TRASLADO\uf8ff'),
+            orderBy('fecha', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const transfers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setTransferHistory(transfers);
+    };
+
+    const handleExportTransferPDF = async (transfer: any) => {
+        try {
+            const html = generateTransferPDFHTML(transfer);
+            const fileName = `Comprobante_Traslado_${transfer.fecha?.toDate ? format(transfer.fecha.toDate(), 'yyyy_MM_dd_HHmm') : Date.now()}.pdf`;
+            await downloadPDF(html, fileName);
+            toast({ title: "PDF generado", description: "Comprobante de traslado descargado." });
+        } catch (error) {
+            console.error("Error generando PDF:", error);
+            toast({ variant: "destructive", title: "Error", description: "No se pudo generar el PDF." });
+        }
+    };
+
+    const generateTransferPDFHTML = (transfer: any) => {
+        const condominioLogo = condominioData?.logo || companyInfo?.logo || "/logos/efascondosys-logo.png";
+        const condominioNombre = condominioData?.nombre || condominioData?.name || companyInfo?.nombre || companyInfo?.name || "CONDOMINIO";
+        const condominioRif = condominioData?.rif || companyInfo?.rif || "J-00000000-0";
+        const fechaStr = transfer.fecha?.toDate ? format(transfer.fecha.toDate(), "dd/MM/yyyy HH:mm") : "Fecha no disponible";
+        const comprobanteNum = `TRS-${transfer.id.slice(-8).toUpperCase()}`;
+        const montoFormateado = formatCurrency(transfer.monto);
+        const cuentaDestino = transfer.descripcion?.match(/RECEPCIÓN DESDE (.*?)\./)?.[1] || transfer.descripcion?.match(/TRASLADO A (.*?):/)?.[1] || "No especificada";
+        
+        return `<!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><title>Comprobante de Traslado</title>
+        <style>
+            @media print {
+                @page { margin: 25mm 20mm 25mm 20mm; }
+                body { margin: 0; padding: 0; }
+                .print-date { display: none; }
+            }
+            @page {
+                size: letter;
+                margin: 25mm 20mm 25mm 20mm;
+            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            @page { margin: 25mm 20mm 25mm 20mm; }
+            body { font-family: 'Times New Roman', Times, serif; background: white; font-size: 12pt; line-height: 1.5; }
+            .top-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #F28705; }
+            .condominio-section { display: flex; align-items: center; gap: 15px; }
+            .logo-circle { width: 65px; height: 65px; border-radius: 50%; overflow: hidden; background: #FFFFFF; border: 3px solid #F5A623; display: flex; align-items: center; justify-content: center; }
+            .logo-circle img { width: 100%; height: 100%; object-fit: cover; }
+            .condominio-nombre { font-size: 14px; font-weight: 900; color: #1A1D23; text-transform: uppercase; }
+            .condominio-rif { font-size: 10px; color: #64748b; font-weight: 600; margin-top: 3px; }
+            .system-logo { height: 50px; width: auto; object-fit: contain; }
+            h1 { text-align: center; font-size: 18pt; font-weight: bold; text-transform: uppercase; margin: 20px 0; letter-spacing: 2px; }
+            .info { margin: 20px 0; }
+            .info-row { display: flex; margin-bottom: 12px; }
+            .info-label { width: 150px; font-weight: bold; }
+            .info-value { flex: 1; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            td { padding: 12px; border: 1px solid #ccc; text-align: center; vertical-align: top; }
+            .signatures { margin-top: 50px; display: flex; justify-content: space-between; }
+            .signature-box { text-align: center; width: 45%; }
+            .signature-line { border-top: 1px solid #000; margin: 30px auto 10px auto; width: 80%; }
+            .footer { margin-top: 30px; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 10px; }
+        </style>
+        </head>
+        <body>
+            <div class="top-header">
+                <div class="condominio-section">
+                    <div class="logo-circle">
+                        <img src="${condominioLogo}" alt="${condominioNombre}" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=&quot;font-size:28px;&quot;>🏢</div>'">
+                    </div>
+                    <div>
+                        <div class="condominio-nombre">${condominioNombre}</div>
+                        <div class="condominio-rif">RIF: ${condominioRif}</div>
+                    </div>
+                </div>
+                <div><img class="system-logo" src="/logos/efascondosys-logo.png" alt="EFASCondoSys"></div>
+            </div>
+            <h1>COMPROBANTE DE TRASLADO DE FONDOS</h1>
+            <div class="info">
+                <div class="info-row"><div class="info-label">Nº Comprobante:</div><div class="info-value">${comprobanteNum}</div></div>
+                <div class="info-row"><div class="info-label">Fecha del Traslado:</div><div class="info-value">${fechaStr}</div></div>
+                <div class="info-row"><div class="info-label">Monto:</div><div class="info-value">Bs. ${montoFormateado}</div></div>
+            </div>
+            <table>
+                <tr><td style="width: 50%;"><strong>Cuenta Origen</strong><br>${transfer.nombreCuenta || "No especificada"}</td>
+                    <td style="width: 50%;"><strong>Cuenta Destino</strong><br>${cuentaDestino}</td>
+                </tr>
+            </table>
+            <div class="signatures">
+                <div class="signature-box"><div class="signature-line"></div><p><strong>Presidente(a) de Condominio</strong><br>(Autorizado por)</p></div>
+                <div class="signature-box"><div class="signature-line"></div><p><strong>Tesorero(a)</strong><br>(Ejecutado por)</p></div>
+            </div>
+            <div class="footer">
+                <p>Documento generado electrónicamente por EFASCondoSys - Sistema de Autogestión de Condominios</p>
+                <p>Comprobante de traslado interno entre cuentas</p>
+            </div>
+        </body>
+        </html>`;
     };
 
     const handleTransfer = async () => {
@@ -567,7 +693,14 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
             <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Trasladar <span className="text-primary">Fondos</span></DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <div className="flex justify-between items-center">
+                            <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Trasladar <span className="text-primary">Fondos</span></DialogTitle>
+                            <Button variant="outline" size="sm" onClick={() => { loadTransferHistory(); setShowHistoryDialog(true); }} className="rounded-xl border-white/10 text-white font-black uppercase text-[10px]">
+                                <FileText className="mr-1 h-3 w-3" /> Ver Historial
+                            </Button>
+                        </div>
+                    </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta Origen</Label><Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue placeholder="Desde..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-white font-black italic">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
@@ -606,6 +739,52 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Motivo / Notas</Label><Input placeholder="EJ: FONDEO DE CAJA CHICA" value={transferForm.descripcion} onChange={e => setTransferForm({...transferForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                     </div>
                     <DialogFooter><Button onClick={handleTransfer} disabled={isSubmitting} className="w-full bg-white text-slate-900 hover:bg-slate-200 font-black uppercase h-14 rounded-2xl shadow-xl italic">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Ejecutar Traslado"}</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Diálogo de Historial de Traslados */}
+            <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-primary" /> Historial de Traslados
+                        </DialogTitle>
+                        <DialogDescription className="text-white/40 text-sm">
+                            Lista de todos los movimientos de traslado entre cuentas
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        {transferHistory.length === 0 ? (
+                            <div className="text-center py-10 text-white/40 font-black uppercase text-[10px]">No hay traslados registrados</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {transferHistory.map((tx, idx) => (
+                                    <div key={tx.id} className="p-4 bg-slate-800 rounded-xl border border-white/10">
+                                        <div className="flex justify-between items-start flex-wrap gap-2">
+                                            <div>
+                                                <p className="text-[10px] text-white/40">{tx.fecha?.toDate ? format(tx.fecha.toDate(), "dd/MM/yyyy HH:mm") : "Fecha no disponible"}</p>
+                                                <p className="font-black text-white text-sm uppercase mt-1">{tx.descripcion}</p>
+                                                <p className="text-[10px] text-primary">Monto: Bs. {formatCurrency(tx.monto)}</p>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleExportTransferPDF(tx)}
+                                                className="rounded-xl border-emerald-500/30 text-emerald-400 font-black uppercase text-[9px]"
+                                            >
+                                                <Download className="mr-1 h-3 w-3" /> PDF
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={() => setShowHistoryDialog(false)} className="rounded-xl bg-primary text-slate-900 font-black uppercase text-[10px]">
+                            Cerrar
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

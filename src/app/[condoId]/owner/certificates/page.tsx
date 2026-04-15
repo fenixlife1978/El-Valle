@@ -1,214 +1,202 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, AlertTriangle, ShieldCheck, FilePlus, Info } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { Label } from '@/components/ui/label';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2, FileText, ShieldCheck, Heart, Users, Home, Calendar, AlertCircle } from 'lucide-react';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-type Debt = {
+interface Plantilla {
     id: string;
-    status: 'pending' | 'paid' | 'vencida';
-    condominioId?: string;
+    nombre: string;
+    descripcion: string;
+    icono: string;
+}
+
+const getIcon = (iconName: string) => {
+    switch (iconName) {
+        case 'Home': return <Home className="h-8 w-8 text-primary" />;
+        case 'Heart': return <Heart className="h-8 w-8 text-primary" />;
+        case 'ShieldCheck': return <ShieldCheck className="h-8 w-8 text-primary" />;
+        case 'Users': return <Users className="h-8 w-8 text-primary" />;
+        default: return <FileText className="h-8 w-8 text-primary" />;
+    }
 };
 
-type CertificateRequest = {
-    ownerId: string;
-    ownerName: string;
-    ownerCedula: string;
-    property: { street: string; house: string };
-    type: 'residencia' | 'solvencia';
-    createdAt: Timestamp;
-    status: 'solicitud';
-    condominioId: string;
-};
+const plantillasBase: Plantilla[] = [
+    { id: 'residencia', nombre: 'Constancia de Residencia', descripcion: 'Certifica tu lugar de residencia en el condominio', icono: 'Home' },
+    { id: 'concubinato', nombre: 'Constancia de Concubinato', descripcion: 'Certifica una relación de unión estable', icono: 'Heart' },
+    { id: 'buena_conducta', nombre: 'Constancia de Buena Conducta', descripcion: 'Certifica tu comportamiento en la comunidad', icono: 'ShieldCheck' },
+    { id: 'solteria', nombre: 'Constancia de Soltería', descripcion: 'Declaración jurada de estado civil', icono: 'Users' },
+];
 
-export default function OwnerCertificatesPage() {
-    const { user, ownerData, loading: authLoading, activeCondoId } = useAuth();
-    const { toast } = useToast();
+export default function CertificatesPage() {
+    const params = useParams();
     const router = useRouter();
-
-    const [debts, setDebts] = useState<Debt[]>([]);
+    const condoId = params?.condoId as string;
+    const { user, ownerData, loading: authLoading } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    
-    const [certificateType, setCertificateType] = useState<'residencia' | 'solvencia' | ''>('');
-    const [selectedProperty, setSelectedProperty] = useState<{ street: string; house: string } | null>(null);
-
-    const isSolvent = useMemo(() => {
-        const pendingDebts = debts.filter(d => d.status === 'pending' || d.status === 'vencida');
-        return pendingDebts.length === 0;
-    }, [debts]);
+    const [ownerProperties, setOwnerProperties] = useState<any[]>([]);
+    const [isSolvent, setIsSolvent] = useState(true);
 
     useEffect(() => {
-        if (authLoading || !user || !activeCondoId) {
-            if (!authLoading) setLoading(false);
-            return;
+        if (authLoading) return;
+        
+        const fetchOwnerData = async () => {
+            if (!user?.uid || !condoId) return;
+            
+            try {
+                const ownersCollection = condoId === 'condo_01' ? 'owners' : 'propietarios';
+                const ownerRef = doc(db, 'condominios', condoId, ownersCollection, user.uid);
+                const ownerSnap = await getDoc(ownerRef);
+                
+                if (ownerSnap.exists()) {
+                    const data = ownerSnap.data();
+                    setOwnerProperties(data.properties || []);
+                }
+                
+                // Verificar si tiene deudas pendientes
+                const debtsQuery = query(
+                    collection(db, 'condominios', condoId, 'debts'),
+                    where('ownerId', '==', user.uid),
+                    where('status', 'in', ['pending', 'vencida'])
+                );
+                const debtsSnap = await getDocs(debtsQuery);
+                setIsSolvent(debtsSnap.empty);
+                
+            } catch (error) {
+                console.error("Error cargando datos del propietario:", error);
+            } finally {
+                setLoading(false);
+            }
         };
         
-        const debtsQuery = query(
-            collection(db, "condominios", activeCondoId, "debts"), 
-            where("ownerId", "==", user.uid)
+        fetchOwnerData();
+    }, [user?.uid, condoId, authLoading]);
+
+    if (authLoading || loading) {
+        return (
+            <div className="flex flex-col justify-center items-center p-20 space-y-4 bg-[#1A1D23] min-h-screen">
+                <Loader2 className="animate-spin h-10 w-10 text-primary" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/40 animate-pulse italic">Cargando constancias...</p>
+            </div>
         );
-
-        const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
-            const debtsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
-            setDebts(debtsData);
-            setLoading(false);
-        });
-
-        if(ownerData?.properties && ownerData.properties.length > 0) {
-            setSelectedProperty(ownerData.properties[0]);
-        }
-
-        return () => unsubscribe();
-    }, [user, authLoading, router, ownerData, activeCondoId]);
-
-    const handleSubmitRequest = async () => {
-        if (!user || !ownerData || !selectedProperty || !certificateType || !activeCondoId) {
-            toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Faltan datos del perfil o del condominio.' });
-            return;
-        }
-        
-        if (!ownerData.cedula) {
-             toast({ variant: 'destructive', title: 'Cédula no registrada', description: 'Su perfil no tiene una cédula registrada.' });
-            return;
-        }
-        
-        setIsSubmitting(true);
-        try {
-            const requestData: CertificateRequest = {
-                ownerId: user.uid,
-                ownerName: ownerData.name,
-                ownerCedula: ownerData.cedula,
-                property: selectedProperty,
-                type: certificateType,
-                status: 'solicitud',
-                condominioId: activeCondoId, 
-                createdAt: serverTimestamp() as Timestamp,
-            };
-
-            await addDoc(collection(db, "condominios", activeCondoId, "certificates"), requestData);
-
-            toast({
-                title: 'Solicitud Enviada',
-                description: 'La administración de su condominio revisará su solicitud pronto.',
-                className: 'bg-primary/20 border-primary'
-            });
-
-            setCertificateType('');
-
-        } catch (error) {
-            console.error("Error submitting request:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo enviar la solicitud.' });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    if (loading || authLoading) {
-        return <div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
     }
 
     if (!isSolvent) {
         return (
-            <Dialog open={true}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <AlertTriangle className="h-6 w-6 text-destructive"/>
-                            Acceso Denegado
-                        </DialogTitle>
-                        <DialogDescription>
-                            Debe estar solvente con el condominio para solicitar constancias.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button onClick={() => router.push(`/${activeCondoId}/owner/dashboard`)}>
-                            Volver al Inicio
+            <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
+                <div className="mb-6">
+                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">
+                        Constancias <span className="text-primary">Digitales</span>
+                    </h2>
+                    <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
+                    <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">
+                        Acceso restringido
+                    </p>
+                </div>
+                <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-red-900/30 to-slate-900 overflow-hidden border border-red-500/20">
+                    <CardContent className="p-12 text-center">
+                        <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                        <p className="text-white font-black uppercase text-sm">No puedes generar constancias</p>
+                        <p className="text-white/40 font-bold text-[10px] mt-2">
+                            Debes estar solvente con el condominio para solicitar constancias.
+                        </p>
+                        <Button 
+                            onClick={() => router.push(`/${condoId}/owner/dashboard`)} 
+                            className="mt-6 rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px]"
+                        >
+                            Volver al Dashboard
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </CardContent>
+                </Card>
+            </div>
         );
     }
-    
+
+    if (!ownerProperties.length) {
+        return (
+            <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
+                <div className="mb-6">
+                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">
+                        Constancias <span className="text-primary">Digitales</span>
+                    </h2>
+                    <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
+                    <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">
+                        No se encontraron propiedades asociadas a tu cuenta
+                    </p>
+                </div>
+                <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
+                    <CardContent className="p-12 text-center">
+                        <AlertCircle className="h-16 w-16 text-white/20 mx-auto mb-4" />
+                        <p className="text-white/40 font-black uppercase text-xs">
+                            Para generar constancias, debes tener al menos una propiedad registrada.<br />
+                            Contacta a la administración para actualizar tus datos.
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-8">
-            <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Solicitud de <span className="text-primary">Constancias</span>
+        <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
+            <div className="mb-6">
+                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">
+                    Constancias <span className="text-primary">Digitales</span>
                 </h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Genera una solicitud para tus documentos de residencia o solvencia.
+                <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
+                <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Selecciona el tipo de constancia que necesitas
                 </p>
             </div>
-            
-            <Card className="max-w-2xl mx-auto">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <ShieldCheck className="h-6 w-6 text-primary" />
-                        ¡Estás Solvente!
-                    </CardTitle>
-                    <CardDescription>
-                        Solicite su documento para la propiedad seleccionada.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                     <div className="p-4 bg-primary/10 border border-primary/20 rounded-md text-sm text-primary flex items-start gap-2">
-                        <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                        <span>Su solicitud será procesada por la administración de su condominio.</span>
-                    </div>
-                     <div className="space-y-2">
-                        <Label>Tipo de Constancia</Label>
-                        <Select value={certificateType} onValueChange={(v) => setCertificateType(v as any)}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Seleccione un tipo de documento..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="residencia">Constancia de Residencia</SelectItem>
-                                <SelectItem value="solvencia">Constancia de Solvencia</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    
-                    <div className="space-y-2">
-                        <Label>Propiedad</Label>
-                        <Select 
-                            value={selectedProperty ? `${selectedProperty.street}-${selectedProperty.house}` : ''}
-                            onValueChange={(v) => setSelectedProperty(ownerData.properties.find((p:any) => `${p.street}-${p.house}` === v) || null)}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Seleccione una propiedad..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {ownerData?.properties?.map((p: any) => (
-                                    <SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>
-                                        {p.street} - {p.house}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {plantillasBase.map((plantilla) => (
+                    <Card 
+                        key={plantilla.id} 
+                        className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5 hover:scale-[1.02] transition-all duration-300 cursor-pointer group"
+                        onClick={() => router.push(`/${condoId}/owner/certificates/${plantilla.id}`)}
+                    >
+                        <CardHeader className="p-6 pb-0">
+                            <div className="bg-primary/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-primary/30 transition-all">
+                                {getIcon(plantilla.icono)}
+                            </div>
+                            <CardTitle className="text-white font-black uppercase italic text-base tracking-tighter">
+                                {plantilla.nombre}
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-6 pt-2">
+                            <p className="text-[10px] text-white/60 leading-relaxed">
+                                {plantilla.descripcion}
+                            </p>
+                        </CardContent>
+                        <CardFooter className="p-6 pt-0">
+                            <Button className="w-full rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-10 italic">
+                                <FileText className="mr-2 h-3 w-3" /> Generar Constancia
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                ))}
+            </div>
+
+            <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900/50 overflow-hidden border border-white/5">
+                <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                        <div className="bg-primary/10 p-2 rounded-xl">
+                            <Calendar className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase text-primary tracking-widest">Información Importante</p>
+                            <p className="text-[9px] text-white/60 mt-1">
+                                Las constancias generadas son documentos preliminares. <strong className="text-white">Debes presentar el documento impreso ante la Junta de Condominio para su estampado de sello y firma oficial.</strong>
+                            </p>
+                        </div>
                     </div>
                 </CardContent>
-                <CardFooter>
-                     <Button 
-                        onClick={handleSubmitRequest} 
-                        disabled={isSubmitting || !certificateType || !selectedProperty}
-                        className="w-full"
-                    >
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FilePlus className="mr-2 h-4 w-4"/>}
-                        Enviar Solicitud
-                    </Button>
-                </CardFooter>
             </Card>
         </div>
     );
