@@ -47,7 +47,8 @@ interface OwnerExtraordinaryDebt {
     debtId: string;
     description: string;
     amountUSD: number;
-    status: 'pending' | 'paid';
+    status: 'pending' | 'paid' | 'partial';
+    pendingUSD?: number;
     paidAt?: Timestamp;
     paymentId?: string;
 }
@@ -233,9 +234,9 @@ export default function ManageExtraordinaryFundPage() {
         let counter = 1;
         
         for (const owner of sortedOwners) {
-            const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && d.status === 'pending');
+            const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && (d.status === 'pending' || d.status === 'partial'));
             if (debt) {
-                pendingDebts.push({ owner, debt: debt || null, index: counter });
+                pendingDebts.push({ owner, debt, index: counter });
                 counter++;
             }
         }
@@ -250,7 +251,7 @@ export default function ManageExtraordinaryFundPage() {
         let counter = 1;
         
         for (const owner of sortedOwners) {
-            const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && d.status === 'paid');
+            const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && (d.status === 'paid' || d.status === 'partial'));
             if (debt) {
                 paidDebts.push({ owner, debt, index: counter });
                 counter++;
@@ -262,7 +263,14 @@ export default function ManageExtraordinaryFundPage() {
     };
 
     const generateReportHTML = (items: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[], type: string) => {
-        const totalUSD = items.reduce((sum, item) => sum + (item.debt?.amountUSD || 0), 0);
+        const totalUSD = items.reduce((sum, item) => {
+            if (type === 'POR PAGAR') {
+                // Para POR PAGAR, mostrar el monto pendiente (pendingUSD o amountUSD)
+                return sum + (item.debt?.pendingUSD || item.debt?.amountUSD || 0);
+            }
+            // Para PAGADOS, mostrar el monto pagado (amountUSD)
+            return sum + (item.debt?.amountUSD || 0);
+        }, 0);
         
         return `
             <!DOCTYPE html>
@@ -300,6 +308,7 @@ export default function ManageExtraordinaryFundPage() {
                             <th class="text-left">Propietario</th>
                             <th class="text-left">Propiedad</th>
                             <th class="text-right">Monto (USD)</th>
+                            <th class="text-right">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -307,12 +316,19 @@ export default function ManageExtraordinaryFundPage() {
                             // Obtener la propiedad ordenada igual que en la tabla principal
                             const sortedProps = sortProperties(item.owner.properties || []);
                             const propertyDisplay = sortedProps[0] ? `${sortedProps[0].street} - ${sortedProps[0].house}` : (item.debt?.property || 'N/A');
+                            const displayAmount = type === 'POR PAGAR' 
+                                ? (item.debt?.pendingUSD || item.debt?.amountUSD || 0)
+                                : (item.debt?.amountUSD || 0);
+                            const statusText = item.debt?.status === 'paid' ? 'PAGADO' : 
+                                              item.debt?.status === 'partial' ? `PARCIAL (PENDIENTE: $${formatUSD(item.debt?.pendingUSD || 0)})` : 
+                                              'PENDIENTE';
                             return `
                             <tr>
                                 <td>${item.index}</td>
                                 <td class="text-left">${item.owner.name}</td>
                                 <td class="text-left">${propertyDisplay}</td>
-                                <td class="text-right">$${formatUSD(item.debt?.amountUSD || 0)}</td>
+                                <td class="text-right">$${formatUSD(displayAmount)}</td>
+                                <td class="text-right">${statusText}</td>
                             </tr>
                             `;
                         }).join('')}
@@ -324,9 +340,9 @@ export default function ManageExtraordinaryFundPage() {
         `;
     };
 
-    const pendingCount = extraordinaryDebts.filter(d => d.status === 'pending').length;
+    const pendingCount = extraordinaryDebts.filter(d => d.status === 'pending' || d.status === 'partial').length;
     const paidCount = extraordinaryDebts.filter(d => d.status === 'paid').length;
-    const totalPendingUSD = extraordinaryDebts.filter(d => d.status === 'pending').reduce((s, d) => s + d.amountUSD, 0);
+    const totalPendingUSD = extraordinaryDebts.filter(d => d.status === 'pending' || d.status === 'partial').reduce((s, d) => s + (d.pendingUSD || d.amountUSD), 0);
     const totalPaidUSD = extraordinaryDebts.filter(d => d.status === 'paid').reduce((s, d) => s + d.amountUSD, 0);
     const sortedOwners = getSortedOwnersWithProperties();
 
@@ -392,7 +408,7 @@ export default function ManageExtraordinaryFundPage() {
                 </Card>
                 <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                     <CardContent className="p-6">
-                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Pendientes</p>
+                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Pendientes / Parciales</p>
                         <p className="text-3xl font-black text-yellow-400 italic mt-1">{pendingCount}</p>
                         <p className="text-[8px] text-white/40">${formatUSD(totalPendingUSD)} USD</p>
                     </CardContent>
@@ -470,6 +486,9 @@ export default function ManageExtraordinaryFundPage() {
                                         const propertyStr = owner.sortedProperties[0] 
                                             ? `${owner.sortedProperties[0].street} - ${owner.sortedProperties[0].house}`
                                             : 'Sin propiedad';
+                                        const statusText = debt?.status === 'paid' ? 'PAGADO' : 
+                                                          debt?.status === 'partial' ? `PARCIAL (PENDIENTE: $${formatUSD(debt.pendingUSD || 0)})` : 
+                                                          'PENDIENTE';
                                         return (
                                             <TableRow key={owner.id} className="border-white/5 hover:bg-white/5 transition-colors">
                                                 <TableCell className="font-black text-white text-xs italic text-center">{idx + 1}</TableCell>
@@ -477,8 +496,8 @@ export default function ManageExtraordinaryFundPage() {
                                                 <TableCell className="text-[10px] text-white/60">{propertyStr}</TableCell>
                                                 <TableCell className="font-black text-white italic">${formatUSD(debt?.amountUSD || 0)}</TableCell>
                                                 <TableCell>
-                                                    <Badge className={debt?.status === 'paid' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-yellow-500/20 text-yellow-500'}>
-                                                        {debt?.status === 'paid' ? 'PAGADO' : 'PENDIENTE'}
+                                                    <Badge className={debt?.status === 'paid' ? 'bg-emerald-500/20 text-emerald-500' : debt?.status === 'partial' ? 'bg-blue-500/20 text-blue-500' : 'bg-yellow-500/20 text-yellow-500'}>
+                                                        {statusText}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right text-[10px] text-white/40 pr-8">
