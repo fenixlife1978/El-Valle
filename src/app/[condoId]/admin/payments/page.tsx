@@ -339,7 +339,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (funds.gt(0)) {
                             liquidatedConcepts.push({
                                 ownerId: beneficiary.ownerId,
-                                description: `ABONO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                description: `EXCEDENTE APLICADO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
                                 amountUSD: funds.div(payment.exchangeRate).toNumber(),
                                 period: 'SALDO',
                                 type: 'abono'
@@ -449,7 +449,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 if (remainderBs > 0.05) {
                     ownerConcepts.push({
                         ownerId: ownerId,
-                        description: `ABONO A SALDO A FAVOR (${propString})`,
+                        description: `EXCEDENTE APLICADO A SALDO A FAVOR (${propString})`,
                         amountUSD: remainderBs / payment.exchangeRate,
                         period: 'SALDO',
                         type: 'abono'
@@ -464,18 +464,30 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
             const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
-            const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
-            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
+            
+            // Filtrar conceptos: excluir "abono" que no sea por excedente de esta transacción
+            const transactionConcepts = ownerConcepts.filter(c => {
+                if (c.type === 'abono' && !c.description.includes('EXCEDENTE')) {
+                    return false;
+                }
+                return true;
+            });
 
-            const concepts = ownerConcepts.map(c => {
-                const isAbono = c.type === 'abono' || c.description.includes('ABONO');
+            const concepts = transactionConcepts.map(c => {
+                const isAbonoExcedente = c.type === 'abono' && c.description.includes('EXCEDENTE');
                 return [
                     c.period,
                     c.description.toUpperCase(),
-                    isAbono ? '' : `$${c.amountUSD.toFixed(2)}`,
+                    isAbonoExcedente ? '' : `$${c.amountUSD.toFixed(2)}`,
                     formatCurrency(c.amountUSD * payment.exchangeRate)
                 ];
             });
+
+            // Calcular totales correctos
+            const totalAbonadoEnDeudas = transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const saldoFavorAnterior = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
+            const saldoFavorActual = currentBalance;
+            const totalPagado = beneficiary.amount;
 
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
@@ -488,10 +500,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 reference: payment.reference || 'N/A',
                 date: format(pDate, 'dd/MM/yyyy'),
                 rate: formatCurrency(payment.exchangeRate),
-                receivedAmount: formatCurrency(beneficiary.amount),
-                totalDebtPaid: formatCurrency(totalAbonadoBs),
-                prevBalance: formatCurrency(prevBalance),
-                currentBalance: formatCurrency(currentBalance),
+                receivedAmount: formatCurrency(totalPagado),
+                totalDebtPaid: formatCurrency(totalAbonadoEnDeudas),
+                prevBalance: formatCurrency(saldoFavorAnterior),
+                currentBalance: formatCurrency(saldoFavorActual),
                 observations: payment.observations || 'Pago verificado y aplicado por la administración.',
                 concepts
             };
@@ -543,7 +555,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 if (remainderBs > 0.05) {
                     ownerConcepts.push({
                         ownerId: ownerId,
-                        description: `ABONO A SALDO A FAVOR (${propString})`,
+                        description: `EXCEDENTE APLICADO A SALDO A FAVOR (${propString})`,
                         amountUSD: remainderBs / payment.exchangeRate,
                         period: 'SALDO',
                         type: 'abono'
@@ -558,18 +570,30 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
             const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
-            const totalAbonadoBs = ownerConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
-            const prevBalance = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoBs));
+            
+            // Filtrar conceptos: excluir "abono" que no sea por excedente de esta transacción
+            const transactionConcepts = ownerConcepts.filter(c => {
+                if (c.type === 'abono' && !c.description.includes('EXCEDENTE')) {
+                    return false;
+                }
+                return true;
+            });
 
-            const concepts = ownerConcepts.map(c => {
-                const isAbono = c.type === 'abono' || c.description.includes('ABONO');
+            const concepts = transactionConcepts.map(c => {
+                const isAbonoExcedente = c.type === 'abono' && c.description.includes('EXCEDENTE');
                 return [
                     c.period,
                     c.description.toUpperCase(),
-                    isAbono ? '' : `$${c.amountUSD.toFixed(2)}`,
+                    isAbonoExcedente ? '' : `$${c.amountUSD.toFixed(2)}`,
                     formatCurrency(c.amountUSD * payment.exchangeRate)
                 ];
             });
+
+            // Calcular totales correctos
+            const totalAbonadoEnDeudas = transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+            const saldoFavorAnterior = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
+            const saldoFavorActual = currentBalance;
+            const totalPagado = beneficiary.amount;
 
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
@@ -582,10 +606,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 reference: payment.reference || 'N/A',
                 date: format(pDate, 'dd/MM/yyyy'),
                 rate: formatCurrency(payment.exchangeRate),
-                receivedAmount: formatCurrency(beneficiary.amount),
-                totalDebtPaid: formatCurrency(totalAbonadoBs),
-                prevBalance: formatCurrency(prevBalance),
-                currentBalance: formatCurrency(currentBalance),
+                receivedAmount: formatCurrency(totalPagado),
+                totalDebtPaid: formatCurrency(totalAbonadoEnDeudas),
+                prevBalance: formatCurrency(saldoFavorAnterior),
+                currentBalance: formatCurrency(saldoFavorActual),
                 observations: payment.observations || 'Pago verificado y aplicado por la administración.',
                 concepts
             };
@@ -1077,7 +1101,7 @@ function ReportPaymentComponent() {
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
                                         <Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />
                                         {row.searchTerm.length >= 2 && (
-                                            <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-y-auto max-h-64">
+                                            <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
                                                 <ScrollArea className="h-48">
                                                     {getFilteredOwnersFn(row.searchTerm).map(o => (
                                                         <div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">

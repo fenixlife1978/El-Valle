@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Upload, Camera, Trash2, Calendar, ImageIcon, X, Download, Eye, Filter, ImagePlus } from 'lucide-react';
+import { Loader2, Upload, Camera, Trash2, Calendar, ImageIcon, X, Download, Eye, Filter, ImagePlus, Edit, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { compressImage } from '@/lib/utils';
@@ -56,6 +56,11 @@ export default function ExpenseSupportPage() {
     const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
     const [viewingSupport, setViewingSupport] = useState<ExpenseSupport | null>(null);
+    const [editingSupport, setEditingSupport] = useState<ExpenseSupport | null>(null);
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const [editFiles, setEditFiles] = useState<File[]>([]);
+    const [editPreviews, setEditPreviews] = useState<string[]>([]);
+    const [editFormData, setEditFormData] = useState({ fecha: new Date(), descripcion: "" });
     const [viewingImageIndex, setViewingImageIndex] = useState(0);
     const [formData, setFormData] = useState({
         fecha: new Date(),
@@ -176,6 +181,81 @@ export default function ExpenseSupportPage() {
         }
     };
 
+    const openEditDialog = (support: ExpenseSupport) => {
+        setEditingSupport(support);
+        setEditFormData({
+            fecha: support.fecha?.toDate ? support.fecha.toDate() : new Date(),
+            descripcion: support.descripcion
+        });
+        setEditPreviews([...support.images]);
+        setEditFiles([]);
+        setIsEditDialogOpen(true);
+    };
+
+    const handleEditSubmit = async () => {
+        if (!editingSupport || !condoId) return;
+        setIsSubmitting(true);
+        toast.loading("Actualizando soporte...", { id: "edit-support" });
+        try {
+            let updatedImages = [...editPreviews];
+            for (let i = 0; i < editFiles.length; i++) {
+                const file = editFiles[i];
+                if (file && typeof file !== "string") {
+                    const url = await uploadToImgbb(file);
+                    if (url) {
+                        if (updatedImages[i]) {
+                            updatedImages[i] = url;
+                        } else {
+                            updatedImages.push(url);
+                        }
+                    }
+                }
+            }
+            updatedImages = updatedImages.filter(img => img && img !== "");
+            const supportRef = doc(db, "condominios", condoId, "expense_support", editingSupport.id);
+            await updateDoc(supportRef, {
+                images: updatedImages,
+                fecha: Timestamp.fromDate(editFormData.fecha),
+                descripcion: editFormData.descripcion.toUpperCase(),
+                updatedAt: serverTimestamp()
+            });
+            toast.success("Soporte actualizado correctamente", { id: "edit-support" });
+            setIsEditDialogOpen(false);
+            setEditingSupport(null);
+            setEditFiles([]);
+            setEditPreviews([]);
+        } catch (error) {
+            console.error("Error actualizando soporte:", error);
+            toast.error("Error al actualizar el soporte", { id: "edit-support" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleEditImageCapture = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const newPreviews = [...editPreviews];
+            newPreviews[index] = event.target?.result as string;
+            setEditPreviews(newPreviews);
+        };
+        reader.readAsDataURL(file);
+        const newFiles = [...editFiles];
+        newFiles[index] = file;
+        setEditFiles(newFiles);
+    };
+
+    const removeEditImage = (index: number) => {
+        const newPreviews = [...editPreviews];
+        const newFiles = [...editFiles];
+        newPreviews.splice(index, 1);
+        newFiles.splice(index, 1);
+        setEditPreviews(newPreviews);
+        setEditFiles(newFiles);
+    };
+
     const handleDelete = async (id: string) => {
         if (!confirm('¿Eliminar este soporte permanentemente?')) return;
         try {
@@ -291,6 +371,9 @@ export default function ExpenseSupportPage() {
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                     <Button size="sm" variant="secondary" className="rounded-xl h-8 px-3 text-[9px] font-black" onClick={(e) => { e.stopPropagation(); setViewingSupport(support); setViewingImageIndex(0); }}><Eye className="h-3 w-3 mr-1" /> Ver</Button>
                                     <Button size="sm" variant="secondary" className="rounded-xl h-8 px-3 text-[9px] font-black" onClick={(e) => { e.stopPropagation(); handleDownloadPDF(support); }}><Download className="h-3 w-3 mr-1" /> PDF</Button>
+                                    <Button size="sm" variant="secondary" className="rounded-xl h-8 px-3 text-[9px] font-black" onClick={(e) => { e.stopPropagation(); openEditDialog(support); }}>
+                                        <Edit className="h-3 w-3 mr-1" /> Editar
+                                    </Button>
                                 </div>
                                 <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleDelete(support.id); }}><Trash2 className="h-3 w-3" /></Button>
                             </div>
@@ -378,6 +461,77 @@ export default function ExpenseSupportPage() {
                         <div className="bg-white/5 p-4 rounded-xl"><p className="text-[8px] font-black uppercase text-slate-500">Descripción</p><p className="font-black text-white text-sm uppercase">{viewingSupport.descripcion}</p></div>
                         <div className="flex gap-3"><Button onClick={() => handleDownloadPDF(viewingSupport)} className="flex-1 rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-12 italic"><Download className="mr-2 h-4 w-4" /> Descargar PDF</Button><Button onClick={() => setViewingSupport(null)} variant="ghost" className="flex-1 rounded-xl border-white/10 text-white font-black uppercase text-[10px]">Cerrar</Button></div>
                     </div>)}
+                </DialogContent>
+            </Dialog>
+
+            {/* Diálogo de Edición de Soporte */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase italic text-white flex items-center gap-2">
+                            <Edit className="h-5 w-5 text-primary" /> Editar Soporte de Gasto
+                        </DialogTitle>
+                        <p className="text-[9px] text-white/40">Puedes agregar más imágenes (máximo 20 en total)</p>
+                    </DialogHeader>
+                    <div className="py-6 space-y-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto p-2">
+                            {Array.from({ length: 20 }).map((_, idx) => (
+                                <div key={idx} className="space-y-2">
+                                    <Label className="text-[9px] font-black uppercase text-slate-500">Imagen {idx + 1}</Label>
+                                    <div className="border-2 border-dashed border-white/20 rounded-2xl p-3 text-center hover:border-primary/50 transition-colors min-h-[120px]">
+                                        {editPreviews[idx] ? (
+                                            <div className="relative">
+                                                <img src={editPreviews[idx]} alt={`Preview ${idx + 1}`} className="max-h-24 mx-auto rounded-lg" />
+                                                <Button type="button" variant="ghost" size="icon" className="absolute top-0 right-0 h-6 w-6 rounded-full bg-black/50" onClick={() => removeEditImage(idx)}>
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="py-3">
+                                                <Camera className="h-6 w-6 text-white/20 mx-auto mb-1" />
+                                                <Input type="file" accept="image/*" onChange={(e) => handleEditImageCapture(e, idx)} className="hidden" id={`edit-image-upload-${idx}`} />
+                                                <Label htmlFor={`edit-image-upload-${idx}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/20 text-primary font-black uppercase text-[7px] cursor-pointer hover:bg-primary/30 transition-colors">
+                                                    <ImagePlus className="h-2 w-2" /> Seleccionar
+                                                </Label>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500">Fecha del Gasto</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-12 rounded-xl bg-slate-800 border-none text-white uppercase italic text-xs", !editFormData.fecha && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-3 h-4 w-4 text-primary" />
+                                        {editFormData.fecha ? format(editFormData.fecha, "PPP", { locale: es }) : "Seleccione una fecha"}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10">
+                                    <CalendarComponent mode="single" selected={editFormData.fecha} onSelect={(date) => date && setEditFormData({ ...editFormData, fecha: date })} initialFocus locale={es} />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500">Descripción</Label>
+                            <Textarea
+                                placeholder="Ej: COMPRA DE MATERIALES DE LIMPIEZA"
+                                value={editFormData.descripcion}
+                                onChange={(e) => setEditFormData({ ...editFormData, descripcion: e.target.value })}
+                                className="rounded-xl bg-slate-800 border-none text-white font-black uppercase text-xs min-h-[80px]"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl font-black uppercase text-[10px]">
+                            Cancelar
+                        </Button>
+                        <Button onClick={handleEditSubmit} disabled={isSubmitting} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] italic">
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Guardar Cambios
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
