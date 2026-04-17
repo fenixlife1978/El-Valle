@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, Home } from 'lucide-react';
-import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
 import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
@@ -27,6 +27,7 @@ function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [portalType, setPortalType] = useState<'owner' | 'admin' | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [resetLoading, setResetLoading] = useState(false);
 
     useEffect(() => {
         const roleParam = searchParams?.get('role');
@@ -36,6 +37,30 @@ function LoginPage() {
             router.replace('/welcome');
         }
     }, [searchParams, router]);
+
+    const handleResetPassword = async () => {
+        if (!email) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Ingresa tu correo electrónico primero.' });
+            return;
+        }
+        
+        setResetLoading(true);
+        try {
+            await sendPasswordResetEmail(auth, email);
+            toast({ 
+                title: 'Correo enviado', 
+                description: 'Revisa tu bandeja de entrada para restablecer tu contraseña.' 
+            });
+        } catch (error: any) {
+            let msg = 'Error al enviar el correo de recuperación.';
+            if (error.code === 'auth/user-not-found') {
+                msg = 'No existe una cuenta con este correo electrónico.';
+            }
+            toast({ variant: 'destructive', title: 'Error', description: msg });
+        } finally {
+            setResetLoading(false);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -127,7 +152,6 @@ function LoginPage() {
         }
     };
 
-    // ... (El resto del JSX se mantiene igual, ya está muy bien diseñado)
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 font-montserrat">
             <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] bg-card/80 backdrop-blur-xl overflow-hidden">
@@ -163,6 +187,17 @@ function LoginPage() {
                                 <Input type={showPassword ? "text" : "password"} className="h-12 rounded-2xl font-bold pr-12" value={password} onChange={(e) => setPassword(e.target.value)} required />
                                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                            <div className="text-right mt-1">
+                                <button
+                                    type="button"
+                                    onClick={handleResetPassword}
+                                    disabled={resetLoading}
+                                    className="text-[9px] font-black uppercase text-primary hover:text-primary/80 transition-colors"
+                                >
+                                    {resetLoading ? <Loader2 className="inline animate-spin h-3 w-3 mr-1" /> : null}
+                                    ¿Olvidaste tu contraseña?
                                 </button>
                             </div>
                         </div>
