@@ -45,9 +45,12 @@ type ExtraordinaryDebt = {
     id: string;
     description: string;
     amountUSD: number;
+    pendingUSD?: number;
+    status: 'pending' | 'partial' | 'paid';
     ownerId: string;
     ownerName?: string;
     property?: string;
+    debtId?: string;
 };
 
 const formatCurrency = (num: number) => {
@@ -86,7 +89,7 @@ function ReportPaymentComponent() {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
     
-    // Todas las cuotas extraordinarias pendientes del condominio
+    // Todas las cuotas extraordinarias pendientes o parciales del propietario
     const [allExtraordinaryDebts, setAllExtraordinaryDebts] = useState<ExtraordinaryDebt[]>([]);
     
     // Estado para expandir/colapsar selección de extraordinarias por beneficiario
@@ -95,12 +98,12 @@ function ReportPaymentComponent() {
     const isCashPayment = paymentMethod === 'efectivo_bs';
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
-    // Cargar todas las cuotas extraordinarias pendientes
+    // Cargar todas las cuotas extraordinarias pendientes y parciales
     useEffect(() => {
         if (!condoId) return;
         const q = query(
             collection(db, 'condominios', condoId, 'owner_extraordinary_debts'),
-            where('status', '==', 'pending'),
+            where('status', 'in', ['pending', 'partial']),
             where('ownerId', '==', authUser?.uid)
         );
     
@@ -209,7 +212,6 @@ function ReportPaymentComponent() {
         }
     }
 
-    // MODIFICADO: Subir a Imgbb en lugar de Base64 (sin toast conflictivo)
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -647,7 +649,7 @@ function ReportPaymentComponent() {
                                                         </div>
                                                         
                                                         {/* Cuotas Extraordinarias para este beneficiario */}
-                                                        {ownerExtraordinaryDebts.length > 0 && paymentCategory === 'ordinaria' && (
+                                                        {ownerExtraordinaryDebts.length > 0 && paymentCategory === 'extraordinaria' && (
                                                             <div className="mt-4 pt-4 border-t border-white/10">
                                                                 <div 
                                                                     className="flex items-center justify-between cursor-pointer"
@@ -676,11 +678,16 @@ function ReportPaymentComponent() {
                                                                                     />
                                                                                     <div>
                                                                                         <p className="text-[9px] font-black text-white uppercase">{debt.description}</p>
-                                                                                        <p className="text-[8px] text-white/40">${formatUSD(debt.amountUSD)} USD</p>
+                                                                                        <p className="text-[8px] text-white/40">
+                                                                                            ${formatUSD(debt.amountUSD)} USD
+                                                                                            {debt.status === 'partial' && debt.pendingUSD && (
+                                                                                                <span className="text-yellow-400 block">Pendiente: ${formatUSD(debt.pendingUSD)}</span>
+                                                                                            )}
+                                                                                        </p>
                                                                                     </div>
                                                                                 </div>
                                                                                 <span className="text-[9px] text-emerald-400">
-                                                                                    ≈ Bs. {formatCurrency(debt.amountUSD * (exchangeRate || 1))}
+                                                                                    ≈ Bs. {formatCurrency((debt.pendingUSD || debt.amountUSD) * (exchangeRate || 1))}
                                                                                 </span>
                                                                             </label>
                                                                         ))}
@@ -690,7 +697,7 @@ function ReportPaymentComponent() {
                                                                 {extraordinaryTotalUSD > 0 && (
                                                                     <div className="mt-3 p-2 bg-primary/10 rounded-xl">
                                                                         <p className="text-[8px] font-black uppercase text-white/60 text-center">
-                                                                            Total extraordinarias: <span className="text-primary">${formatUSD(extraordinaryTotalUSD)} USD</span>
+                                                                            Total seleccionado: <span className="text-primary">${formatUSD(extraordinaryTotalUSD)} USD</span>
                                                                             ≈ Bs. {formatCurrency(extraordinaryTotalUSD * (exchangeRate || 1))}
                                                                         </p>
                                                                     </div>
@@ -772,19 +779,7 @@ function ReportPaymentComponent() {
                             REGISTRAR PAGO Y ASENTAR
                         </Button>
                     </CardFooter>
-            <Button 
-              type="button"
-              onClick={async () => {
-                const q = query(
-                  collection(db, 'condominios', condoId, 'owner_extraordinary_debts'),
-                  where('status', '==', 'pending')
-                );
-                const snapshot = await getDocs(q);
-              }}
-              className="mb-4 bg-yellow-500 text-slate-900"
-            >
-              DEPURAR - Ver Deudas
-            </Button>
+         
 
                 </form>
             </Card>

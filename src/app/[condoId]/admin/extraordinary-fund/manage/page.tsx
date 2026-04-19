@@ -14,11 +14,12 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Plus, Users, FileText, AlertCircle, DollarSign, XCircle } from 'lucide-react';
+import { Loader2, Plus, Users, FileText, AlertCircle, DollarSign, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { downloadPDF } from '@/lib/print-pdf';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Owner {
     id: string;
@@ -28,13 +29,14 @@ interface Owner {
     balance?: number;
 }
 
-interface ExtraordinaryDebt {
+interface ExtraordinaryCampaign {
     id: string;
     description: string;
     amountUSD: number;
     createdAt: Timestamp;
-    dueDate?: Timestamp;
     status: 'active' | 'closed';
+    totalCollected?: number;
+    totalPending?: number;
 }
 
 interface OwnerExtraordinaryDebt {
@@ -87,12 +89,13 @@ export default function ManageExtraordinaryFundPage() {
     const [loading, setLoading] = useState(false);
     const [owners, setOwners] = useState<Owner[]>([]);
     const [extraordinaryDebts, setExtraordinaryDebts] = useState<OwnerExtraordinaryDebt[]>([]);
-    const [activeCampaign, setActiveCampaign] = useState<ExtraordinaryDebt | null>(null);
+    const [activeCampaigns, setActiveCampaigns] = useState<ExtraordinaryCampaign[]>([]);
+    const [closedCampaigns, setClosedCampaigns] = useState<ExtraordinaryCampaign[]>([]);
+    const [selectedCampaign, setSelectedCampaign] = useState<ExtraordinaryCampaign | null>(null);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [formData, setFormData] = useState({
         description: '',
-        amountUSD: '',
-        dueDate: ''
+        amountUSD: ''
     });
     
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
@@ -108,20 +111,17 @@ export default function ManageExtraordinaryFundPage() {
         return () => unsubscribe();
     }, [condoId, ownersCollectionName]);
 
-    // Cargar campaña activa y deudas
+    // Cargar campañas y deudas
     useEffect(() => {
         if (!condoId) return;
         
-        const campaignQuery = query(
-            collection(db, 'condominios', condoId, 'extraordinary_campaigns'),
-            where('status', '==', 'active')
+        const campaignsQuery = query(
+            collection(db, 'condominios', condoId, 'extraordinary_campaigns')
         );
-        const unsubCampaign = onSnapshot(campaignQuery, (snap) => {
-            if (!snap.empty) {
-                setActiveCampaign({ id: snap.docs[0].id, ...snap.docs[0].data() } as ExtraordinaryDebt);
-            } else {
-                setActiveCampaign(null);
-            }
+        const unsubCampaigns = onSnapshot(campaignsQuery, (snap) => {
+            const campaignsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExtraordinaryCampaign));
+            setActiveCampaigns(campaignsData.filter(c => c.status === 'active'));
+            setClosedCampaigns(campaignsData.filter(c => c.status === 'closed'));
         });
         
         const debtsQuery = query(
@@ -133,10 +133,21 @@ export default function ManageExtraordinaryFundPage() {
         });
         
         return () => {
-            unsubCampaign();
+            unsubCampaigns();
             unsubDebts();
         };
     }, [condoId]);
+
+    // Obtener estadísticas por campaña
+    const getCampaignStats = (campaignId: string) => {
+        const campaignDebts = extraordinaryDebts.filter(d => d.debtId === campaignId);
+        const totalAmount = campaignDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+        const paidAmount = campaignDebts.filter(d => d.status === 'paid').reduce((sum, d) => sum + d.amountUSD, 0);
+        const partialPaid = campaignDebts.filter(d => d.status === 'partial').reduce((sum, d) => sum + (d.amountUSD - (d.pendingUSD || 0)), 0);
+        const collected = paidAmount + partialPaid;
+        const pending = totalAmount - collected;
+        return { totalAmount, collected, pending };
+    };
 
     // Obtener propietarios con sus propiedades ordenadas
     const getSortedOwnersWithProperties = () => {
@@ -170,12 +181,10 @@ export default function ManageExtraordinaryFundPage() {
         setLoading(true);
         try {
             const amountUSD = parseFloat(formData.amountUSD);
-            const dueDate = formData.dueDate ? new Date(formData.dueDate) : null;
             
             const campaignRef = await addDoc(collection(db, 'condominios', condoId, 'extraordinary_campaigns'), {
                 description: formData.description.toUpperCase(),
                 amountUSD,
-                dueDate: dueDate ? Timestamp.fromDate(dueDate) : null,
                 status: 'active',
                 createdAt: serverTimestamp()
             });
@@ -204,7 +213,7 @@ export default function ManageExtraordinaryFundPage() {
             
             toast({ title: 'Éxito', description: `Cuota extraordinaria cargada a ${owners.length} propietarios.` });
             setIsCreateDialogOpen(false);
-            setFormData({ description: '', amountUSD: '', dueDate: '' });
+            setFormData({ description: '', amountUSD: '' });
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo crear la cuota extraordinaria.' });
@@ -213,14 +222,13 @@ export default function ManageExtraordinaryFundPage() {
         }
     };
 
-    const handleCloseCampaign = async () => {
-        if (!activeCampaign) return;
+    const handleCloseCampaign = async (campaignId: string) => {
         setLoading(true);
         try {
-            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_campaigns', activeCampaign.id), {
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_campaigns', campaignId), {
                 status: 'closed'
             });
-            toast({ title: 'Campaña cerrada', description: 'No se pueden registrar más pagos para esta cuota.' });
+            toast({ title: 'Campaña cerrada', description: 'Esta cuota ya no recibirá más pagos.' });
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error' });
         } finally {
@@ -228,47 +236,40 @@ export default function ManageExtraordinaryFundPage() {
         }
     };
 
-    const generatePorPagarReport = async () => {
+    const generateCampaignReport = async (campaign: ExtraordinaryCampaign, type: 'pending' | 'paid' | 'all') => {
         const sortedOwners = getSortedOwnersWithProperties();
-        const pendingDebts: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[] = [];
+        const campaignDebts = extraordinaryDebts.filter(d => d.debtId === campaign.id);
+        
+        let filteredDebts: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[] = [];
         let counter = 1;
         
         for (const owner of sortedOwners) {
-            const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && (d.status === 'pending' || d.status === 'partial'));
+            let debt = null;
+            if (type === 'pending') {
+                debt = campaignDebts.find(d => d.ownerId === owner.id && (d.status === 'pending' || d.status === 'partial'));
+            } else if (type === 'paid') {
+                debt = campaignDebts.find(d => d.ownerId === owner.id && (d.status === 'paid' || d.status === 'partial'));
+            } else {
+                debt = campaignDebts.find(d => d.ownerId === owner.id);
+            }
+            
             if (debt) {
-                pendingDebts.push({ owner, debt, index: counter });
+                filteredDebts.push({ owner, debt, index: counter });
                 counter++;
             }
         }
         
-        const html = generateReportHTML(pendingDebts, 'POR PAGAR');
-        downloadPDF(html, `Reporte_Por_Pagar_Extraordinario_${format(new Date(), 'yyyy_MM_dd')}.pdf`);
+        const stats = getCampaignStats(campaign.id);
+        const html = generateReportHTML(filteredDebts, type === 'pending' ? 'POR PAGAR' : 'PAGADOS', campaign, stats);
+        const fileName = `Cuota_Extraordinaria_${campaign.description.replace(/ /g, '_')}_${type === 'pending' ? 'Por_Pagar' : 'Pagados'}_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
+        downloadPDF(html, fileName);
     };
 
-    const generatePagadosReport = async () => {
-        const sortedOwners = getSortedOwnersWithProperties();
-        const paidDebts: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[] = [];
-        let counter = 1;
-        
-        for (const owner of sortedOwners) {
-            const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && (d.status === 'paid' || d.status === 'partial'));
-            if (debt) {
-                paidDebts.push({ owner, debt, index: counter });
-                counter++;
-            }
-        }
-        
-        const html = generateReportHTML(paidDebts, 'PAGADOS');
-        downloadPDF(html, `Reporte_Pagados_Extraordinario_${format(new Date(), 'yyyy_MM_dd')}.pdf`);
-    };
-
-    const generateReportHTML = (items: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[], type: string) => {
+    const generateReportHTML = (items: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[], type: string, campaign: ExtraordinaryCampaign, stats: any) => {
         const totalUSD = items.reduce((sum, item) => {
             if (type === 'POR PAGAR') {
-                // Para POR PAGAR, mostrar el monto pendiente (pendingUSD o amountUSD)
                 return sum + (item.debt?.pendingUSD || item.debt?.amountUSD || 0);
             }
-            // Para PAGADOS, mostrar el monto pagado (amountUSD)
             return sum + (item.debt?.amountUSD || 0);
         }, 0);
         
@@ -277,14 +278,18 @@ export default function ManageExtraordinaryFundPage() {
             <html>
             <head>
                 <meta charset="UTF-8">
-                <title>Reporte Cuota Extraordinaria - ${type}</title>
+                <title>Reporte Cuota Extraordinaria - ${campaign.description}</title>
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { font-family: 'Helvetica', Arial, sans-serif; margin: 20px; padding: 20px; }
                     .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #F28705; padding-bottom: 15px; }
                     .header h1 { color: #1e293b; font-size: 24px; }
-                    .summary { margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; }
-                    table { width: 100%; border-collapse: collapse; }
+                    .header h2 { color: #64748b; font-size: 14px; margin-top: 5px; }
+                    .summary { margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; display: flex; justify-content: space-between; }
+                    .summary-item { text-align: center; }
+                    .summary-item label { font-size: 10px; color: #64748b; }
+                    .summary-item .value { font-size: 16px; font-weight: bold; color: #1e293b; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
                     th { background: #1A1D23; color: white; padding: 10px; text-align: center; }
                     td { padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: center; }
                     .text-left { text-align: left; }
@@ -294,26 +299,23 @@ export default function ManageExtraordinaryFundPage() {
             </head>
             <body>
                 <div class="header">
-                    <h1>CUOTA EXTRAORDINARIA - ${type}</h1>
+                    <h1>CUOTA EXTRAORDINARIA</h1>
+                    <h2>${campaign.description}</h2>
+                    <p>Reporte: ${type}</p>
                     <p>Generado: ${new Date().toLocaleString('es-VE')}</p>
                 </div>
                 <div class="summary">
-                    <p><strong>Total ${type === 'POR PAGAR' ? 'Adeudado' : 'Recaudado'}:</strong> $${formatUSD(totalUSD)}</p>
-                    <p><strong>Cantidad de propietarios:</strong> ${items.length}</p>
+                    <div class="summary-item"><label>Monto por Propietario</label><div class="value">$${formatUSD(campaign.amountUSD)}</div></div>
+                    <div class="summary-item"><label>Total Recaudado</label><div class="value">$${formatUSD(stats.collected)}</div></div>
+                    <div class="summary-item"><label>Total Pendiente</label><div class="value">$${formatUSD(stats.pending)}</div></div>
+                    <div class="summary-item"><label>Propietarios</label><div class="value">${items.length}</div></div>
                 </div>
                 <table>
                     <thead>
-                        <tr>
-                            <th>#</th>
-                            <th class="text-left">Propietario</th>
-                            <th class="text-left">Propiedad</th>
-                            <th class="text-right">Monto (USD)</th>
-                            <th class="text-right">Estado</th>
-                        </tr>
+                        <tr><th>#</th><th class="text-left">Propietario</th><th class="text-left">Propiedad</th><th class="text-right">Monto (USD)</th><th class="text-right">Estado</th></tr>
                     </thead>
                     <tbody>
                         ${items.map(item => {
-                            // Obtener la propiedad ordenada igual que en la tabla principal
                             const sortedProps = sortProperties(item.owner.properties || []);
                             const propertyDisplay = sortedProps[0] ? `${sortedProps[0].street} - ${sortedProps[0].house}` : (item.debt?.property || 'N/A');
                             const displayAmount = type === 'POR PAGAR' 
@@ -322,15 +324,7 @@ export default function ManageExtraordinaryFundPage() {
                             const statusText = item.debt?.status === 'paid' ? 'PAGADO' : 
                                               item.debt?.status === 'partial' ? `PARCIAL (PENDIENTE: $${formatUSD(item.debt?.pendingUSD || 0)})` : 
                                               'PENDIENTE';
-                            return `
-                            <tr>
-                                <td>${item.index}</td>
-                                <td class="text-left">${item.owner.name}</td>
-                                <td class="text-left">${propertyDisplay}</td>
-                                <td class="text-right">$${formatUSD(displayAmount)}</td>
-                                <td class="text-right">${statusText}</td>
-                            </tr>
-                            `;
+                            return `<tr><td>${item.index}</td><td class="text-left">${item.owner.name}</td><td class="text-left">${propertyDisplay}</td><td class="text-right">$${formatUSD(displayAmount)}</td><td class="text-right">${statusText}</td></tr>`;
                         }).join('')}
                     </tbody>
                 </table>
@@ -340,10 +334,6 @@ export default function ManageExtraordinaryFundPage() {
         `;
     };
 
-    const pendingCount = extraordinaryDebts.filter(d => d.status === 'pending' || d.status === 'partial').length;
-    const paidCount = extraordinaryDebts.filter(d => d.status === 'paid').length;
-    const totalPendingUSD = extraordinaryDebts.filter(d => d.status === 'pending' || d.status === 'partial').reduce((s, d) => s + (d.pendingUSD || d.amountUSD), 0);
-    const totalPaidUSD = extraordinaryDebts.filter(d => d.status === 'paid').reduce((s, d) => s + d.amountUSD, 0);
     const sortedOwners = getSortedOwnersWithProperties();
 
     return (
@@ -362,7 +352,6 @@ export default function ManageExtraordinaryFundPage() {
                     </div>
                     <Button 
                         onClick={() => setIsCreateDialogOpen(true)}
-                        disabled={!!activeCampaign}
                         className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-12 px-6 italic"
                     >
                         <Plus className="mr-2 h-4 w-4" /> Nueva Cuota Extraordinaria
@@ -370,80 +359,148 @@ export default function ManageExtraordinaryFundPage() {
                 </div>
             </div>
 
-            {/* CAMPAÑA ACTIVA */}
-            {activeCampaign && (
-                <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-r from-primary/20 to-primary/5 overflow-hidden border border-primary/20">
-                    <CardContent className="p-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-primary/30 p-3 rounded-2xl">
-                                    <AlertCircle className="h-6 w-6 text-primary" />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">Campaña Activa</p>
-                                    <p className="font-black text-white text-lg uppercase">{activeCampaign.description}</p>
-                                    <p className="text-[10px] text-white/60">Monto: ${formatUSD(activeCampaign.amountUSD)} USD</p>
-                                </div>
-                            </div>
-                            <Button 
-                                onClick={handleCloseCampaign}
-                                disabled={loading}
-                                variant="outline"
-                                className="rounded-xl border-red-500/30 text-red-400 font-black uppercase text-[10px] hover:bg-red-500/10"
-                            >
-                                <XCircle className="mr-2 h-4 w-4" /> Cerrar Campaña
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+            {/* CAMPAÑAS ACTIVAS */}
+            {activeCampaigns.length > 0 && (
+                <div className="space-y-6">
+                    <h3 className="text-lg font-black uppercase text-primary tracking-wider">Campañas Activas</h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {activeCampaigns.map(campaign => {
+                            const stats = getCampaignStats(campaign.id);
+                            const isOpen = selectedCampaign?.id === campaign.id;
+                            return (
+                                <Card key={campaign.id} className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
+                                    <CardContent className="p-6">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Campaña Activa</p>
+                                                <p className="font-black text-white text-lg uppercase">{campaign.description}</p>
+                                                <p className="text-[10px] text-white/60">Monto: ${formatUSD(campaign.amountUSD)} USD</p>
+                                            </div>
+                                            <Button 
+                                                onClick={() => handleCloseCampaign(campaign.id)}
+                                                disabled={loading}
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-xl border-red-500/30 text-red-400 font-black uppercase text-[10px] hover:bg-red-500/10"
+                                            >
+                                                <XCircle className="mr-1 h-3 w-3" /> Cerrar
+                                            </Button>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-3 gap-3 mb-4 pt-4 border-t border-white/10">
+                                            <div className="text-center">
+                                                <p className="text-[8px] text-white/40">Recaudado</p>
+                                                <p className="font-black text-emerald-400 text-sm">${formatUSD(stats.collected)}</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-[8px] text-white/40">Pendiente</p>
+                                                <p className="font-black text-yellow-400 text-sm">${formatUSD(stats.pending)}</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-[8px] text-white/40">Propietarios</p>
+                                                <p className="font-black text-white text-sm">{extraordinaryDebts.filter(d => d.debtId === campaign.id).length}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex gap-2">
+                                            <Button 
+                                                onClick={() => generateCampaignReport(campaign, 'pending')}
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 rounded-xl border-yellow-500/30 text-yellow-400 font-black uppercase text-[9px]"
+                                            >
+                                                <FileText className="mr-1 h-3 w-3" /> Por Pagar
+                                            </Button>
+                                            <Button 
+                                                onClick={() => generateCampaignReport(campaign, 'paid')}
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 rounded-xl border-emerald-500/30 text-emerald-400 font-black uppercase text-[9px]"
+                                            >
+                                                <FileText className="mr-1 h-3 w-3" /> Pagados
+                                            </Button>
+                                            <Button 
+                                                onClick={() => setSelectedCampaign(isOpen ? null : campaign)}
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-xl border-white/10 text-white font-black uppercase text-[9px]"
+                                            >
+                                                {isOpen ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                            </Button>
+                                        </div>
+                                        
+                                        {isOpen && (
+                                            <div className="mt-4 pt-4 border-t border-white/10">
+                                                <div className="max-h-64 overflow-y-auto">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow className="border-white/10">
+                                                                <TableHead className="text-[8px] font-black uppercase text-slate-400">#</TableHead>
+                                                                <TableHead className="text-[8px] font-black uppercase text-slate-400">Propietario</TableHead>
+                                                                <TableHead className="text-right text-[8px] font-black uppercase text-slate-400">Estado</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {sortedOwners.map((owner, idx) => {
+                                                                const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && d.debtId === campaign.id);
+                                                                if (!debt) return null;
+                                                                const statusText = debt.status === 'paid' ? 'PAGADO' : debt.status === 'partial' ? `PARCIAL ($${formatUSD(debt.pendingUSD || 0)})` : 'PENDIENTE';
+                                                                return (
+                                                                    <TableRow key={owner.id} className="border-white/10">
+                                                                        <TableCell className="text-[9px] text-white/60">{idx + 1}</TableCell>
+                                                                        <TableCell className="text-[9px] font-black text-white uppercase">{owner.name}</TableCell>
+                                                                        <TableCell className="text-right text-[9px] font-black" style={{ color: debt.status === 'paid' ? '#10b981' : debt.status === 'partial' ? '#3b82f6' : '#eab308' }}>
+                                                                            {statusText}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                );
+                                                            })}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </div>
             )}
 
-            {/* TARJETAS DE RESUMEN */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                    <CardContent className="p-6">
-                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Propietarios</p>
-                        <p className="text-3xl font-black text-white italic mt-1">{owners.length}</p>
-                    </CardContent>
-                </Card>
-                <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                    <CardContent className="p-6">
-                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Pendientes / Parciales</p>
-                        <p className="text-3xl font-black text-yellow-400 italic mt-1">{pendingCount}</p>
-                        <p className="text-[8px] text-white/40">${formatUSD(totalPendingUSD)} USD</p>
-                    </CardContent>
-                </Card>
-                <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                    <CardContent className="p-6">
-                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Pagados</p>
-                        <p className="text-3xl font-black text-emerald-400 italic mt-1">{paidCount}</p>
-                        <p className="text-[8px] text-white/40">${formatUSD(totalPaidUSD)} USD</p>
-                    </CardContent>
-                </Card>
-                <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                    <CardContent className="p-6">
-                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Recaudación</p>
-                        <p className="text-3xl font-black text-emerald-400 italic mt-1">${formatUSD(totalPaidUSD)}</p>
-                    </CardContent>
-                </Card>
-            </div>
+            {/* CAMPAÑAS CERRADAS (opcional, colapsable) */}
+            {closedCampaigns.length > 0 && (
+                <div className="space-y-4">
+                    <h3 className="text-lg font-black uppercase text-white/40 tracking-wider">Historial de Campañas</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {closedCampaigns.map(campaign => {
+                            const stats = getCampaignStats(campaign.id);
+                            return (
+                                <Card key={campaign.id} className="rounded-[2rem] border-none shadow-xl bg-slate-900/50 overflow-hidden border border-white/5">
+                                    <CardContent className="p-4">
+                                        <p className="text-[9px] font-black uppercase text-white/40">{campaign.description}</p>
+                                        <p className="text-[8px] text-white/40">Monto: ${formatUSD(campaign.amountUSD)}</p>
+                                        <div className="flex justify-between mt-2">
+                                            <span className="text-[8px] text-emerald-400">Recaudado: ${formatUSD(stats.collected)}</span>
+                                            <Button 
+                                                onClick={() => generateCampaignReport(campaign, 'all')}
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 rounded-lg text-[8px] font-black text-primary"
+                                            >
+                                                <FileText className="h-2 w-2 mr-1" /> Reporte
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
-            {/* BOTONES DE REPORTES */}
-            <div className="flex flex-wrap gap-4">
-                <Button 
-                    onClick={generatePorPagarReport}
-                    variant="outline"
-                    className="rounded-xl border-yellow-500/30 text-yellow-400 font-black uppercase text-[10px] bg-yellow-500/5 hover:bg-yellow-500/10"
-                >
-                    <FileText className="mr-2 h-4 w-4" /> Reporte de Por Pagar
-                </Button>
-                <Button 
-                    onClick={generatePagadosReport}
-                    variant="outline"
-                    className="rounded-xl border-emerald-500/30 text-emerald-400 font-black uppercase text-[10px] bg-emerald-500/5 hover:bg-emerald-500/10"
-                >
-                    <FileText className="mr-2 h-4 w-4" /> Reporte de Pagados
-                </Button>
+            {/* BOTÓN PARA VER LIBRO DIARIO */}
+            <div className="flex justify-end">
                 <Button 
                     onClick={() => router.push(`/${condoId}/admin/extraordinary-fund`)}
                     variant="outline"
@@ -452,66 +509,6 @@ export default function ManageExtraordinaryFundPage() {
                     <DollarSign className="mr-2 h-4 w-4" /> Ver Libro Diario
                 </Button>
             </div>
-
-            {/* TABLA DE DEUDAS ORDENADA POR CALLE Y CASA */}
-            <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                <CardHeader className="bg-gradient-to-r from-white/5 to-transparent p-6 border-b border-white/5">
-                    <CardTitle className="text-white font-black uppercase italic text-lg tracking-tighter flex items-center gap-2">
-                        <Users className="h-5 w-5 text-primary" /> Estado de Pagos por Propietario
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader className="bg-slate-800/30">
-                                <TableRow className="border-white/5">
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">#</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Propietario</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Propiedad</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Monto (USD)</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Estado</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 pr-8">Fecha Pago</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {sortedOwners.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="h-40 text-center text-slate-500 font-bold italic uppercase text-[10px]">
-                                            No hay propietarios registrados
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    sortedOwners.map((owner, idx) => {
-                                        const debt = extraordinaryDebts.find(d => d.ownerId === owner.id);
-                                        const propertyStr = owner.sortedProperties[0] 
-                                            ? `${owner.sortedProperties[0].street} - ${owner.sortedProperties[0].house}`
-                                            : 'Sin propiedad';
-                                        const statusText = debt?.status === 'paid' ? 'PAGADO' : 
-                                                          debt?.status === 'partial' ? `PARCIAL (PENDIENTE: $${formatUSD(debt.pendingUSD || 0)})` : 
-                                                          'PENDIENTE';
-                                        return (
-                                            <TableRow key={owner.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                                                <TableCell className="font-black text-white text-xs italic text-center">{idx + 1}</TableCell>
-                                                <TableCell className="font-black text-white text-xs uppercase italic">{owner.name}</TableCell>
-                                                <TableCell className="text-[10px] text-white/60">{propertyStr}</TableCell>
-                                                <TableCell className="font-black text-white italic">${formatUSD(debt?.amountUSD || 0)}</TableCell>
-                                                <TableCell>
-                                                    <Badge className={debt?.status === 'paid' ? 'bg-emerald-500/20 text-emerald-500' : debt?.status === 'partial' ? 'bg-blue-500/20 text-blue-500' : 'bg-yellow-500/20 text-yellow-500'}>
-                                                        {statusText}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right text-[10px] text-white/40 pr-8">
-                                                    {debt?.paidAt ? format(debt.paidAt.toDate(), 'dd/MM/yyyy') : '-'}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
 
             {/* DIÁLOGO PARA CREAR CAMPAÑA */}
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -542,15 +539,6 @@ export default function ManageExtraordinaryFundPage() {
                                 value={formData.amountUSD}
                                 onChange={e => setFormData({...formData, amountUSD: e.target.value})}
                                 className="rounded-xl bg-slate-800 border-none text-white font-black"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-500">Fecha Límite (Opcional)</Label>
-                            <Input 
-                                type="date"
-                                value={formData.dueDate}
-                                onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                                className="rounded-xl bg-slate-800 border-none text-white"
                             />
                         </div>
                         <div className="bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20">

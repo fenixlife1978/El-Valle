@@ -843,6 +843,7 @@ function ReportPaymentComponent() {
     
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [extraordinaryDebts, setExtraordinaryDebts] = useState<any[]>([]);
+    const [selectedOwnerForDebts, setSelectedOwnerForDebts] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
@@ -865,10 +866,13 @@ function ReportPaymentComponent() {
         });
     }, [condoId, ownersCollectionName]);
 
+    // Cargar cuotas extraordinarias solo cuando se selecciona un propietario
     useEffect(() => {
-        if (!condoId) return;
+        if (!condoId || !selectedOwnerForDebts) return;
+        
         const q = query(
             collection(db, 'condominios', condoId, 'owner_extraordinary_debts'),
+            where('ownerId', '==', selectedOwnerForDebts),
             where('status', 'in', ['pending', 'partial'])
         );
         const unsubscribe = onSnapshot(q, (snap) => {
@@ -876,7 +880,7 @@ function ReportPaymentComponent() {
             setExtraordinaryDebts(debts);
         });
         return () => unsubscribe();
-    }, [condoId]);
+    }, [condoId, selectedOwnerForDebts]);
 
     useEffect(() => {
         if (!condoId) return;
@@ -943,6 +947,7 @@ function ReportPaymentComponent() {
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
     
     const handleOwnerSelect = (rowId: string, owner: Owner) => {
+        setSelectedOwnerForDebts(owner.id);
         updateBeneficiaryRow(rowId, { 
             owner, 
             searchTerm: '', 
@@ -966,7 +971,6 @@ function ReportPaymentComponent() {
     
     const removeBeneficiaryRow = (id: string) => setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
 
-    // MODIFICADO: Subir a Imgbb en lugar de Base64
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -1176,7 +1180,10 @@ function ReportPaymentComponent() {
                                                                 <SelectContent className="bg-slate-800 border-white/10">
                                                                     {extraordinaryDebts.filter(d => d.ownerId === row.owner?.id).map(debt => (
                                                                         <SelectItem key={debt.id} value={debt.id} className="text-[10px]">
-                                                                            {debt.description} (${formatUSD(debt.amountUSD)} USD) {debt.status === 'partial' ? `- PENDIENTE: $${debt.pendingUSD}` : ''}
+                                                                            {debt.description} (${formatUSD(debt.amountUSD)} USD)
+                                                                            {debt.status === 'partial' && debt.pendingUSD && (
+                                                                                <span className="text-yellow-400 ml-1">- Pendiente: ${formatUSD(debt.pendingUSD)}</span>
+                                                                            )}
                                                                         </SelectItem>
                                                                     ))}
                                                                 </SelectContent>
