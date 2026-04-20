@@ -76,6 +76,14 @@ interface Transaction {
     referencia?: string;
 }
 
+interface ExtraordinaryCampaign {
+    id: string;
+    description: string;
+    amountUSD: number;
+    status: 'active' | 'closed';
+    createdAt: Timestamp;
+}
+
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -90,6 +98,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [loading, setLoading] = useState(true);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [activeCampaigns, setActiveCampaigns] = useState<ExtraordinaryCampaign[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     // Diálogos de Cuentas
@@ -107,6 +116,9 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [showHistoryDialog, setShowHistoryDialog] = useState(false);
     const [transferHistory, setTransferHistory] = useState<any[]>([]);
     const [condominioData, setCondominioData] = useState<any>(null);
+    
+    // Estado para campaña seleccionada en egreso extraordinario
+    const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
 
     // Estados de selección
     const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
@@ -121,6 +133,20 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [editTxData, setEditTxData] = useState({ descripcion: '', referencia: '' });
 
     const [dateRange, setDateRange] = useState({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
+
+    // Cargar campañas activas
+    useEffect(() => {
+        if (!condoId || condoId === "[condoId]") return;
+        const campaignsQuery = query(
+            collection(db, 'condominios', condoId, 'extraordinary_campaigns'),
+            where('status', '==', 'active')
+        );
+        const unsubCampaigns = onSnapshot(campaignsQuery, (snap) => {
+            const campaignsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExtraordinaryCampaign));
+            setActiveCampaigns(campaignsData);
+        });
+        return () => unsubCampaigns();
+    }, [condoId]);
 
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
@@ -228,6 +254,22 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             if (rateDoc.exists()) exchangeRate = rateDoc.data().rate || 0;
         } catch (e) { console.warn("No se pudo obtener tasa de cambio"); }
         
+        // Validar que se seleccione una campaña para egresos extraordinarios
+        if (transForm.categoria === 'extraordinaria' && transForm.tipo === 'egreso' && !selectedCampaignId) {
+            toast({ variant: 'destructive', title: "Error", description: "Debe seleccionar una campaña para el egreso de Fondo Extraordinario." });
+            setIsSubmitting(false);
+            return;
+        }
+        
+        // Obtener información de la campaña seleccionada
+        let campaignName = '';
+        let campaignAmountUSD = 0;
+        if (selectedCampaignId) {
+            const campaign = activeCampaigns.find(c => c.id === selectedCampaignId);
+            campaignName = campaign?.description || '';
+            campaignAmountUSD = campaign?.amountUSD || 0;
+        }
+        
         try {
             await runTransaction(db, async (transaction) => {
                 const accountDoc = await transaction.get(cuentaRef);
@@ -256,6 +298,9 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         categoria: 'extraordinaria',
                         sourceTransactionId: newTransRef.id,
                         createdBy: user?.email,
+                        campaignId: selectedCampaignId,
+                        campaignName: campaignName,
+                        campaignAmountUSD: campaignAmountUSD,
                         createdAt: serverTimestamp()
                     });
                 }
@@ -265,6 +310,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             toast({ title: "Movimiento procesado con éxito" });
             setIsTransactionDialogOpen(false);
             setTransactionForm({ monto: '', tipo: 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date(), categoria: 'ordinaria' });
+            setSelectedCampaignId('');
         } catch (error: any) { toast({ variant: 'destructive', title: "Fallo en transacción", description: error.message }); }
         finally { setIsSubmitting(false); }
     };
@@ -660,7 +706,10 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Categoría</Label>
-                                <Select value={transForm.categoria || "ordinaria"} onValueChange={(v) => setTransactionForm({...transForm, categoria: v})}>
+                                <Select value={transForm.categoria || "ordinaria"} onValueChange={(v) => {
+                                    setTransactionForm({...transForm, categoria: v});
+                                    setSelectedCampaignId(''); // Limpiar campaña al cambiar categoría
+                                }}>
                                     <SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic">
                                         <SelectValue placeholder="Seleccionar categoría..." />
                                     </SelectTrigger>
@@ -686,6 +735,33 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Descripción</Label><Input placeholder="EJ: PAGO DE SERVICIOS" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Referencia (Opcional)</Label><Input placeholder="EJ: 123456" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
+                        
+                        {/* Selector de campaña para movimientos extraordinarios */}
+                        {transForm.categoria === 'extraordinaria' && (
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">
+                                    Campaña del Fondo Extraordinario
+                                </Label>
+                                <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+                                    <SelectTrigger className="rounded-xl h-12 bg-white/5 border-none text-white font-black uppercase text-[10px]">
+                                        <SelectValue placeholder="Seleccionar campaña..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                        {activeCampaigns.length > 0 ? (
+                                            activeCampaigns.map(c => (
+                                                <SelectItem key={c.id} value={c.id} className="font-black uppercase text-[10px]">
+                                                    📁 {c.description}
+                                                </SelectItem>
+                                            ))
+                                        ) : (
+                                            <div className="p-4 text-center text-white/40 text-[10px] font-black uppercase">
+                                                No hay campañas activas
+                                            </div>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                     </div>
                     <DialogFooter><Button onClick={handleSaveTransaction} disabled={isSubmitting} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}Procesar Movimiento</Button></DialogFooter>
                 </DialogContent>

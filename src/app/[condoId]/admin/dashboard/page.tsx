@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Building2, Users, Banknote, Landmark } from "lucide-react"; 
-import { collection, query, onSnapshot, doc, orderBy, limit } from 'firebase/firestore';
+import { Loader2, Building2, Users, Banknote, Landmark, AlertCircle } from "lucide-react"; 
+import { collection, query, onSnapshot, doc, orderBy, limit, getDocs, updateDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, startOfMonth, isAfter, isEqual } from "date-fns";
 import { es } from "date-fns/locale";
@@ -291,6 +292,52 @@ export default function AdminDashboardPage({ params }: PageProps) {
                                 )}
                             </TableBody>
                         </Table>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* BOTÓN PARA MIGRAR TODOS LOS MOVIMIENTOS A LA CAMPAÑA ORIGINAL */}
+            <Card className="rounded-[2rem] border-none shadow-2xl bg-blue-900/30 overflow-hidden border border-blue-500/30 mt-6">
+                <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">⚠️ MIGRACIÓN MASIVA</p>
+                            <p className="text-white font-black uppercase text-xs">Asignar TODOS los movimientos antiguos a la campaña original</p>
+                            <p className="text-[8px] text-white/40 mt-1">Este botón asigna campaignId y campaignName a todos los movimientos que no los tengan</p>
+                        </div>
+                        <Button 
+                            onClick={async () => {
+                                const condoIdActual = urlCondoId;
+                                if (!confirm("¿Estás seguro? Esta acción asignará TODOS los movimientos sin campaña a la campaña 'REP. SISTEMA DE BOMBA DE AGUA'.")) return;
+                                
+                                const CAMPAIGN_ID = "C65Yq0795UbUpPZJ2tlM";
+                                const CAMPAIGN_NAME = "REP. SISTEMA DE BOMBA DE AGUA";
+                                
+                                const fundsRef = collection(db, "condominios", condoIdActual, "extraordinary_funds");
+                                const allSnap = await getDocs(fundsRef);
+                                const movementsToUpdate = allSnap.docs.filter(doc => !doc.data().campaignId);
+                                
+                                if (movementsToUpdate.length === 0) {
+                                    alert("No hay movimientos sin campaña");
+                                    return;
+                                }
+                                
+                                let count = 0;
+                                for (const docSnap of movementsToUpdate) {
+                                    await updateDoc(doc(db, "condominios", condoIdActual, "extraordinary_funds", docSnap.id), {
+                                        campaignId: CAMPAIGN_ID,
+                                        campaignName: CAMPAIGN_NAME
+                                    });
+                                    count++;
+                                }
+                                
+                                alert(`✅ ${count} movimientos actualizados a la campaña "${CAMPAIGN_NAME}"`);
+                                window.location.reload();
+                            }}
+                            className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] h-12 px-6"
+                        >
+                            <AlertCircle className="mr-2 h-4 w-4" /> MIGRAR TODOS LOS MOVIMIENTOS
+                        </Button>
                     </div>
                 </CardContent>
             </Card>

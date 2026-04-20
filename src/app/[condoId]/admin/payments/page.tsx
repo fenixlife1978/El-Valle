@@ -241,6 +241,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     sourcePaymentId: payment.id,
                                     ownerId: beneficiary.ownerId,
                                     pendingAmountUSD: pendingUSD > 0 ? pendingUSD : null,
+                                    campaignId: beneficiary.extraordinaryDebtId,
+                                    campaignName: debtData.description,
                                     createdAt: serverTimestamp()
                                 });
                                 

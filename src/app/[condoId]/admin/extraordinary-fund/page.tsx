@@ -3,18 +3,19 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, Timestamp, deleteDoc, doc, updateDoc, getDocs, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, Timestamp, deleteDoc, doc, updateDoc, getDocs, where, getDoc } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, TrendingDown, DollarSign, Calendar, FileText, Info, Trash2 } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, DollarSign, Calendar, FileText, Info, Trash2, Filter, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { downloadPDF } from '@/lib/print-pdf';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ExtraordinaryTransaction {
     id: string;
@@ -27,6 +28,16 @@ interface ExtraordinaryTransaction {
     categoria: 'extraordinaria';
     sourcePaymentId?: string;
     ownerId?: string;
+    campaignId?: string;
+    campaignName?: string;
+    createdAt: Timestamp;
+}
+
+interface ExtraordinaryCampaign {
+    id: string;
+    description: string;
+    amountUSD: number;
+    status: 'active' | 'closed';
     createdAt: Timestamp;
 }
 
@@ -41,20 +52,47 @@ export default function ExtraordinaryFundPage() {
     const { toast } = useToast();
     
     const [transactions, setTransactions] = useState<ExtraordinaryTransaction[]>([]);
+    const [campaigns, setCampaigns] = useState<ExtraordinaryCampaign[]>([]);
+    const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
     const [loading, setLoading] = useState(true);
     const [balance, setBalance] = useState(0);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState<ExtraordinaryTransaction | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
+    // Cargar campañas
+    useEffect(() => {
+        if (!condoId || condoId === "[condoId]") return;
+        
+        const campaignsQuery = query(
+            collection(db, 'condominios', condoId, 'extraordinary_campaigns'),
+            orderBy('createdAt', 'desc')
+        );
+        const unsubCampaigns = onSnapshot(campaignsQuery, (snap) => {
+            const campaignsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExtraordinaryCampaign));
+            setCampaigns(campaignsData);
+        });
+        
+        return () => unsubCampaigns();
+    }, [condoId]);
+
+    // Cargar transacciones (con o sin filtro de campaña)
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
 
-        // CAMBIO: orden ascendente para que el saldo acumulado tenga sentido
-        const q = query(
-            collection(db, 'condominios', condoId, 'extraordinary_funds'),
-            orderBy('fecha', 'asc')
-        );
+        let q;
+        if (selectedCampaignId && selectedCampaignId !== 'all') {
+            q = query(
+                collection(db, 'condominios', condoId, 'extraordinary_funds'),
+                where('campaignId', '==', selectedCampaignId),
+                orderBy('fecha', 'asc')
+            );
+        } else {
+            q = query(
+                collection(db, 'condominios', condoId, 'extraordinary_funds'),
+                orderBy('fecha', 'asc')
+            );
+        }
 
         const unsubscribe = onSnapshot(q, (snap) => {
             const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExtraordinaryTransaction));
@@ -72,9 +110,9 @@ export default function ExtraordinaryFundPage() {
         });
 
         return () => unsubscribe();
-    }, [condoId]);
+    }, [condoId, selectedCampaignId]);
 
-    // Función para agregar el saldo acumulado a cada transacción (respetando el orden ascendente)
+    // Función para agregar el saldo acumulado a cada transacción
     const getTransactionsWithRunningBalance = () => {
         let runningBalance = 0;
         return transactions.map(tx => {
@@ -92,37 +130,90 @@ export default function ExtraordinaryFundPage() {
         
         setIsDeleting(true);
         try {
-            // Buscar y revertir la cuota extraordinaria asociada
+            console.log("Eliminando movimiento:", selectedTransaction);
+            
+            let debtUpdated = false;
+            
+            // Método 1: Buscar por paymentId (sourcePaymentId)
             if (selectedTransaction.sourcePaymentId) {
                 const debtsQuery = query(
-                    collection(db, 'condominios', condoId, 'owner_extraordinary_debts'),
-                    where('paymentId', '==', selectedTransaction.sourcePaymentId)
+                    collection(db, "condominios", condoId, "owner_extraordinary_debts"),
+                    where("paymentId", "==", selectedTransaction.sourcePaymentId)
                 );
                 const debtsSnap = await getDocs(debtsQuery);
                 
                 for (const debtDoc of debtsSnap.docs) {
-                    const debtRef = doc(db, 'condominios', condoId, 'owner_extraordinary_debts', debtDoc.id);
-                    await updateDoc(debtRef, {
-                        status: 'pending',
-                        paidAt: null,
-                        paymentId: null,
-                        amountPaidBs: null
-                    });
+                    console.log("Deuda encontrada por paymentId:", debtDoc.id);
+                    const debtRef = doc(db, "condominios", condoId, "owner_extraordinary_debts", debtDoc.id);
+                    const debtData = debtDoc.data();
+                    
+                    if (debtData.status === "partial" && debtData.pendingUSD) {
+                        await updateDoc(debtRef, {
+                            status: "pending",
+                            pendingUSD: debtData.amountUSD,
+                            paidAt: null,
+                            paymentId: null,
+                            amountPaidBs: null
+                        });
+                    } else {
+                        await updateDoc(debtRef, {
+                            status: "pending",
+                            paidAt: null,
+                            paymentId: null,
+                            amountPaidBs: null
+                        });
+                    }
+                    debtUpdated = true;
+                }
+            }
+            
+            // Método 2: Si no se encontró por paymentId, buscar por ownerId y campaña
+            if (!debtUpdated && selectedTransaction.ownerId && selectedTransaction.campaignId) {
+                const debtsQuery = query(
+                    collection(db, "condominios", condoId, "owner_extraordinary_debts"),
+                    where("ownerId", "==", selectedTransaction.ownerId),
+                    where("debtId", "==", selectedTransaction.campaignId)
+                );
+                const debtsSnap = await getDocs(debtsQuery);
+                
+                for (const debtDoc of debtsSnap.docs) {
+                    console.log("Deuda encontrada por ownerId y campaignId:", debtDoc.id);
+                    const debtRef = doc(db, "condominios", condoId, "owner_extraordinary_debts", debtDoc.id);
+                    const debtData = debtDoc.data();
+                    const amountUSD = selectedTransaction.monto / (selectedTransaction.exchangeRate || 1);
+                    const newPendingUSD = (debtData.pendingUSD || debtData.amountUSD) + amountUSD;
+                    
+                    if (newPendingUSD >= debtData.amountUSD - 0.01) {
+                        await updateDoc(debtRef, {
+                            status: "pending",
+                            pendingUSD: debtData.amountUSD,
+                            paidAt: null,
+                            paymentId: null
+                        });
+                    } else {
+                        await updateDoc(debtRef, {
+                            status: "partial",
+                            pendingUSD: newPendingUSD,
+                            paidAt: null,
+                            paymentId: null
+                        });
+                    }
+                    debtUpdated = true;
                 }
             }
             
             // Eliminar el movimiento del fondo extraordinario
-            await deleteDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', selectedTransaction.id));
+            await deleteDoc(doc(db, "condominios", condoId, "extraordinary_funds", selectedTransaction.id));
             
-            toast({ 
-                title: "Movimiento eliminado", 
-                description: "La cuota extraordinaria ha sido revertida a estado pendiente." 
+            toast({
+                title: "Movimiento eliminado",
+                description: debtUpdated ? "La cuota ha sido revertida a su estado anterior." : "Movimiento eliminado, pero no se encontró la deuda asociada."
             });
             setDeleteDialogOpen(false);
             setSelectedTransaction(null);
         } catch (error) {
             console.error("Error eliminando movimiento:", error);
-            toast({ variant: 'destructive', title: "Error", description: "No se pudo eliminar el movimiento" });
+            toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar el movimiento" });
         } finally {
             setIsDeleting(false);
         }
@@ -130,12 +221,16 @@ export default function ExtraordinaryFundPage() {
 
     const handleGeneratePDF = async () => {
         const transactionsWithBalance = getTransactionsWithRunningBalance();
-        const html = generateReportHTML(transactionsWithBalance, balance);
-        const fileName = `Fondo_Extraordinario_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
+        const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
+        const campaignDisplayName = selectedCampaign ? selectedCampaign.description : "Todas las Campañas";
+        const html = generateReportHTML(transactionsWithBalance, balance, campaignDisplayName);
+        const fileName = selectedCampaignId !== 'all' && selectedCampaign
+            ? `Fondo_Extraordinario_${selectedCampaign.description.replace(/ /g, '_')}_${format(new Date(), 'yyyy_MM_dd')}.pdf`
+            : `Fondo_Extraordinario_Consolidado_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
         downloadPDF(html, fileName);
     };
 
-    const generateReportHTML = (txs: (ExtraordinaryTransaction & { runningBalance: number })[], saldo: number) => {
+    const generateReportHTML = (txs: (ExtraordinaryTransaction & { runningBalance: number })[], saldo: number, campaignName: string) => {
         const period = format(new Date(), 'MMMM yyyy', { locale: es }).toUpperCase();
         const totalIngresos = txs.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
         const totalEgresos = txs.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
@@ -169,7 +264,11 @@ export default function ExtraordinaryFundPage() {
             </head>
             <body>
                 <div class="container">
-                    <div class="header"><h1>FONDO EXTRAORDINARIO</h1><p>Reporte de movimientos - Período: ${period}</p></div>
+                    <div class="header">
+                        <h1>FONDO EXTRAORDINARIO</h1>
+                        <p>Campaña: ${campaignName}</p>
+                        <p>Período: ${period}</p>
+                    </div>
                     <div class="summary">
                         <div class="summary-card"><label>Total Ingresos (Debe)</label><value class="ingreso">Bs. ${formatCurrency(totalIngresos)}</value></div>
                         <div class="summary-card"><label>Total Egresos (Haber)</label><value class="egreso">Bs. ${formatCurrency(totalEgresos)}</value></div>
@@ -190,14 +289,14 @@ export default function ExtraordinaryFundPage() {
                             ${txs.map(t => `
                                 <tr>
                                     <td class="text-left">${t.fecha?.toDate ? format(t.fecha.toDate(), 'dd/MM/yyyy') : 'N/A'}</td>
-                                    <td class="text-left">${t.descripcion}</td>
+                                    <td class="text-left">${t.descripcion}${t.campaignName ? ` (${t.campaignName})` : ''}</td>
                                     <td class="text-left">${t.referencia || '-'}</td>
                                     <td class="text-right ingreso">${t.tipo === 'ingreso' ? `Bs. ${formatCurrency(t.monto)}` : '-'}</td>
                                     <td class="text-right egreso">${t.tipo === 'egreso' ? `Bs. ${formatCurrency(t.monto)}` : '-'}</td>
                                     <td class="text-right">Bs. ${formatCurrency(t.runningBalance)}</td>
                                 </tr>
                             `).join('')}
-                            ${txs.length === 0 ? '<tr><td colspan="6" class="text-center">No hay movimientos registrados</td></tr>' : ''}
+                            ${txs.length === 0 ? '<tr><td colspan="6" class="text-center">No hay movimientos registrados</td>' : ''}
                         </tbody>
                     </table>
                     <div class="footer"><p>Documento generado por <strong>EFASCondoSys</strong> - Sistema de Autogestión de Condominios</p></div>
@@ -219,6 +318,8 @@ export default function ExtraordinaryFundPage() {
     const transactionsWithBalance = getTransactionsWithRunningBalance();
     const totalIngresos = transactions.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
     const totalEgresos = transactions.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
+    const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
+    const campaignDisplayName = selectedCampaign ? selectedCampaign.description : "Todas las Campañas";
 
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
@@ -233,12 +334,73 @@ export default function ExtraordinaryFundPage() {
                             Gestión independiente de cuotas extraordinarias
                         </p>
                     </div>
-                    <Button onClick={handleGeneratePDF} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
-                        <FileText className="mr-2 h-4 w-4" /> Exportar Reporte PDF
-                    </Button>
+                    <div className="flex gap-3">
+                        <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+                            <SelectTrigger className="w-56 rounded-xl bg-slate-800 border-none text-white font-black uppercase text-[10px]">
+                                <Filter className="mr-2 h-4 w-4" />
+                                <SelectValue placeholder="Todas las campañas" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                <SelectItem value="all" className="font-black uppercase text-[10px]">📊 Todas las campañas</SelectItem>
+                                {campaigns.map(c => (
+                                    <SelectItem key={c.id} value={c.id} className="font-black uppercase text-[10px]">
+                                        📁 {c.description}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button onClick={handleGeneratePDF} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
+                            <FileText className="mr-2 h-4 w-4" /> Exportar Reporte
+                        </Button>
+                    </div>
                 </div>
             </div>
 
+            {/* Tarjetas de resumen por campaña */}
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {campaigns.map(campaign => {
+                        const campaignTransactions = transactions.filter(t => t.campaignId === campaign.id);
+                        const campaignIngresos = campaignTransactions.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
+                        const campaignEgresos = campaignTransactions.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
+                        const campaignSaldo = campaignIngresos - campaignEgresos;
+                        const isSelected = selectedCampaignId === campaign.id;
+                        return (
+                            <Card 
+                                key={campaign.id} 
+                                className={`rounded-[2rem] border-none shadow-2xl overflow-hidden border cursor-pointer transition-all hover:scale-[1.02] ${isSelected ? 'ring-2 ring-primary' : 'bg-slate-900'}`}
+                                onClick={() => setSelectedCampaignId(isSelected ? 'all' : campaign.id)}
+                            >
+                                <CardContent className="p-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-[9px] font-black uppercase text-primary tracking-widest">{campaign.status === 'active' ? 'Activa' : 'Cerrada'}</p>
+                                        <Badge variant={isSelected ? 'default' : 'outline'} className="text-[8px]">
+                                            {isSelected ? '✓ Seleccionada' : 'Seleccionar'}
+                                        </Badge>
+                                    </div>
+                                    <p className="font-black text-white text-sm uppercase truncate">{campaign.description}</p>
+                                    <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/10">
+                                        <div className="text-center">
+                                            <p className="text-[7px] text-white/40">Ingresos</p>
+                                            <p className="font-black text-emerald-400 text-[10px]">Bs. {formatCurrency(campaignIngresos)}</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-[7px] text-white/40">Egresos</p>
+                                            <p className="font-black text-red-400 text-[10px]">Bs. {formatCurrency(campaignEgresos)}</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-[7px] text-white/40">Saldo</p>
+                                            <p className="font-black text-primary text-[10px]">Bs. {formatCurrency(campaignSaldo)}</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Tarjeta de resumen consolidado */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="rounded-[2rem] border-none shadow-2xl bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden border border-white/5">
                     <CardContent className="p-6"><div className="flex items-center gap-3 mb-4"><div className="bg-emerald-500/20 p-3 rounded-2xl"><TrendingUp className="h-6 w-6 text-emerald-500" /></div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Ingresos (Debe)</p></div><p className="text-3xl font-black text-emerald-400 italic">Bs. {formatCurrency(totalIngresos)}</p></CardContent>
@@ -251,11 +413,22 @@ export default function ExtraordinaryFundPage() {
                 </Card>
             </div>
 
+            {/* Tabla del libro diario */}
             <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                 <CardHeader className="bg-gradient-to-r from-white/5 to-transparent p-6 border-b border-white/5">
-                    <CardTitle className="text-white font-black uppercase italic text-lg tracking-tighter flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-primary" /> Libro Diario - Fondo Extraordinario
-                    </CardTitle>
+                    <div className="flex justify-between items-center">
+                        <CardTitle className="text-white font-black uppercase italic text-lg tracking-tighter flex items-center gap-2">
+                            <Calendar className="h-5 w-5 text-primary" /> Libro Diario
+                            {selectedCampaignId !== 'all' && selectedCampaign && (
+                                <Badge className="ml-2 bg-primary/20 text-primary text-[9px]">{selectedCampaign.description}</Badge>
+                            )}
+                        </CardTitle>
+                        {selectedCampaignId !== 'all' && (
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedCampaignId('all')} className="text-white/40 hover:text-white text-[9px]">
+                                <X className="h-3 w-3 mr-1" /> Ver todas
+                            </Button>
+                        )}
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -278,7 +451,12 @@ export default function ExtraordinaryFundPage() {
                                     transactionsWithBalance.map((tx) => (
                                         <TableRow key={tx.id} className="border-white/5 hover:bg-white/5 transition-colors">
                                             <TableCell className="font-black text-white text-xs italic">{tx.fecha?.toDate ? format(tx.fecha.toDate(), 'dd/MM/yyyy') : 'N/A'}</TableCell>
-                                            <TableCell className="text-white font-black uppercase text-[10px]">{tx.descripcion}</TableCell>
+                                            <TableCell>
+                                                <div className="text-white font-black uppercase text-[10px]">{tx.descripcion}</div>
+                                                {tx.campaignName && (
+                                                    <div className="text-[8px] text-primary/60">{tx.campaignName}</div>
+                                                )}
+                                            </TableCell>
                                             <TableCell className="font-mono text-[10px] text-white/60">{tx.referencia || '-'}</TableCell>
                                             <TableCell className="text-right font-black text-emerald-400 italic">
                                                 {tx.tipo === 'ingreso' ? `Bs. ${formatCurrency(tx.monto)}` : '-'}
@@ -327,6 +505,9 @@ export default function ExtraordinaryFundPage() {
                             <div className="space-y-2 bg-red-500/10 p-4 rounded-xl">
                                 <p className="text-white font-black text-sm">{selectedTransaction.descripcion}</p>
                                 <p className="text-emerald-400 font-black">Monto: Bs. {formatCurrency(selectedTransaction.monto)}</p>
+                                {selectedTransaction.campaignName && (
+                                    <p className="text-[10px] text-primary">Campaña: {selectedTransaction.campaignName}</p>
+                                )}
                             </div>
                         )}
                     </div>
