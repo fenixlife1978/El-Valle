@@ -170,80 +170,102 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (!ownerSnap.exists()) continue;
 
                         // ============================================
-                        // CUOTA EXTRAORDINARIA - Manejo de pagos parciales
+                        // CUOTA EXTRAORDINARIA - CORREGIDO
                         // ============================================
                         if (beneficiary.category === 'extraordinaria' && beneficiary.extraordinaryDebtId) {
                             const debtRef = doc(db, 'condominios', condoId, 'owner_extraordinary_debts', beneficiary.extraordinaryDebtId);
-                            const debtSnap = await getDoc(debtRef);
+                            const debtSnap = await transaction.get(debtRef);
                             
                             if (debtSnap.exists()) {
                                 const debtData = debtSnap.data();
                                 const totalAmountUSD = debtData.amountUSD;
                                 const paidAmountUSD = beneficiary.amount / payment.exchangeRate;
-                                const pendingUSD = totalAmountUSD - paidAmountUSD;
+                                
+                                // Obtener el ID real de la campaña desde la deuda
+                                const campaignId = debtData.debtId;
+                                const campaignName = debtData.description;
+                                
+                                // Obtener información completa de la campaña
+                                let campaignAmountUSD = totalAmountUSD;
+                                if (campaignId) {
+                                    const campaignRef = doc(db, 'condominios', condoId, 'extraordinary_campaigns', campaignId);
+                                    const campaignSnap = await transaction.get(campaignRef);
+                                    if (campaignSnap.exists()) {
+                                        campaignAmountUSD = campaignSnap.data().amountUSD;
+                                    }
+                                }
+                                
+                                // Calcular el monto pendiente antes del pago
+                                const pendingBeforePayment = debtData.pendingUSD !== undefined ? debtData.pendingUSD : totalAmountUSD;
+                                const newPendingUSD = Math.max(0, pendingBeforePayment - paidAmountUSD);
+                                
+                                // DETERMINAR SI ES LIQUIDACIÓN TOTAL (tolerancia de 0.01 USD)
+                                const isLiquidation = newPendingUSD <= 0.01;
+                                
+                                // Determinar nuevo estado
+                                let newStatus: 'pending' | 'partial' | 'paid' = 'paid';
+                                if (!isLiquidation && newPendingUSD > 0.01) {
+                                    newStatus = 'partial';
+                                }
                                 
                                 const partialPayment = {
                                     amountUSD: paidAmountUSD,
                                     amountBs: beneficiary.amount,
                                     date: payment.paymentDate,
-                                    paymentId: payment.id
+                                    paymentId: payment.id,
+                                    isLiquidation: isLiquidation
                                 };
                                 
                                 const existingPartialPayments = debtData.partialPayments || [];
+                                const newAmountPaidBs = (debtData.amountPaidBs || 0) + beneficiary.amount;
+                                const newAmountPaidUSD = (debtData.amountPaidUSD || 0) + paidAmountUSD;
                                 
-                                if (pendingUSD <= 0.01) {
-                                    transaction.update(debtRef, {
-                                        status: 'paid',
-                                        paidAt: payment.paymentDate,
-                                        paymentId: payment.id,
-                                        pendingUSD: 0,
-                                        partialPayments: [...existingPartialPayments, partialPayment]
-                                    });
-                                    
-                                    liquidatedConcepts.push({
-                                        ownerId: beneficiary.ownerId,
-                                        description: beneficiary.isOwn 
-                                            ? `CUOTA EXTRAORDINARIA (PROPIA) - PAGO COMPLETO`
-                                            : `CUOTA EXTRAORDINARIA PAGADA PARA ${beneficiary.ownerName}`,
-                                        amountUSD: paidAmountUSD,
-                                        period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
-                                        type: 'extraordinaria'
-                                    });
-                                } else {
-                                    transaction.update(debtRef, {
-                                        status: 'partial',
-                                        pendingUSD: pendingUSD,
-                                        partialPayments: [...existingPartialPayments, partialPayment]
-                                    });
-                                    
-                                    liquidatedConcepts.push({
-                                        ownerId: beneficiary.ownerId,
-                                        description: beneficiary.isOwn 
-                                            ? `ABONO PARCIAL A CUOTA EXTRAORDINARIA (PROPIA) - PENDIENTE: $${pendingUSD.toFixed(2)}`
-                                            : `ABONO PARCIAL A CUOTA EXTRAORDINARIA DE ${beneficiary.ownerName} - PENDIENTE: $${pendingUSD.toFixed(2)}`,
-                                        amountUSD: paidAmountUSD,
-                                        period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
-                                        type: 'abono_extraordinaria'
-                                    });
-                                }
+                                // Actualizar la deuda
+                                transaction.update(debtRef, {
+                                    status: newStatus,
+                                    pendingUSD: newPendingUSD,
+                                    paidAt: newStatus === 'paid' ? payment.paymentDate : null,
+                                    paymentId: newStatus === 'paid' ? payment.id : null,
+                                    partialPayments: [...existingPartialPayments, partialPayment],
+                                    amountPaidBs: newAmountPaidBs,
+                                    amountPaidUSD: newAmountPaidUSD,
+                                    updatedAt: serverTimestamp()
+                                });
                                 
+                                // Crear movimiento en extraordinary_funds con campaignId CORRECTO
                                 const extraFundRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
                                 transaction.set(extraFundRef, {
                                     tipo: 'ingreso',
                                     monto: beneficiary.amount,
+                                    montoUSD: paidAmountUSD,
                                     exchangeRate: payment.exchangeRate,
-                                    descripcion: pendingUSD <= 0.01 
-                                        ? `PAGO CUOTA EXTRAORDINARIA`
-                                        : `ABONO PARCIAL A CUOTA EXTRAORDINARIA - PENDIENTE: $${pendingUSD.toFixed(2)}`,
+                                    descripcion: isLiquidation 
+                                        ? `PAGO CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
+                                        : `ABONO PARCIAL A CUOTA EXTRAORDINARIA: ${campaignName} - PENDIENTE: $${formatUSD(newPendingUSD)}`,
                                     referencia: payment.reference,
                                     fecha: payment.paymentDate,
                                     categoria: 'extraordinaria',
+                                    sourceTransactionId: null, // Se asignará después
                                     sourcePaymentId: payment.id,
+                                    createdBy: user?.email,
                                     ownerId: beneficiary.ownerId,
-                                    pendingAmountUSD: pendingUSD > 0 ? pendingUSD : null,
-                                    campaignId: beneficiary.extraordinaryDebtId,
-                                    campaignName: debtData.description,
+                                    campaignId: campaignId, // ✅ ID REAL DE LA CAMPAÑA
+                                    campaignName: campaignName,
+                                    campaignAmountUSD: campaignAmountUSD,
+                                    isLiquidation: isLiquidation,
+                                    previousPendingUSD: isLiquidation ? pendingBeforePayment : null,
                                     createdAt: serverTimestamp()
+                                });
+                                
+                                // Registrar concepto liquidado
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: isLiquidation 
+                                        ? `CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
+                                        : `ABONO PARCIAL CUOTA EXTRAORDINARIA: ${campaignName}`,
+                                    amountUSD: paidAmountUSD,
+                                    period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
+                                    type: isLiquidation ? 'extraordinaria' : 'abono_extraordinaria'
                                 });
                                 
                                 receiptNumbers[beneficiary.ownerId] = `REC-EXT-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
@@ -253,7 +275,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         }
                         
                         // ============================================
-                        // CUOTA ORDINARIA
+                        // CUOTA ORDINARIA (sin cambios)
                         // ============================================
                         let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
                         
@@ -467,7 +489,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
             const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
             
-            // Filtrar conceptos: excluir "abono" que no sea por excedente de esta transacción
             const transactionConcepts = ownerConcepts.filter(c => {
                 if (c.type === 'abono' && !c.description.includes('EXCEDENTE')) {
                     return false;
@@ -485,7 +506,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 ];
             });
 
-            // Calcular totales correctos
             const totalAbonadoEnDeudas = transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
             const saldoFavorAnterior = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
             const saldoFavorActual = currentBalance;
@@ -573,7 +593,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
             const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
             
-            // Filtrar conceptos: excluir "abono" que no sea por excedente de esta transacción
             const transactionConcepts = ownerConcepts.filter(c => {
                 if (c.type === 'abono' && !c.description.includes('EXCEDENTE')) {
                     return false;
@@ -591,7 +610,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 ];
             });
 
-            // Calcular totales correctos
             const totalAbonadoEnDeudas = transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
             const saldoFavorAnterior = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
             const saldoFavorActual = currentBalance;
@@ -834,7 +852,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 }
 
 // ============================================
-// REPORT PAYMENT COMPONENT (Formulario de reporte)
+// REPORT PAYMENT COMPONENT (sin cambios)
 // ============================================
 
 function ReportPaymentComponent() {
@@ -868,7 +886,6 @@ function ReportPaymentComponent() {
         });
     }, [condoId, ownersCollectionName]);
 
-    // Cargar cuotas extraordinarias solo cuando se selecciona un propietario
     useEffect(() => {
         if (!condoId || !selectedOwnerForDebts) return;
         
@@ -997,7 +1014,6 @@ function ReportPaymentComponent() {
             return;
         }
         
-        // Verificar pagos duplicados
         const duplicateQuery = query(
             collection(db, 'condominios', condoId, 'payments'),
             where('reference', '==', reference),
@@ -1253,7 +1269,7 @@ function ReportPaymentComponent() {
 }
 
 // ============================================
-// CALCULATOR COMPONENT
+// CALCULATOR COMPONENT (sin cambios)
 // ============================================
 
 function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {

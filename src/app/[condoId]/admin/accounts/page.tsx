@@ -117,7 +117,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [transferHistory, setTransferHistory] = useState<any[]>([]);
     const [condominioData, setCondominioData] = useState<any>(null);
     
-    // Estado para campaña seleccionada en egreso extraordinario
+    // Estado para campaña seleccionada
     const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
 
     // Estados de selección
@@ -250,13 +250,17 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         
         let exchangeRate = 0;
         try {
-            const rateDoc = await getDoc(doc(db, 'config', 'exchangeRate'));
-            if (rateDoc.exists()) exchangeRate = rateDoc.data().rate || 0;
+            const configRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+            const configSnap = await getDoc(configRef);
+            if (configSnap.exists()) {
+                const data = configSnap.data();
+                exchangeRate = data.exchangeRate || data.rate || 0;
+            }
         } catch (e) { console.warn("No se pudo obtener tasa de cambio"); }
         
-        // Validar que se seleccione una campaña para egresos extraordinarios
-        if (transForm.categoria === 'extraordinaria' && transForm.tipo === 'egreso' && !selectedCampaignId) {
-            toast({ variant: 'destructive', title: "Error", description: "Debe seleccionar una campaña para el egreso de Fondo Extraordinario." });
+        // Validar que se seleccione una campaña para movimientos extraordinarios
+        if (transForm.categoria === 'extraordinaria' && !selectedCampaignId) {
+            toast({ variant: 'destructive', title: "Error", description: "Debe seleccionar una campaña para el movimiento de Fondo Extraordinario." });
             setIsSubmitting(false);
             return;
         }
@@ -278,17 +282,23 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                 transaction.set(newTransRef, {
                     categoria: transForm.categoria || 'ordinaria', 
-                    monto: montoNum, tipo: transForm.tipo, cuentaId: transForm.cuentaId,
-                    nombreCuenta: accountDoc.data().nombre, descripcion: transForm.descripcion.toUpperCase(),
-                    referencia: transForm.referencia.toUpperCase(), fecha: Timestamp.fromDate(transForm.fecha),
-                    createdBy: user?.email, createdAt: serverTimestamp()
+                    monto: montoNum, 
+                    tipo: transForm.tipo, 
+                    cuentaId: transForm.cuentaId,
+                    nombreCuenta: accountDoc.data().nombre, 
+                    descripcion: transForm.descripcion.toUpperCase(),
+                    referencia: transForm.referencia.toUpperCase(), 
+                    fecha: Timestamp.fromDate(transForm.fecha),
+                    createdBy: user?.email, 
+                    createdAt: serverTimestamp()
                 });
                 
-                if (transForm.categoria === 'extraordinaria' && transForm.tipo === 'egreso') {
+                // Guardar en extraordinary_funds para INGRESOS Y EGRESOS
+                if (transForm.categoria === 'extraordinaria') {
                     const extraordinaryRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
                     const montoUSD = exchangeRate > 0 ? montoNum / exchangeRate : 0;
                     transaction.set(extraordinaryRef, {
-                        tipo: 'egreso',
+                        tipo: transForm.tipo,
                         monto: montoNum,
                         montoUSD: montoUSD,
                         exchangeRate: exchangeRate,
@@ -305,13 +315,17 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     });
                 }
                 
-                transaction.update(cuentaRef, { saldoActual: increment(transForm.tipo === 'ingreso' ? montoNum : -montoNum) });
+                transaction.update(cuentaRef, { 
+                    saldoActual: increment(transForm.tipo === 'ingreso' ? montoNum : -montoNum) 
+                });
             });
             toast({ title: "Movimiento procesado con éxito" });
             setIsTransactionDialogOpen(false);
             setTransactionForm({ monto: '', tipo: 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date(), categoria: 'ordinaria' });
             setSelectedCampaignId('');
-        } catch (error: any) { toast({ variant: 'destructive', title: "Fallo en transacción", description: error.message }); }
+        } catch (error: any) { 
+            toast({ variant: 'destructive', title: "Fallo en transacción", description: error.message }); 
+        }
         finally { setIsSubmitting(false); }
     };
 
@@ -708,7 +722,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Categoría</Label>
                                 <Select value={transForm.categoria || "ordinaria"} onValueChange={(v) => {
                                     setTransactionForm({...transForm, categoria: v});
-                                    setSelectedCampaignId(''); // Limpiar campaña al cambiar categoría
+                                    setSelectedCampaignId('');
                                 }}>
                                     <SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic">
                                         <SelectValue placeholder="Seleccionar categoría..." />
