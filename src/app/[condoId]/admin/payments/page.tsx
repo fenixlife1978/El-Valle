@@ -170,7 +170,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (!ownerSnap.exists()) continue;
 
                         // ============================================
-                        // CUOTA EXTRAORDINARIA - CORREGIDO COMPLETAMENTE
+                        // CUOTA EXTRAORDINARIA - CORREGIDO
                         // ============================================
                         if (beneficiary.category === 'extraordinaria' && beneficiary.extraordinaryDebtId) {
                             const debtRef = doc(db, 'condominios', condoId, 'owner_extraordinary_debts', beneficiary.extraordinaryDebtId);
@@ -181,7 +181,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 const totalAmountUSD = debtData.amountUSD;
                                 const paidAmountUSD = beneficiary.amount / payment.exchangeRate;
                                 
-                                // OBTENER EL CAMPAIGN ID REAL DESDE LA DEUDA
+                                // Obtener el ID real de la campaña desde la deuda
                                 const campaignId = debtData.debtId;
                                 const campaignName = debtData.description;
                                 
@@ -195,15 +195,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     }
                                 }
                                 
-                                // Calcular el monto pendiente ANTES del pago
+                                // Calcular el monto pendiente antes del pago
                                 const pendingBeforePayment = debtData.pendingUSD !== undefined ? debtData.pendingUSD : totalAmountUSD;
+                                const newPendingUSD = Math.max(0, pendingBeforePayment - paidAmountUSD);
                                 
-                                // Calcular lo que ya se ha pagado anteriormente
-                                const previouslyPaidUSD = debtData.amountPaidUSD || 0;
-                                const totalPaidAfterThis = previouslyPaidUSD + paidAmountUSD;
-                                const newPendingUSD = Math.max(0, totalAmountUSD - totalPaidAfterThis);
-                                
-                                // DETERMINAR SI ES LIQUIDACIÓN TOTAL
+                                // DETERMINAR SI ES LIQUIDACIÓN TOTAL (tolerancia de 0.01 USD)
                                 const isLiquidation = newPendingUSD <= 0.01;
                                 
                                 // Determinar nuevo estado
@@ -222,42 +218,38 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 
                                 const existingPartialPayments = debtData.partialPayments || [];
                                 const newAmountPaidBs = (debtData.amountPaidBs || 0) + beneficiary.amount;
-                                const newAmountPaidUSD = previouslyPaidUSD + paidAmountUSD;
+                                const newAmountPaidUSD = (debtData.amountPaidUSD || 0) + paidAmountUSD;
                                 
-                                // ACTUALIZAR LA DEUDA CON EL ESTADO CORRECTO
+                                // Actualizar la deuda
                                 transaction.update(debtRef, {
                                     status: newStatus,
-                                    pendingUSD: newStatus === 'paid' ? 0 : newPendingUSD,
-                                    paidAt: newStatus === 'paid' ? payment.paymentDate : (debtData.paidAt || null),
-                                    paymentId: newStatus === 'paid' ? payment.id : (debtData.paymentId || null),
+                                    pendingUSD: newPendingUSD,
+                                    paidAt: newStatus === 'paid' ? payment.paymentDate : null,
+                                    paymentId: newStatus === 'paid' ? payment.id : null,
                                     partialPayments: [...existingPartialPayments, partialPayment],
                                     amountPaidBs: newAmountPaidBs,
                                     amountPaidUSD: newAmountPaidUSD,
                                     updatedAt: serverTimestamp()
                                 });
                                 
-                                // CREAR MOVIMIENTO EN EXTRAORDINARY_FUNDS CON CAMPAIGN ID CORRECTO
+                                // Crear movimiento en extraordinary_funds con campaignId CORRECTO
                                 const extraFundRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
-                                
-                                // Descripción clara con nombre de campaña
-                                const descripcionPago = isLiquidation 
-                                    ? `PAGO CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
-                                    : `ABONO PARCIAL CUOTA EXTRAORDINARIA: ${campaignName} - PENDIENTE: $${formatUSD(newPendingUSD)}`;
-                                
                                 transaction.set(extraFundRef, {
                                     tipo: 'ingreso',
                                     monto: beneficiary.amount,
                                     montoUSD: paidAmountUSD,
                                     exchangeRate: payment.exchangeRate,
-                                    descripcion: descripcionPago,
+                                    descripcion: isLiquidation 
+                                        ? `PAGO CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
+                                        : `ABONO PARCIAL A CUOTA EXTRAORDINARIA: ${campaignName} - PENDIENTE: $${formatUSD(newPendingUSD)}`,
                                     referencia: payment.reference,
                                     fecha: payment.paymentDate,
                                     categoria: 'extraordinaria',
-                                    sourceTransactionId: null,
+                                    sourceTransactionId: null, // Se asignará después
                                     sourcePaymentId: payment.id,
                                     createdBy: user?.email,
                                     ownerId: beneficiary.ownerId,
-                                    campaignId: campaignId,
+                                    campaignId: campaignId, // ✅ ID REAL DE LA CAMPAÑA
                                     campaignName: campaignName,
                                     campaignAmountUSD: campaignAmountUSD,
                                     isLiquidation: isLiquidation,
@@ -265,11 +257,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     createdAt: serverTimestamp()
                                 });
                                 
-                                // REGISTRAR CONCEPTO LIQUIDADO CON NOMBRE DE CAMPAÑA
+                                // Registrar concepto liquidado
                                 liquidatedConcepts.push({
                                     ownerId: beneficiary.ownerId,
                                     description: isLiquidation 
-                                        ? `LIQUIDACIÓN TOTAL CUOTA EXTRAORDINARIA: ${campaignName}`
+                                        ? `CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
                                         : `ABONO PARCIAL CUOTA EXTRAORDINARIA: ${campaignName}`,
                                     amountUSD: paidAmountUSD,
                                     period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
@@ -283,7 +275,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         }
                         
                         // ============================================
-                        // CUOTA ORDINARIA
+                        // CUOTA ORDINARIA (sin cambios)
                         // ============================================
                         let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
                         
@@ -860,7 +852,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 }
 
 // ============================================
-// REPORT PAYMENT COMPONENT
+// REPORT PAYMENT COMPONENT (sin cambios)
 // ============================================
 
 function ReportPaymentComponent() {
@@ -1277,7 +1269,7 @@ function ReportPaymentComponent() {
 }
 
 // ============================================
-// CALCULATOR COMPONENT
+// CALCULATOR COMPONENT (sin cambios)
 // ============================================
 
 function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {
