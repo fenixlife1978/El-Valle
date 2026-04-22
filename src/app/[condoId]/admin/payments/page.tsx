@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense, use } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
@@ -13,18 +13,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from '@/hooks/use-toast';
 import { 
     Search, CheckCircle, XCircle, Eye, MoreHorizontal, 
-    Download, Loader2, Calendar as CalendarIcon, Banknote, 
-    UserPlus, CheckCircle2, WalletCards, Trash2, 
-    Hash, FileText, Save, Share2, FileDown,
-    Calculator, Minus, Equal, Receipt, Check, Info, DollarSign, Plus
+    Download, Loader2, Calendar as CalendarIcon,
+    UserPlus, WalletCards, Trash2, FileText, Save, Share2, FileDown,
+    Calculator, Receipt, Check, DollarSign, Plus
 } from 'lucide-react';
-import { format, startOfMonth, addMonths } from 'date-fns';
+import { format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn, compressImage } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { 
     collection, onSnapshot, query, addDoc, serverTimestamp, 
     doc, getDoc, where, getDocs, Timestamp, runTransaction, 
-    updateDoc, increment, orderBy, setDoc 
+    updateDoc, increment, orderBy
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -155,6 +154,95 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
+                // ============================================
+                // MOVER TODAS LAS LECTURAS FUERA DE LA TRANSACCIÓN
+                // ============================================
+                
+                // Preparar datos de cuotas extraordinarias
+                const extraordinaryPreparedData: any[] = [];
+                for (const beneficiary of payment.beneficiaries) {
+                    if (beneficiary.category === 'extraordinaria' && beneficiary.extraordinaryDebtId) {
+                        const debtRef = doc(db, 'condominios', condoId, 'owner_extraordinary_debts', beneficiary.extraordinaryDebtId);
+                        const debtSnap = await getDoc(debtRef);
+                        
+                        if (debtSnap.exists()) {
+                            const debtData = debtSnap.data();
+                            const totalAmountUSD = debtData.amountUSD;
+                            const paidAmountUSD = beneficiary.amount / payment.exchangeRate;
+                            const campaignId = debtData.debtId;
+                            const campaignName = debtData.description;
+                            
+                            let campaignAmountUSD = totalAmountUSD;
+                            if (campaignId) {
+                                const campaignRef = doc(db, 'condominios', condoId, 'extraordinary_campaigns', campaignId);
+                                const campaignSnap = await getDoc(campaignRef);
+                                if (campaignSnap.exists()) {
+                                    campaignAmountUSD = campaignSnap.data().amountUSD;
+                                }
+                            }
+                            
+                            const pendingBeforePayment = debtData.pendingUSD !== undefined ? debtData.pendingUSD : totalAmountUSD;
+                            const previouslyPaidUSD = debtData.amountPaidUSD || 0;
+                            const totalPaidAfterThis = previouslyPaidUSD + paidAmountUSD;
+                            const newPendingUSD = Math.max(0, totalAmountUSD - totalPaidAfterThis);
+                            const isLiquidation = newPendingUSD <= 0.01;
+                            
+                            let newStatus: 'pending' | 'partial' | 'paid' = 'paid';
+                            if (!isLiquidation && newPendingUSD > 0.01) {
+                                newStatus = 'partial';
+                            }
+                            
+                            extraordinaryPreparedData.push({
+                                beneficiary,
+                                debtRef,
+                                debtData,
+                                campaignId,
+                                campaignName,
+                                campaignAmountUSD,
+                                paidAmountUSD,
+                                newPendingUSD,
+                                isLiquidation,
+                                newStatus,
+                                pendingBeforePayment,
+                                totalPaidAfterThis
+                            });
+                        }
+                    }
+                }
+                
+                // Preparar datos de cuotas ordinarias
+                const ordinaryPreparedData: any[] = [];
+                for (const beneficiary of payment.beneficiaries) {
+                    if (!beneficiary.category || beneficiary.category === 'ordinaria') {
+                        const debtsSnap = await getDocs(query(
+                            collection(db, 'condominios', condoId, 'debts'),
+                            where('ownerId', '==', beneficiary.ownerId),
+                            where('status', 'in', ['pending', 'vencida'])
+                        ));
+                        
+                        const pendingDebts = debtsSnap.docs
+                            .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
+                            .sort((a, b) => a.year - b.year || a.month - b.month);
+                        
+                        const allDebtsSnap = await getDocs(query(
+                            collection(db, 'condominios', condoId, 'debts'),
+                            where('ownerId', '==', beneficiary.ownerId)
+                        ));
+                        const allDebtsSorted = allDebtsSnap.docs
+                            .map(d => d.data())
+                            .sort((a, b) => a.year - b.year || a.month - b.month);
+                        
+                        ordinaryPreparedData.push({
+                            beneficiary,
+                            pendingDebts,
+                            allDebtsSorted
+                        });
+                    }
+                }
+
+                // ============================================
+                // AHORA SÍ, EJECUTAR LA TRANSACCIÓN (SOLO ESCRITURAS)
+                // ============================================
                 await runTransaction(db, async (transaction) => {
                     const ownerRefs = payment.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
                     const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
@@ -170,208 +258,163 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (!ownerSnap.exists()) continue;
 
                         // ============================================
-                        // CUOTA EXTRAORDINARIA - CORREGIDO
+                        // CUOTA EXTRAORDINARIA - CORREGIDO: FILTRAR POR ownerId Y extraordinaryDebtId
                         // ============================================
-                        if (beneficiary.category === 'extraordinaria' && beneficiary.extraordinaryDebtId) {
-                            const debtRef = doc(db, 'condominios', condoId, 'owner_extraordinary_debts', beneficiary.extraordinaryDebtId);
-                            const debtSnap = await transaction.get(debtRef);
+                        const extraordinaryData = extraordinaryPreparedData.find(d => 
+                            d.beneficiary.ownerId === beneficiary.ownerId && 
+                            d.beneficiary.extraordinaryDebtId === beneficiary.extraordinaryDebtId
+                        );
+                        
+                        if (extraordinaryData) {
+                            const { debtRef, campaignId, campaignName, campaignAmountUSD, paidAmountUSD, newPendingUSD, isLiquidation, newStatus, pendingBeforePayment, totalPaidAfterThis } = extraordinaryData;
+                            const debtData = extraordinaryData.debtData;
                             
-                            if (debtSnap.exists()) {
-                                const debtData = debtSnap.data();
-                                const totalAmountUSD = debtData.amountUSD;
-                                const paidAmountUSD = beneficiary.amount / payment.exchangeRate;
-                                
-                                // Obtener el ID real de la campaña desde la deuda
-                                const campaignId = debtData.debtId;
-                                const campaignName = debtData.description;
-                                
-                                // Obtener información completa de la campaña
-                                let campaignAmountUSD = totalAmountUSD;
-                                if (campaignId) {
-                                    const campaignRef = doc(db, 'condominios', condoId, 'extraordinary_campaigns', campaignId);
-                                    const campaignSnap = await transaction.get(campaignRef);
-                                    if (campaignSnap.exists()) {
-                                        campaignAmountUSD = campaignSnap.data().amountUSD;
-                                    }
-                                }
-                                
-                                // Calcular el monto pendiente antes del pago
-                                const pendingBeforePayment = debtData.pendingUSD !== undefined ? debtData.pendingUSD : totalAmountUSD;
-                                const newPendingUSD = Math.max(0, pendingBeforePayment - paidAmountUSD);
-                                
-                                // DETERMINAR SI ES LIQUIDACIÓN TOTAL (tolerancia de 0.01 USD)
-                                const isLiquidation = newPendingUSD <= 0.01;
-                                
-                                // Determinar nuevo estado
-                                let newStatus: 'pending' | 'partial' | 'paid' = 'paid';
-                                if (!isLiquidation && newPendingUSD > 0.01) {
-                                    newStatus = 'partial';
-                                }
-                                
-                                const partialPayment = {
-                                    amountUSD: paidAmountUSD,
-                                    amountBs: beneficiary.amount,
-                                    date: payment.paymentDate,
-                                    paymentId: payment.id,
-                                    isLiquidation: isLiquidation
-                                };
-                                
-                                const existingPartialPayments = debtData.partialPayments || [];
-                                const newAmountPaidBs = (debtData.amountPaidBs || 0) + beneficiary.amount;
-                                const newAmountPaidUSD = (debtData.amountPaidUSD || 0) + paidAmountUSD;
-                                
-                                // Actualizar la deuda
-                                transaction.update(debtRef, {
-                                    status: newStatus,
-                                    pendingUSD: newPendingUSD,
-                                    paidAt: newStatus === 'paid' ? payment.paymentDate : null,
-                                    paymentId: newStatus === 'paid' ? payment.id : null,
-                                    partialPayments: [...existingPartialPayments, partialPayment],
-                                    amountPaidBs: newAmountPaidBs,
-                                    amountPaidUSD: newAmountPaidUSD,
-                                    updatedAt: serverTimestamp()
-                                });
-                                
-                                // Crear movimiento en extraordinary_funds con campaignId CORRECTO
-                                const extraFundRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
-                                transaction.set(extraFundRef, {
-                                    tipo: 'ingreso',
-                                    monto: beneficiary.amount,
-                                    montoUSD: paidAmountUSD,
-                                    exchangeRate: payment.exchangeRate,
-                                    descripcion: isLiquidation 
-                                        ? `PAGO CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
-                                        : `ABONO PARCIAL A CUOTA EXTRAORDINARIA: ${campaignName} - PENDIENTE: $${formatUSD(newPendingUSD)}`,
-                                    referencia: payment.reference,
-                                    fecha: payment.paymentDate,
-                                    categoria: 'extraordinaria',
-                                    sourceTransactionId: null, // Se asignará después
-                                    sourcePaymentId: payment.id,
-                                    createdBy: user?.email,
-                                    ownerId: beneficiary.ownerId,
-                                    campaignId: campaignId, // ✅ ID REAL DE LA CAMPAÑA
-                                    campaignName: campaignName,
-                                    campaignAmountUSD: campaignAmountUSD,
-                                    isLiquidation: isLiquidation,
-                                    previousPendingUSD: isLiquidation ? pendingBeforePayment : null,
-                                    createdAt: serverTimestamp()
-                                });
-                                
-                                // Registrar concepto liquidado
-                                liquidatedConcepts.push({
-                                    ownerId: beneficiary.ownerId,
-                                    description: isLiquidation 
-                                        ? `CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
-                                        : `ABONO PARCIAL CUOTA EXTRAORDINARIA: ${campaignName}`,
-                                    amountUSD: paidAmountUSD,
-                                    period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
-                                    type: isLiquidation ? 'extraordinaria' : 'abono_extraordinaria'
-                                });
-                                
-                                receiptNumbers[beneficiary.ownerId] = `REC-EXT-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
-                                transaction.update(ownerRef, { balance: ownerSnap.data().balance || 0 });
-                                continue;
-                            }
-                        }
-                        
-                        // ============================================
-                        // CUOTA ORDINARIA (sin cambios)
-                        // ============================================
-                        let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
-                        
-                        const debtsSnap = await getDocs(query(
-                            collection(db, 'condominios', condoId, 'debts'),
-                            where('ownerId', '==', beneficiary.ownerId),
-                            where('status', 'in', ['pending', 'vencida'])
-                        ));
-                        
-                        const pendingDebts = debtsSnap.docs
-                            .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
-                            .sort((a, b) => a.year - b.year || a.month - b.month);
-
-                        for (const debt of pendingDebts) {
-                            const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
-                            if (funds.gte(debtAmountBs)) {
-                                funds = funds.minus(debtAmountBs);
-                                transaction.update(debt.ref, {
-                                    status: 'paid',
-                                    paidAmountUSD: debt.amountUSD,
-                                    paymentDate: payment.paymentDate,
-                                    paymentId: payment.id
-                                });
-                                liquidatedConcepts.push({
-                                    ownerId: beneficiary.ownerId,
-                                    description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                    amountUSD: debt.amountUSD,
-                                    period: `${monthsLocale[debt.month]} ${debt.year}`,
-                                    type: 'deuda'
-                                });
-                            } else break;
-                        }
-
-                        const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
-                        if (funds.gte(advanceAmountBs)) {
-                            const allDebtsSnap = await getDocs(query(
-                                collection(db, 'condominios', condoId, 'debts'),
-                                where('ownerId', '==', beneficiary.ownerId)
-                            ));
-                            const allDebtsSorted = allDebtsSnap.docs
-                                .map(d => d.data())
-                                .sort((a, b) => a.year - b.year || a.month - b.month);
+                            const partialPayment = {
+                                amountUSD: paidAmountUSD,
+                                amountBs: beneficiary.amount,
+                                date: payment.paymentDate,
+                                paymentId: payment.id,
+                                isLiquidation: isLiquidation
+                            };
                             
-                            let nextMonthDate = addMonths(new Date(), 1);
-                            if (allDebtsSorted.length > 0) {
-                                const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
-                                nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
-                            }
-
-                            while (funds.gte(advanceAmountBs)) {
-                                const year = nextMonthDate.getFullYear();
-                                const month = nextMonthDate.getMonth() + 1;
-                                
-                                const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
-                                transaction.set(newDebtRef, {
-                                    ownerId: beneficiary.ownerId,
-                                    property: { 
-                                        street: beneficiary.street || '',
-                                        house: beneficiary.house || '' 
-                                    },
-                                    year,
-                                    month,
-                                    amountUSD: currentFee,
-                                    description: 'Cuota de Condominio (Adelantado)',
-                                    status: 'paid',
-                                    paidAmountUSD: currentFee,
-                                    paymentDate: payment.paymentDate,
-                                    paymentId: payment.id,
-                                    published: true
-                                });
-
-                                liquidatedConcepts.push({
-                                    ownerId: beneficiary.ownerId,
-                                    description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                    amountUSD: currentFee,
-                                    period: `${monthsLocale[month]} ${year}`,
-                                    type: 'adelanto'
-                                });
-
-                                funds = funds.minus(advanceAmountBs);
-                                nextMonthDate = addMonths(nextMonthDate, 1);
-                            }
-                        }
-
-                        if (funds.gt(0)) {
+                            const existingPartialPayments = debtData.partialPayments || [];
+                            const newAmountPaidBs = (debtData.amountPaidBs || 0) + beneficiary.amount;
+                            
+                            transaction.update(debtRef, {
+                                status: newStatus,
+                                pendingUSD: newPendingUSD,
+                                paidAt: newStatus === 'paid' ? payment.paymentDate : null,
+                                paymentId: newStatus === 'paid' ? payment.id : null,
+                                partialPayments: [...existingPartialPayments, partialPayment],
+                                amountPaidBs: newAmountPaidBs,
+                                amountPaidUSD: totalPaidAfterThis,
+                                updatedAt: serverTimestamp()
+                            });
+                            
+                            const extraFundRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
+                            transaction.set(extraFundRef, {
+                                tipo: 'ingreso',
+                                monto: beneficiary.amount,
+                                montoUSD: paidAmountUSD,
+                                exchangeRate: payment.exchangeRate,
+                                descripcion: isLiquidation 
+                                    ? `PAGO CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
+                                    : `ABONO PARCIAL A CUOTA EXTRAORDINARIA: ${campaignName} - PENDIENTE: $${formatUSD(newPendingUSD)}`,
+                                referencia: payment.reference,
+                                fecha: payment.paymentDate,
+                                categoria: 'extraordinaria',
+                                sourceTransactionId: null,
+                                sourcePaymentId: payment.id,
+                                createdBy: user?.email,
+                                ownerId: beneficiary.ownerId,
+                                campaignId: campaignId,
+                                campaignName: campaignName,
+                                campaignAmountUSD: campaignAmountUSD,
+                                isLiquidation: isLiquidation,
+                                previousPendingUSD: isLiquidation ? pendingBeforePayment : null,
+                                createdAt: serverTimestamp()
+                            });
+                            
                             liquidatedConcepts.push({
                                 ownerId: beneficiary.ownerId,
-                                description: `EXCEDENTE APLICADO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                                amountUSD: funds.div(payment.exchangeRate).toNumber(),
-                                period: 'SALDO',
-                                type: 'abono'
+                                description: isLiquidation 
+                                    ? `CUOTA EXTRAORDINARIA: ${campaignName} [LIQUIDACIÓN TOTAL]`
+                                    : `ABONO PARCIAL CUOTA EXTRAORDINARIA: ${campaignName}`,
+                                amountUSD: paidAmountUSD,
+                                period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
+                                type: isLiquidation ? 'extraordinaria' : 'abono_extraordinaria'
                             });
+                            
+                            receiptNumbers[beneficiary.ownerId] = `REC-EXT-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                            transaction.update(ownerRef, { balance: ownerSnap.data().balance || 0 });
+                            continue;
                         }
+                        
+                        // ============================================
+                        // CUOTA ORDINARIA - USAR DATOS PREPARADOS
+                        // ============================================
+                        const ordinaryData = ordinaryPreparedData.find(d => d.beneficiary.ownerId === beneficiary.ownerId);
+                        if (ordinaryData) {
+                            const { pendingDebts, allDebtsSorted } = ordinaryData;
+                            
+                            let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
+                            
+                            for (const debt of pendingDebts) {
+                                const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
+                                if (funds.gte(debtAmountBs)) {
+                                    funds = funds.minus(debtAmountBs);
+                                    transaction.update(debt.ref, {
+                                        status: 'paid',
+                                        paidAmountUSD: debt.amountUSD,
+                                        paymentDate: payment.paymentDate,
+                                        paymentId: payment.id
+                                    });
+                                    liquidatedConcepts.push({
+                                        ownerId: beneficiary.ownerId,
+                                        description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                        amountUSD: debt.amountUSD,
+                                        period: `${monthsLocale[debt.month]} ${debt.year}`,
+                                        type: 'deuda'
+                                    });
+                                } else break;
+                            }
 
-                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
-                        transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
+                            const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
+                            if (funds.gte(advanceAmountBs)) {
+                                let nextMonthDate = addMonths(new Date(), 1);
+                                if (allDebtsSorted.length > 0) {
+                                    const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
+                                    nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
+                                }
+
+                                while (funds.gte(advanceAmountBs)) {
+                                    const year = nextMonthDate.getFullYear();
+                                    const month = nextMonthDate.getMonth() + 1;
+                                    
+                                    const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
+                                    transaction.set(newDebtRef, {
+                                        ownerId: beneficiary.ownerId,
+                                        property: { 
+                                            street: beneficiary.street || '',
+                                            house: beneficiary.house || '' 
+                                        },
+                                        year,
+                                        month,
+                                        amountUSD: currentFee,
+                                        description: 'Cuota de Condominio (Adelantado)',
+                                        status: 'paid',
+                                        paidAmountUSD: currentFee,
+                                        paymentDate: payment.paymentDate,
+                                        paymentId: payment.id,
+                                        published: true
+                                    });
+
+                                    liquidatedConcepts.push({
+                                        ownerId: beneficiary.ownerId,
+                                        description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                        amountUSD: currentFee,
+                                        period: `${monthsLocale[month]} ${year}`,
+                                        type: 'adelanto'
+                                    });
+
+                                    funds = funds.minus(advanceAmountBs);
+                                    nextMonthDate = addMonths(nextMonthDate, 1);
+                                }
+                            }
+
+                            if (funds.gt(0)) {
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: `EXCEDENTE APLICADO A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
+                                    amountUSD: funds.div(payment.exchangeRate).toNumber(),
+                                    period: 'SALDO',
+                                    type: 'abono'
+                                });
+                            }
+
+                            receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                            transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
+                        }
                     }
 
                     const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
@@ -789,7 +832,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
                                 <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-widest">Distribución de Ingreso</p>
                                 {(selectedPayment?.beneficiaries || []).map((b, i) => (
-                                    <div key={b.ownerId + "_" + i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
+                                    <div key={`ben_${b.ownerId}_${i}`} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
                                         <div className="flex flex-col"><span className="font-black text-white text-xs uppercase italic">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span></div>
                                         <span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span>
                                     </div>
@@ -814,7 +857,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     </div>
                                     <div className="space-y-3">
                                         {selectedPayment.liquidatedConcepts.map((concept, idx) => (
-                                            <div key={idx} className="flex justify-between items-start gap-4 text-[10px]">
+                                            <div key={`concept_${concept.ownerId}_${idx}`} className="flex justify-between items-start gap-4 text-[10px]">
                                                 <div className="flex flex-col">
                                                     <span className="font-black text-white uppercase italic">{concept.period}</span>
                                                     <span className="font-bold text-slate-500 uppercase">{concept.description}</span>
@@ -852,12 +895,12 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 }
 
 // ============================================
-// REPORT PAYMENT COMPONENT (sin cambios)
+// REPORT PAYMENT COMPONENT
 // ============================================
 
 function ReportPaymentComponent() {
     const { toast } = useToast();
-    const { user: authUser, ownerData: authOwnerData } = useAuth();
+    const { user: authUser } = useAuth();
     const params = useParams();
     const condoId = params?.condoId as string;
     
@@ -1269,7 +1312,7 @@ function ReportPaymentComponent() {
 }
 
 // ============================================
-// CALCULATOR COMPONENT (sin cambios)
+// CALCULATOR COMPONENT
 // ============================================
 
 function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {
