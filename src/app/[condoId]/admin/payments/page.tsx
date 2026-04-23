@@ -40,7 +40,7 @@ import {
     DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub,
     DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal
 } from '@/components/ui/dropdown-menu';
-import { generatePaymentReceipt } from '@/lib/pdf-generator';
+import { generatePaymentReceipt, generateCashReceipt } from '@/lib/pdf-generator';
 import Decimal from 'decimal.js';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
@@ -690,6 +690,42 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         }
     };
 
+    // ✅ NUEVA FUNCIÓN: Comprobante de Efectivo para CAJA PRINCIPAL
+    const handleExportCashReceipt = async (payment: Payment) => {
+        try {
+            if (!localCompanyInfo) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no disponible.' });
+                return;
+            }
+            
+            // Obtener el nombre de todos los beneficiarios
+            const beneficiaryNames = payment.beneficiaries.map(b => b.ownerName).join(', ');
+            const firstBeneficiary = payment.beneficiaries[0];
+            const property = firstBeneficiary?.street && firstBeneficiary?.house 
+                ? `${firstBeneficiary.street} - ${firstBeneficiary.house}` 
+                : 'N/A';
+            
+            const data = {
+                condoName: localCompanyInfo.name || 'CONDOMINIO',
+                rif: localCompanyInfo.rif || 'J-40587208-0',
+                receiptNumber: `CASH-${payment.id.slice(-8).toUpperCase()}`,
+                ownerName: beneficiaryNames,
+                property: property,
+                paymentDate: payment.paymentDate?.toDate ? format(payment.paymentDate.toDate(), 'dd/MM/yyyy') : 'N/A',
+                amount: payment.totalAmount,
+                exchangeRate: payment.exchangeRate,
+                reference: payment.reference || 'EFECTIVO',
+                observations: payment.observations || 'Pago en efectivo registrado en CAJA PRINCIPAL.'
+            };
+            
+            await generateCashReceipt(data, localCompanyInfo.logo, 'download');
+            toast({ title: "Comprobante generado", description: "Comprobante de efectivo descargado." });
+        } catch (error) {
+            console.error("Error generando comprobante de efectivo:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el comprobante.' });
+        }
+    };
+
     const handleDeletePayment = async () => {
         if (!paymentToDelete || !condoId) return;
         requestAuthorization(async () => {
@@ -792,6 +828,17 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                                             {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleSharePDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
                                                                         </DropdownMenuSubContent></DropdownMenuPortal>
                                                                     </DropdownMenuSub>
+                                                                    
+                                                                    {/* ✅ NUEVO: Comprobante de Efectivo (solo si es efectivo_bs) */}
+                                                                    {p.paymentMethod === 'efectivo_bs' && (
+                                                                        <DropdownMenuItem 
+                                                                            onClick={() => handleExportCashReceipt(p)} 
+                                                                            className="font-black uppercase text-[10px] p-3 gap-2 text-amber-400"
+                                                                        >
+                                                                            <Receipt className="h-4 w-4" /> Comprobante Efectivo
+                                                                        </DropdownMenuItem>
+                                                                    )}
+                                                                    
                                                                     <DropdownMenuSeparator className="bg-white/5"/>
                                                                     <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Revertir y Eliminar</DropdownMenuItem>
                                                                 </>
