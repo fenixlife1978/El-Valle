@@ -94,7 +94,6 @@ export default function CertificatesPage() {
     const [preview, setPreview] = useState(false);
     const [generating, setGenerating] = useState(false);
     
-    // Configuración
     const [headerConfig, setHeaderConfig] = useState({
         title: '',
         subtitle: '',
@@ -195,6 +194,7 @@ export default function CertificatesPage() {
         const mes = fecha.toLocaleString('es', { month: 'long' });
         const año = fecha.getFullYear();
         const nombreCondominio = headerConfig.title || companyInfo?.nombre || companyInfo?.name || 'CONDOMINIO';
+        const numeroConstancia = `CERT-${selectedPlantilla.id.toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
         
         let logoHtml = '';
         if (headerConfig.logo) {
@@ -229,7 +229,9 @@ export default function CertificatesPage() {
             .content p { margin-bottom: 16px; }
             .signature { margin-top: 80px; text-align: center; }
             .signature-line { width: 250px; margin: 20px auto 10px auto; border-top: 1px solid #000; }
-            .footer { margin-top: 60px; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 10px; }
+            .barcode-container { text-align: center; margin-top: 30px; }
+            .barcode-container .barcode-number { font-size: 8pt; font-family: 'Courier New', monospace; margin-top: 5px; color: #333; }
+            .footer { margin-top: 30px; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 10px; }
             .warning { margin-top: 5px; font-size: 7pt; color: #c00; font-weight: bold; }
         </style>
         </head>
@@ -245,10 +247,26 @@ export default function CertificatesPage() {
                 <div class="signature-line"></div>
                 <p><strong>Por: ${nombreCondominio}</strong></p>
             </div>
+            <div class="barcode-container">
+                <svg id="barcode-${numeroConstancia}"></svg>
+                <div class="barcode-number">N° ${numeroConstancia}</div>
+            </div>
             <div class="footer">
                 <p>${footerText}</p>
                 ${showStampWarning ? `<p class="warning">⚠️ Debe ser presentado ante la Junta de Condominio para su estampado de sello y firma oficial.</p>` : ''}
             </div>
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+            <script>
+                try {
+                    JsBarcode("#barcode-${numeroConstancia}", "${numeroConstancia}", {
+                        format: "CODE128",
+                        width: 2,
+                        height: 50,
+                        displayValue: false,
+                        margin: 0
+                    });
+                } catch(e) {}
+            </script>
         </body>
         </html>`;
     };

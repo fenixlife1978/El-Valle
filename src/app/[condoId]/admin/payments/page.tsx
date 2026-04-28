@@ -72,7 +72,7 @@ const CAJA_PRINCIPAL_ID = "fS0hdoWOyZBuTVuUJSic";
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
 type DistributionLine = { id: string; category: 'ordinaria' | 'extraordinaria'; amount: number; extraordinaryDebtId?: string; isOwn?: boolean; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; selectedProperty: { street: string, house: string } | null; distributionLines: DistributionLine[]; };
-type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
+type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | '';
 type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string; type: 'deuda' | 'adelanto' | 'abono' | 'extraordinaria' | 'abono_extraordinaria'; };
 type Payment = { 
     id: string; 
@@ -146,6 +146,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             setIsVerifying(true);
             try {
                 const method = (payment.paymentMethod || "").toLowerCase().trim();
+                const isDolares = method.includes('usd') || method.includes('dolares');
                 const isDigital = method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil');
                 const targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
                 const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
@@ -168,7 +169,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (debtSnap.exists()) {
                             const debtData = debtSnap.data();
                             const totalAmountUSD = debtData.amountUSD;
-                            const paidAmountUSD = beneficiary.amount / payment.exchangeRate;
+                            const paidAmountUSD = isDolares ? beneficiary.amount : beneficiary.amount / payment.exchangeRate;
                             const campaignId = debtData.debtId;
                             const campaignName = debtData.description;
                             
@@ -294,7 +295,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             const extraFundRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
                             transaction.set(extraFundRef, {
                                 tipo: 'ingreso',
-                                monto: beneficiary.amount,
+                                monto: isDolares ? 0 : beneficiary.amount,
                                 montoUSD: paidAmountUSD,
                                 exchangeRate: payment.exchangeRate,
                                 descripcion: isLiquidation 
@@ -545,14 +546,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     c.period,
                     c.description.toUpperCase(),
                     isAbonoExcedente ? '' : `$${c.amountUSD.toFixed(2)}`,
-                    formatCurrency(c.amountUSD * payment.exchangeRate)
+                    isDol ? `$ ${formatUSD(c.amountUSD)}` : formatCurrency(c.amountUSD * payment.exchangeRate)
                 ];
             });
 
-            const totalAbonadoEnDeudas = transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
-            const saldoFavorAnterior = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
-            const saldoFavorActual = currentBalance;
-            const totalPagado = beneficiary.amount;
+            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
+const totalAbonadoEnDeudas = isDol ? transactionConcepts.reduce((sum, c) => sum + c.amountUSD, 0) : transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+const saldoFavorAnterior = isDol ? 0 : Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
+const saldoFavorActual = isDol ? 0 : currentBalance;
+const totalPagado = isDol ? payment.totalAmount : beneficiary.amount;
 
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
@@ -649,14 +651,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     c.period,
                     c.description.toUpperCase(),
                     isAbonoExcedente ? '' : `$${c.amountUSD.toFixed(2)}`,
-                    formatCurrency(c.amountUSD * payment.exchangeRate)
+                    isDol ? `$ ${formatUSD(c.amountUSD)}` : formatCurrency(c.amountUSD * payment.exchangeRate)
                 ];
             });
 
-            const totalAbonadoEnDeudas = transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
-            const saldoFavorAnterior = Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
-            const saldoFavorActual = currentBalance;
-            const totalPagado = beneficiary.amount;
+            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
+const totalAbonadoEnDeudas = isDol ? transactionConcepts.reduce((sum, c) => sum + c.amountUSD, 0) : transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
+const saldoFavorAnterior = isDol ? 0 : Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
+const saldoFavorActual = isDol ? 0 : currentBalance;
+const totalPagado = isDol ? payment.totalAmount : beneficiary.amount;
 
             const data = {
                 condoName: localCompanyInfo.name || 'CONDOMINIO',
@@ -804,7 +807,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-slate-400 font-bold text-xs">{p.paymentDate?.toDate ? format(p.paymentDate.toDate(), 'dd/MM/yy') : 'N/A'}</TableCell>
-                                            <TableCell className="font-black text-white text-lg italic">Bs. {formatCurrency(p.totalAmount)}</TableCell>
+                                            <TableCell className="font-black text-white text-lg italic">{(p.paymentMethod || '').includes('usd') || (p.paymentMethod || '').includes('dolares') ? `$ ${formatUSD(p.totalAmount)} USD` : `Bs. ${formatCurrency(p.totalAmount)}`}</TableCell>
                                             <TableCell className="font-mono text-[10px] text-slate-500">{p.reference || 'N/A'}</TableCell>
                                             <TableCell className="text-right pr-8">
                                                 <div className="flex justify-end items-center gap-2">
@@ -964,6 +967,7 @@ function ReportPaymentComponent() {
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+    const isDolares = paymentMethod === 'efectivo_usd';
     
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
@@ -1167,8 +1171,8 @@ function ReportPaymentComponent() {
                 exchangeRate, 
                 paymentDate: paymentDate ? Timestamp.fromDate(paymentDate) : Timestamp.now(), 
                 paymentMethod, 
-                bank: paymentMethod === 'efectivo_bs' ? 'Efectivo' : bank, 
-                reference: paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : reference, 
+                bank: (paymentMethod === 'efectivo_bs' || isDolares) ? 'Efectivo' : bank, 
+                reference: isDolares ? 'EFECTIVO USD' : paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : reference, 
                 receiptUrl: receiptImage || "", 
                 status: 'pendiente', 
                 reportedAt: serverTimestamp() 
@@ -1193,13 +1197,13 @@ function ReportPaymentComponent() {
                 <CardContent className="p-8 space-y-10">
                     <div className="grid md:grid-cols-2 gap-8">
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Fecha Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa Bs.</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left" onClick={() => setIsBankModalOpen(true)} disabled={paymentMethod === 'efectivo_bs'}>{paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={paymentMethod === 'efectivo_bs'} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic" placeholder="6 DÍGITOS" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa Bs.</Label><Input type="number" value={isDolares ? '1.00' : (exchangeRate || '')} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem><SelectItem value="efectivo_usd">💲 Efectivo USD (Administrador)</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left" onClick={() => setIsBankModalOpen(true)} disabled={paymentMethod === 'efectivo_bs' || isDolares}>{isDolares ? 'EFECTIVO USD' : paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={paymentMethod === 'efectivo_bs' || isDolares} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic" placeholder="6 DÍGITOS" /></div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
-                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equiv. USD</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={((parseFloat(totalAmount) || 0) / (exchangeRate || 1)).toFixed(2)} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
+                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">{isDolares ? 'Monto USD $' : 'Monto Bs.'}</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className={cn("h-14 rounded-2xl bg-slate-800 border-none font-black text-2xl italic text-right pr-6", isDolares ? "text-yellow-500" : "text-white")} placeholder="0,00" /></div>
+                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">{isDolares ? 'Equiv. Bs.' : 'Equiv. USD'}</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={isDolares ? formatCurrency((parseFloat(totalAmount) || 0) * (exchangeRate || 0)) : ((parseFloat(totalAmount) || 0) / (exchangeRate || 1)).toFixed(2)} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
                         </div>
                         <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Soporte Digital (Opcional)</Label><Input type="file" accept="image/*" onChange={handleImageUpload} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
                     </div>
@@ -1309,20 +1313,20 @@ function ReportPaymentComponent() {
                                                     
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div className="space-y-1">
-                                                            <Label className="text-[8px] font-black uppercase text-slate-500">Monto (Bs.)</Label>
+                                                            <Label className="text-[8px] font-black uppercase text-slate-500">{isDolares ? 'Monto USD $' : 'Monto (Bs.)'}</Label>
                                                             <Input
                                                                 type="number"
                                                                 placeholder="0,00"
                                                                 value={line.amount || ''}
                                                                 onChange={(e) => updateDistributionLine(row.id, line.id, { amount: parseFloat(e.target.value) || 0 })}
-                                                                className="h-10 rounded-xl bg-slate-700 border-none text-white font-black text-right"
+                                                                className={cn("h-10 rounded-xl bg-slate-700 border-none font-black text-right", isDolares ? "text-yellow-500" : "text-white")}
                                                             />
                                                         </div>
                                                         <div className="space-y-1">
-                                                            <Label className="text-[8px] font-black uppercase text-slate-500">Equivalente (USD)</Label>
+                                                            <Label className="text-[8px] font-black uppercase text-slate-500">{isDolares ? 'Equiv. Bs.' : 'Equiv. USD'}</Label>
                                                             <div className="h-10 rounded-xl bg-slate-700/50 flex items-center justify-end px-3">
                                                                 <span className="text-emerald-400 font-black text-sm">
-                                                                    ${formatUSD((line.amount || 0) / (exchangeRate || 1))}
+                                                                    {isDolares ? `Bs. ${formatCurrency((line.amount || 0) * (exchangeRate || 0))}` : `$${formatUSD((line.amount || 0) / (exchangeRate || 1))}`}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -1345,7 +1349,7 @@ function ReportPaymentComponent() {
                 </CardContent>
                 <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>
-                        Diferencia: Bs. {formatCurrency(balance)}
+                        Diferencia: {isDolares ? `$ ${formatUSD(Math.abs(balance))}` : `Bs. ${formatCurrency(Math.abs(balance))}`}
                     </div>
                     <Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">
                         {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />}

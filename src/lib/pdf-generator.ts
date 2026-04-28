@@ -27,6 +27,12 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
 
+  // ✅ Detectar si es pago en dólares
+  const isDolares = (paymentData.method || '').toLowerCase().includes('usd') || 
+                    (paymentData.method || '').toLowerCase().includes('dolares');
+  const monedaSimbolo = isDolares ? '$' : 'Bs.';
+  const monedaTexto = isDolares ? 'USD' : 'Bs.';
+
   // 1. Encabezado Institucional
   doc.setFillColor(28, 35, 51); 
   doc.rect(0, 0, 210, 28, 'F');
@@ -57,7 +63,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('RECIBO DE PAGO', 105, 48, { align: 'center' });
+  doc.text(isDolares ? 'RECIBO DE PAGO - DÓLARES USD' : 'RECIBO DE PAGO', 105, 48, { align: 'center' });
 
   // 4. Datos de la Transacción
   doc.setFontSize(9);
@@ -66,11 +72,11 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   const details = [
     { label: 'Beneficiario:', value: paymentData.ownerName },
     { label: 'Propiedad:', value: paymentData.property || 'N/A' },
-    { label: 'Método de pago:', value: paymentData.method || 'N/A' },
+    { label: 'Método de pago:', value: isDolares ? 'EFECTIVO USD' : (paymentData.method || 'N/A') },
     { label: 'Banco Emisor:', value: paymentData.bank || 'N/A' },
     { label: 'N° de Referencia Bancaria:', value: paymentData.reference || 'N/A' },
     { label: 'Fecha del pago:', value: paymentData.date },
-    { label: 'Tasa de Cambio Aplicada:', value: `Bs. ${paymentData.rate} por USD` }
+    { label: isDolares ? 'Moneda:' : 'Tasa de Cambio Aplicada:', value: isDolares ? 'DÓLARES ESTADOUNIDENSES (USD)' : `Bs. ${paymentData.rate} por USD` }
   ];
 
   details.forEach(item => {
@@ -84,10 +90,10 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   // 5. Tabla de Conceptos
   autoTable(doc, {
     startY: 110,
-    head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
+    head: [[isDolares ? 'Período' : 'Período', isDolares ? 'Concepto (Propiedad)' : 'Concepto (Propiedad)', isDolares ? 'Monto USD ($)' : 'Monto ($)', isDolares ? 'Monto Pagado (USD)' : 'Monto Pagado (Bs)']],
     body: paymentData.concepts,
     headStyles: { 
-        fillColor: [30, 80, 220], 
+        fillColor: isDolares ? [15, 23, 42] : [30, 80, 220], 
         textColor: 255, 
         fontStyle: 'bold',
         fontSize: 8,
@@ -111,10 +117,10 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   doc.setFont('helvetica', 'normal');
   
   const summary = [
-    { label: 'Saldo a Favor Anterior:', value: `Bs. ${paymentData.prevBalance || '0,00'}` },
-    { label: 'Monto del Pago Recibido:', value: `Bs. ${paymentData.receivedAmount || '0,00'}` },
-    { label: 'Total Abonado en Deudas:', value: `Bs. ${paymentData.totalDebtPaid || '0,00'}` },
-    { label: 'Saldo a Favor Actual:', value: `Bs. ${paymentData.currentBalance || '0,00'}` }
+    { label: 'Saldo a Favor Anterior:', value: `${monedaSimbolo} ${isDolares ? paymentData.prevBalance || '0.00' : paymentData.prevBalance || '0,00'}` },
+    { label: 'Monto del Pago Recibido:', value: `${monedaSimbolo} ${isDolares ? paymentData.receivedAmount || '0.00' : paymentData.receivedAmount || '0,00'}` },
+    { label: 'Total Abonado en Deudas:', value: `${monedaSimbolo} ${isDolares ? paymentData.totalDebtPaid || '0.00' : paymentData.totalDebtPaid || '0,00'}` },
+    { label: 'Saldo a Favor Actual:', value: `${monedaSimbolo} ${isDolares ? paymentData.currentBalance || '0.00' : paymentData.currentBalance || '0,00'}` }
   ];
 
   summary.forEach(item => {
@@ -127,7 +133,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text(`TOTAL PAGADO:`, labelX, finalY, { align: 'right' });
-  doc.text(`Bs. ${paymentData.totalDebtPaid}`, rightAlignX, finalY, { align: 'right' });
+  doc.text(`${monedaSimbolo} ${isDolares ? paymentData.totalDebtPaid : paymentData.totalDebtPaid}`, rightAlignX, finalY, { align: 'right' });
 
   // 7. Pie de Página
   const footerY = 240;
@@ -151,7 +157,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   doc.text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', 105, footerY + 23, { align: 'center' });
 
   // 8. Código de Barras al final centrado
-  const barcodeValue = paymentData.receiptNumber || `REC-${Date.now()}`;
+  const barcodeValue = paymentData.receiptNumber || (isDolares ? `USD-${Date.now()}` : `REC-${Date.now()}`);
   try {
       const canvas = document.createElement('canvas');
       JsBarcode(canvas, barcodeValue, {
@@ -173,7 +179,8 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
     return doc.output('blob');
   } else {
     const safeName = (paymentData.ownerName || 'Beneficiario').replace(/[^a-z0-9]/gi, '_').toUpperCase();
-    doc.save(`Recibo_Pago_${safeName}.pdf`);
+    const prefix = isDolares ? 'Recibo_USD_' : 'Recibo_Pago_';
+    doc.save(`${prefix}${safeName}.pdf`);
     return null;
   }
 };
@@ -193,6 +200,7 @@ export interface CashReceiptData {
   reference?: string;
   observations?: string;
   concepts?: string[][];
+  isDolares?: boolean;
 }
 
 export const generateCashReceipt = async (
@@ -209,10 +217,15 @@ export const generateCashReceipt = async (
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
 
+  // ✅ Detectar si es pago en dólares
+  const isDolares = data.isDolares || (data.reference || '').toUpperCase().includes('USD');
+  const monedaSimbolo = isDolares ? '$' : 'Bs.';
+  const monedaTexto = isDolares ? 'USD' : 'Bs.';
+
   // ============================================
   // 1. ENCABEZADO INSTITUCIONAL
   // ============================================
-  doc.setFillColor(15, 23, 42);
+  doc.setFillColor(isDolares ? 28 : 15, isDolares ? 35 : 23, isDolares ? 51 : 42);
   doc.rect(0, 0, 210, 35, 'F');
 
   // Logo
@@ -256,7 +269,7 @@ export const generateCashReceipt = async (
   doc.setTextColor(15, 23, 42);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('COMPROBANTE DE INGRESO EN EFECTIVO', 105, 55, { align: 'center' });
+  doc.text(isDolares ? 'COMPROBANTE DE INGRESO EN DÓLARES USD' : 'COMPROBANTE DE INGRESO EN EFECTIVO', 105, 55, { align: 'center' });
 
   // Línea decorativa
   doc.setDrawColor(242, 135, 5);
@@ -282,9 +295,9 @@ export const generateCashReceipt = async (
     { label: 'Propietario:', value: data.ownerName },
     { label: 'Propiedad:', value: data.property },
     { label: 'Fecha de Pago:', value: data.paymentDate },
-    { label: 'Tasa de Cambio Aplicada:', value: `Bs. ${formatCurrency(data.exchangeRate)} por USD` },
-    { label: 'Referencia:', value: data.reference || 'EFECTIVO' },
-    { label: 'Cuenta de Destino:', value: 'CAJA PRINCIPAL' }
+    { label: isDolares ? 'Moneda:' : 'Tasa de Cambio Aplicada:', value: isDolares ? 'DÓLARES ESTADOUNIDENSES (USD)' : `Bs. ${formatCurrency(data.exchangeRate)} por USD` },
+    { label: 'Referencia:', value: data.reference || (isDolares ? 'EFECTIVO USD' : 'EFECTIVO') },
+    { label: 'Cuenta de Destino:', value: isDolares ? 'CUENTA EN DÓLARES' : 'CAJA PRINCIPAL' }
   ];
 
   doc.setFontSize(9);
@@ -310,10 +323,10 @@ export const generateCashReceipt = async (
   if (data.concepts && data.concepts.length > 0) {
     autoTable(doc, {
       startY: currentY,
-      head: [['Período', 'Concepto', 'Monto ($)', 'Monto (Bs.)']],
+      head: [['Período', 'Concepto', isDolares ? 'Monto (USD)' : 'Monto ($)', isDolares ? 'Monto (USD)' : 'Monto (Bs.)']],
       body: data.concepts,
       headStyles: {
-        fillColor: [15, 23, 42],
+        fillColor: isDolares ? [28, 35, 51] : [15, 23, 42],
         textColor: 255,
         fontStyle: 'bold',
         fontSize: 9,
@@ -334,7 +347,7 @@ export const generateCashReceipt = async (
   } else {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text('Pago en efectivo registrado en CAJA PRINCIPAL.', margin, currentY);
+    doc.text(isDolares ? 'Pago en dólares registrado en Cuenta USD.' : 'Pago en efectivo registrado en CAJA PRINCIPAL.', margin, currentY);
     currentY += 10;
   }
 
@@ -345,7 +358,7 @@ export const generateCashReceipt = async (
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text('MONTO TOTAL RECIBIDO:', margin + 5, currentY + 8);
-  doc.text(`Bs. ${formatCurrency(data.amount)}`, pageWidth - margin - 5, currentY + 8, { align: 'right' });
+  doc.text(isDolares ? `$ ${formatUSD(data.amount)} USD` : `Bs. ${formatCurrency(data.amount)}`, pageWidth - margin - 5, currentY + 8, { align: 'right', maxWidth: 80 });
 
   currentY += 20;
 
@@ -386,20 +399,16 @@ export const generateCashReceipt = async (
   doc.setFont('helvetica', 'italic');
   doc.setTextColor(120, 120, 120);
   doc.text('Documento generado electrónicamente por EFASCondoSys', 105, footerY + 6, { align: 'center' });
-  doc.text('Comprobante de ingreso en efectivo - Válido sin firma manuscrita', 105, footerY + 12, { align: 'center' });
+  doc.text(isDolares ? 'Comprobante de ingreso en dólares USD - Válido sin firma manuscrita' : 'Comprobante de ingreso en efectivo - Válido sin firma manuscrita', 105, footerY + 12, { align: 'center' });
 
   // ============================================
   // 7. CÓDIGO DE BARRAS AL FINAL CENTRADO
   // ============================================
-  const barcodeValue = data.receiptNumber || `CASH-${Date.now()}`;
+  const barcodeValue = data.receiptNumber || (isDolares ? `USD-${Date.now()}` : `CASH-${Date.now()}`);
   try {
     const canvas = document.createElement('canvas');
     JsBarcode(canvas, barcodeValue, {
-      format: "CODE128",
-      height: 40,
-      width: 2,
-      displayValue: false,
-      margin: 0,
+      format: "CODE128", height: 40, width: 2, displayValue: false, margin: 0,
     });
     const barcodeDataUrl = canvas.toDataURL("image/png");
     doc.addImage(barcodeDataUrl, 'PNG', 80, footerY + 18, 50, 12);
@@ -419,7 +428,8 @@ export const generateCashReceipt = async (
     return doc.output('blob');
   } else {
     const safeName = (data.ownerName || 'Propietario').replace(/[^a-z0-9]/gi, '_').toUpperCase();
-    doc.save(`Comprobante_Efectivo_${safeName}.pdf`);
+    const prefix = isDolares ? 'Comprobante_USD_' : 'Comprobante_Efectivo_';
+    doc.save(`${prefix}${safeName}.pdf`);
     return null;
   }
 };
