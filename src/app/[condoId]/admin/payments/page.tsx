@@ -106,6 +106,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     const [rejectionReason, setRejectionReason] = useState('');
     const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
     const [localCompanyInfo, setLocalCompanyInfo] = useState<any>(null);
+    const [cuentasDolares, setCuentasDolares] = useState<any[]>([]);
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
@@ -126,6 +127,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment)));
             setLoading(false);
         });
+    }, [condoId]);
+    useEffect(() => {
+        if (!condoId) return;
+        const q = query(collection(db, 'condominios', condoId, 'cuentas'), where('tipo', '==', 'dolares'));
+        return onSnapshot(q, (snap) => setCuentasDolares(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     }, [condoId]);
 
     const filteredPayments = useMemo(() => {
@@ -148,8 +154,12 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const method = (payment.paymentMethod || "").toLowerCase().trim();
                 const isDolares = method.includes('usd') || method.includes('dolares');
                 const isDigital = method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil');
-                const targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
-                const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
+                let targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
+                let targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
+                if (isDolares && cuentasDolares.length > 0) {
+                    targetAccountId = cuentasDolares[0].id;
+                    targetAccountName = cuentasDolares[0].nombre;
+                }
                 const monthId = format(payment.paymentDate.toDate(), 'yyyy-MM');
 
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
@@ -534,12 +544,14 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
             
             const transactionConcepts = ownerConcepts.filter(c => {
+            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
                 if (c.type === 'abono' && !c.description.includes('EXCEDENTE')) {
                     return false;
                 }
                 return true;
             });
 
+            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
             const concepts = transactionConcepts.map(c => {
                 const isAbonoExcedente = c.type === 'abono' && c.description.includes('EXCEDENTE');
                 return [
@@ -550,7 +562,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 ];
             });
 
-            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
 const totalAbonadoEnDeudas = isDol ? transactionConcepts.reduce((sum, c) => sum + c.amountUSD, 0) : transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
 const saldoFavorAnterior = isDol ? 0 : Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
 const saldoFavorActual = isDol ? 0 : currentBalance;
@@ -639,11 +650,13 @@ const totalPagado = isDol ? payment.totalAmount : beneficiary.amount;
             const currentBalance = ownerData ? (ownerData.balance || 0) : 0;
             
             const transactionConcepts = ownerConcepts.filter(c => {
+            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
                 if (c.type === 'abono' && !c.description.includes('EXCEDENTE')) {
                     return false;
                 }
                 return true;
             });
+            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
 
             const concepts = transactionConcepts.map(c => {
                 const isAbonoExcedente = c.type === 'abono' && c.description.includes('EXCEDENTE');
@@ -655,7 +668,6 @@ const totalPagado = isDol ? payment.totalAmount : beneficiary.amount;
                 ];
             });
 
-            const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
 const totalAbonadoEnDeudas = isDol ? transactionConcepts.reduce((sum, c) => sum + c.amountUSD, 0) : transactionConcepts.reduce((sum, c) => sum + (c.amountUSD * payment.exchangeRate), 0);
 const saldoFavorAnterior = isDol ? 0 : Math.max(0, currentBalance - (beneficiary.amount - totalAbonadoEnDeudas));
 const saldoFavorActual = isDol ? 0 : currentBalance;

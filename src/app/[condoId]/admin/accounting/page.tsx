@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { PDFContent } from "@/components/BankStatementPDF";
 import { downloadPDF } from "@/lib/print-pdf";
@@ -39,7 +39,6 @@ const formatCurrency = (amount: number): string => {
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-// ID MAESTRO ACTUALIZADO PARA EFAS CONDOSYS
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -56,19 +55,26 @@ const AccountingPage = () => {
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
-    // Cargar datos del condominio desde Firestore en la ruta: condominios/condo_01
+    // ✅ Helper para detectar cuentas en dólares y formatear montos
+    const isDolarAccount = (accountId: string): boolean => {
+        const acc = accounts.find(a => a.id === accountId);
+        return acc?.tipo === 'dolares';
+    };
+
+    const formatMoney = (amount: number, accountId?: string): string => {
+        if (accountId && isDolarAccount(accountId)) return `$ ${formatCurrency(amount)}`;
+        return `Bs. ${formatCurrency(amount)}`;
+    };
+
     useEffect(() => {
         if (!workingCondoId || workingCondoId === "[condoId]") return;
         
         const fetchCondominioData = async () => {
             try {
-                // Ruta correcta: condominios/condo_01
                 const docRef = doc(db, 'condominios', workingCondoId);
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     setCondominioData(docSnap.data());
-                } else {
-                    console.error("No se encontró el documento en:", 'condominios', workingCondoId);
                 }
             } catch (error) {
                 console.error("Error cargando datos del condominio:", error);
@@ -180,7 +186,17 @@ const AccountingPage = () => {
                     let targetAccountName = "";
 
                     const method = (p.paymentMethod || "").toLowerCase().trim();
-                    if (method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil')) {
+                    if (method.includes('usd') || method.includes('dolares')) {
+                        // ✅ Buscar cuenta en dólares
+                        const cuentasSnap = await getDocs(query(
+                            collection(db, 'condominios', workingCondoId, 'cuentas'),
+                            where('tipo', '==', 'dolares')
+                        ));
+                        if (!cuentasSnap.empty) {
+                            targetAccountId = cuentasSnap.docs[0].id;
+                            targetAccountName = cuentasSnap.docs[0].data().nombre;
+                        }
+                    } else if (method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil')) {
                         targetAccountId = BDV_ACCOUNT_ID;
                         targetAccountName = "BANCO DE VENEZUELA";
                     } else if (method.includes('efectivo')) {
@@ -195,7 +211,8 @@ const AccountingPage = () => {
 
                     const newTxRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
                     transaction.set(newTxRef, {
-                        monto: p.totalAmount, 
+                        monto: method.includes('usd') || method.includes('dolares') ? 0 : p.totalAmount,
+                        montoUSD: method.includes('usd') || method.includes('dolares') ? p.totalAmount : 0,
                         tipo: 'ingreso', 
                         cuentaId: targetAccountId, 
                         nombreCuenta: targetAccountName,
@@ -203,6 +220,7 @@ const AccountingPage = () => {
                         referencia: p.reference || 'S/R', 
                         fecha: p.paymentDate, 
                         sourcePaymentId: pDoc.id,
+                        tipoCuenta: method.includes('usd') || method.includes('dolares') ? 'dolares' : 'bs',
                         createdAt: serverTimestamp(), 
                         createdBy: user?.email
                     });
@@ -212,7 +230,7 @@ const AccountingPage = () => {
                         periodo: monthId,
                         saldoBancarioReal: increment(targetAccountName === "BANCO DE VENEZUELA" ? p.totalAmount : 0),
                         saldoCajaReal: increment(targetAccountName === "CAJA PRINCIPAL" ? p.totalAmount : 0),
-                        totalIngresosMes: increment(p.totalAmount),
+                        totalIngresosMes: increment(method.includes('usd') || method.includes('dolares') ? 0 : p.totalAmount),
                         updatedAt: serverTimestamp()
                     }, { merge: true });
                     
@@ -236,7 +254,6 @@ const AccountingPage = () => {
 
         const periodLabel = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
         
-        // Usar los datos del condominio desde Firestore (ruta: condominios/condo_01)
         const infoParaPDF = {
             nombre: condominioData?.nombre || condominioData?.name || account.nombre,
             rif: condominioData?.rif || "J-40587208-0",
@@ -333,10 +350,10 @@ const AccountingPage = () => {
                                     {generalLedger.map(acc => (
                                         <TableRow key={acc.accountId} className="font-medium hover:bg-white/5 transition-colors border-white/5">
                                             <TableCell className="font-black px-8 py-6 uppercase text-xs text-white italic">{acc.accountName}</TableCell>
-                                            <TableCell className="text-right text-slate-500 font-bold italic">Bs. {formatCurrency(acc.startBalance)}</TableCell>
-                                            <TableCell className="text-right text-emerald-500 font-black italic">+{formatCurrency(acc.totalCredit)}</TableCell>
-                                            <TableCell className="text-right text-red-500 font-black italic">-{formatCurrency(acc.totalDebit)}</TableCell>
-                                            <TableCell className="text-right font-black italic text-lg pr-8 text-white">Bs. {formatCurrency(acc.endBalance)}</TableCell>
+                                            <TableCell className="text-right text-slate-500 font-bold italic">{formatMoney(acc.startBalance, acc.accountId)}</TableCell>
+                                            <TableCell className="text-right text-emerald-500 font-black italic">{formatMoney(acc.totalCredit, acc.accountId)}</TableCell>
+                                            <TableCell className="text-right text-red-500 font-black italic">{formatMoney(acc.totalDebit, acc.accountId)}</TableCell>
+                                            <TableCell className="text-right font-black italic text-lg pr-8 text-white">{formatMoney(acc.endBalance, acc.accountId)}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -347,6 +364,7 @@ const AccountingPage = () => {
                 
                 {accounts.map(acc => {
                     const { transactions, startBalance } = periodData[acc.id] || { transactions: [], startBalance: 0 };
+                    const esDolares = acc.tipo === 'dolares';
                     return (
                         <TabsContent key={acc.id} value={acc.id} className="mt-4">
                             <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-slate-900 border border-white/5">
@@ -367,16 +385,31 @@ const AccountingPage = () => {
                                 </CardHeader>
                                 <CardContent className="p-0">
                                     <Table>
-                                        <TableHeader className="bg-slate-950/50"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-white/40 italic">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción / Concepto</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Ingreso (+)</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Egreso (-)</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-white/40 italic">Saldo Progresivo</TableHead></TableRow></TableHeader>
+                                        <TableHeader className="bg-slate-950/50"><TableRow className="border-white/5">
+                                            <TableHead className="px-8 py-6 text-[10px] font-black uppercase text-white/40 italic">Fecha</TableHead>
+                                            <TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción / Concepto</TableHead>
+                                            <TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Ingreso (+)</TableHead>
+                                            <TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Egreso (-)</TableHead>
+                                            <TableHead className="text-right text-[10px] font-black uppercase pr-8 text-white/40 italic">Saldo Progresivo</TableHead>
+                                        </TableRow></TableHeader>
                                         <TableBody>
-                                            <TableRow className="bg-white/5 text-[10px] font-black text-white/30 italic"><TableCell colSpan={4} className="px-8 py-4 uppercase">SALDO INICIAL AL 01 DE ESTE MES</TableCell><TableCell className="text-right pr-8">Bs. {formatCurrency(startBalance)}</TableCell></TableRow>
+                                            <TableRow className="bg-white/5 text-[10px] font-black text-white/30 italic">
+                                                <TableCell colSpan={4} className="px-8 py-4 uppercase">SALDO INICIAL AL 01 DE ESTE MES</TableCell>
+                                                <TableCell className="text-right pr-8">{formatMoney(startBalance, acc.id)}</TableCell>
+                                            </TableRow>
                                             {transactions.map((tx, i) => (
                                                 <TableRow key={i} className="hover:bg-white/5 transition-colors border-white/5">
                                                     <TableCell className="px-8 py-5 font-bold text-white/40 text-xs italic">{format(tx.date, 'dd/MM/yy')}</TableCell>
                                                     <TableCell className="font-black text-white uppercase italic text-xs leading-tight">{tx.descripcion}</TableCell>
-                                                    <TableCell className="text-right text-emerald-500 font-black italic">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
-                                                    <TableCell className="text-right text-red-500 font-black italic">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
-                                                    <TableCell className="text-right font-black pr-8 text-white italic">Bs. {formatCurrency(tx.balance)}</TableCell>
+                                                    <TableCell className="text-right text-emerald-500 font-black italic">
+                                                        {tx.credit ? (esDolares ? `+$ ${formatCurrency(tx.credit)}` : `+Bs. ${formatCurrency(tx.credit)}`) : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-red-500 font-black italic">
+                                                        {tx.debit ? (esDolares ? `-$ ${formatCurrency(tx.debit)}` : `-Bs. ${formatCurrency(tx.debit)}`) : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-black pr-8 text-white italic">
+                                                        {esDolares ? `$ ${formatCurrency(tx.balance)}` : `Bs. ${formatCurrency(tx.balance)}`}
+                                                    </TableCell>
                                                 </TableRow>
                                             ))}
                                             {transactions.length === 0 && (
