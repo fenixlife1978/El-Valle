@@ -4,8 +4,8 @@ import { PDFContent } from "@/components/BankStatementPDF";
 import { downloadPDF } from "@/lib/print-pdf";
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp, query, orderBy, doc, serverTimestamp, increment, runTransaction, getDocs, where, getDoc } from 'firebase/firestore';
-import { RefreshCw, History, Zap, Loader2, BookCopy, Download, Share2 } from 'lucide-react';
+import { collection, onSnapshot, Timestamp, query, orderBy, doc, serverTimestamp, increment, runTransaction, getDocs, where, getDoc, updateDoc } from 'firebase/firestore';
+import { RefreshCw, History, Zap, Loader2, BookCopy, Download, Share2, ArrowUp, ArrowDown } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -27,9 +27,20 @@ interface Transaction {
     nombreCuenta: string; 
     descripcion: string; 
     referencia?: string; 
-    sourcePaymentId?: string; 
+    sourcePaymentId?: string;
+    orden?: number;
 }
-interface ProcessedTransaction { date: Date; descripcion: string; reference: string; credit: number; debit: number; balance: number; }
+interface ProcessedTransaction { 
+    id: string;
+    date: Date; 
+    descripcion: string; 
+    reference: string; 
+    credit: number; 
+    debit: number; 
+    balance: number;
+    orden: number;
+    txIndex: number;
+}
 
 const formatCurrency = (amount: number): string => {
     if (typeof amount !== 'number') return '0,00';
@@ -51,11 +62,11 @@ const AccountingPage = () => {
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
     const [condominioData, setCondominioData] = useState<any>(null);
+    const [movingTx, setMovingTx] = useState<string | null>(null);
     
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
-    // ✅ Helper para detectar cuentas en dólares y formatear montos
     const isDolarAccount = (accountId: string): boolean => {
         const acc = accounts.find(a => a.id === accountId);
         return acc?.tipo === 'dolares';
@@ -95,10 +106,17 @@ const AccountingPage = () => {
         });
 
         const unsubTx = onSnapshot(query(collection(db, 'condominios', workingCondoId, 'transacciones'), orderBy('fecha', 'asc')), snap => {
-            setAllTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)).map(tx => ({
+            const txs = snap.docs.map(d => ({ id: d.id, ...d.data() } as any)).map(tx => ({
                 ...tx,
-                descripcion: tx.descripcion || tx.description || 'SIN CONCEPTO'
-            })));
+                descripcion: tx.descripcion || tx.description || 'SIN CONCEPTO',
+                orden: tx.orden || 0
+            }));
+            txs.sort((a, b) => {
+                const dateDiff = a.fecha.toDate().getTime() - b.fecha.toDate().getTime();
+                if (dateDiff !== 0) return dateDiff;
+                return (a.orden || 0) - (b.orden || 0);
+            });
+            setAllTransactions(txs);
             setLoading(false);
         }, (error) => {
             console.error("Accounting: Error cargando transacciones:", error.message);
@@ -115,15 +133,19 @@ const AccountingPage = () => {
 
         accounts.forEach(acc => { accountData[acc.id] = { transactions: [], startBalance: 0, endBalance: 0 }; });
 
+        let globalIndex = 0;
         allTransactions.forEach(tx => {
             const date = tx.fecha.toDate();
             const entry: ProcessedTransaction = { 
+                id: tx.id,
                 date, 
                 descripcion: tx.descripcion || 'SIN CONCEPTO', 
                 reference: tx.referencia || 'N/A', 
                 credit: tx.tipo === 'ingreso' ? tx.monto : 0, 
                 debit: tx.tipo === 'egreso' ? tx.monto : 0, 
-                balance: 0 
+                balance: 0,
+                orden: tx.orden || 0,
+                txIndex: globalIndex++
             };
             if (accountData[tx.cuentaId]) {
                 if (date < fromDate) accountData[tx.cuentaId].startBalance += (entry.credit - entry.debit);
@@ -133,7 +155,11 @@ const AccountingPage = () => {
 
         Object.keys(accountData).forEach(accId => {
             const acc = accountData[accId];
-            acc.transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+            acc.transactions.sort((a, b) => {
+                const dateDiff = a.date.getTime() - b.date.getTime();
+                if (dateDiff !== 0) return dateDiff;
+                return a.orden - b.orden;
+            });
             let running = acc.startBalance;
             acc.transactions.forEach(tx => { running += tx.credit - tx.debit; tx.balance = running; });
             acc.endBalance = running;
@@ -151,6 +177,72 @@ const AccountingPage = () => {
             };
         });
     }, [accounts, periodData]);
+
+    const handleMoveUp = async (txId: string, cuentaId: string) => {
+        if (!workingCondoId) return;
+        const data = periodData[cuentaId];
+        if (!data) return;
+        
+        const currentIndex = data.transactions.findIndex(tx => tx.id === txId);
+        if (currentIndex <= 0) return;
+        
+        const currentTx = data.transactions[currentIndex];
+        const prevTx = data.transactions[currentIndex - 1];
+        
+        if (currentTx.date.getTime() !== prevTx.date.getTime()) {
+            toast({ variant: 'destructive', title: "No permitido", description: "Solo se pueden reordenar asientos de la misma fecha." });
+            return;
+        }
+        
+        setMovingTx(txId);
+        try {
+            const newOrdenCurrent = (prevTx.orden || 0) - 1;
+            const newOrdenPrev = (currentTx.orden || 0) + 1;
+            
+            await updateDoc(doc(db, 'condominios', workingCondoId, 'transacciones', currentTx.id), { orden: newOrdenCurrent });
+            await updateDoc(doc(db, 'condominios', workingCondoId, 'transacciones', prevTx.id), { orden: newOrdenPrev });
+            
+            toast({ title: "Asiento movido", description: "Los saldos se han recalculado automáticamente." });
+        } catch (error) {
+            console.error("Error moviendo asiento:", error);
+            toast({ variant: 'destructive', title: "Error", description: "No se pudo mover el asiento." });
+        } finally {
+            setMovingTx(null);
+        }
+    };
+
+    const handleMoveDown = async (txId: string, cuentaId: string) => {
+        if (!workingCondoId) return;
+        const data = periodData[cuentaId];
+        if (!data) return;
+        
+        const currentIndex = data.transactions.findIndex(tx => tx.id === txId);
+        if (currentIndex < 0 || currentIndex >= data.transactions.length - 1) return;
+        
+        const currentTx = data.transactions[currentIndex];
+        const nextTx = data.transactions[currentIndex + 1];
+        
+        if (currentTx.date.getTime() !== nextTx.date.getTime()) {
+            toast({ variant: 'destructive', title: "No permitido", description: "Solo se pueden reordenar asientos de la misma fecha." });
+            return;
+        }
+        
+        setMovingTx(txId);
+        try {
+            const newOrdenCurrent = (nextTx.orden || 0) + 1;
+            const newOrdenNext = (currentTx.orden || 0) - 1;
+            
+            await updateDoc(doc(db, 'condominios', workingCondoId, 'transacciones', currentTx.id), { orden: newOrdenCurrent });
+            await updateDoc(doc(db, 'condominios', workingCondoId, 'transacciones', nextTx.id), { orden: newOrdenNext });
+            
+            toast({ title: "Asiento movido", description: "Los saldos se han recalculado automáticamente." });
+        } catch (error) {
+            console.error("Error moviendo asiento:", error);
+            toast({ variant: 'destructive', title: "Error", description: "No se pudo mover el asiento." });
+        } finally {
+            setMovingTx(null);
+        }
+    };
 
     const handleSyncPeriod = async () => {
         if (!workingCondoId) return;
@@ -187,7 +279,6 @@ const AccountingPage = () => {
 
                     const method = (p.paymentMethod || "").toLowerCase().trim();
                     if (method.includes('usd') || method.includes('dolares')) {
-                        // ✅ Buscar cuenta en dólares
                         const cuentasSnap = await getDocs(query(
                             collection(db, 'condominios', workingCondoId, 'cuentas'),
                             where('tipo', '==', 'dolares')
@@ -221,6 +312,7 @@ const AccountingPage = () => {
                         fecha: p.paymentDate, 
                         sourcePaymentId: pDoc.id,
                         tipoCuenta: method.includes('usd') || method.includes('dolares') ? 'dolares' : 'bs',
+                        orden: Date.now(),
                         createdAt: serverTimestamp(), 
                         createdBy: user?.email
                     });
@@ -248,7 +340,7 @@ const AccountingPage = () => {
         } finally { setIsSyncing(false); }
     };
 
-    const handleExportDailyBook = async (account: Account, output: 'download' | 'share' = 'download') => {
+    const handleExportDailyBook = async (account: Account) => {
         const data = periodData[account.id];
         if (!data) return;
 
@@ -374,11 +466,8 @@ const AccountingPage = () => {
                                             <BookCopy className="text-primary"/> Libro Diario: {acc.nombre}
                                         </CardTitle>
                                         <div className="flex gap-2">
-                                            <Button onClick={() => handleExportDailyBook(acc, 'download')} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] h-10 bg-white/5 hover:bg-white/10 italic">
+                                            <Button onClick={() => handleExportDailyBook(acc)} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] h-10 bg-white/5 hover:bg-white/10 italic">
                                                 <Download className="mr-2 h-4 w-4" /> Exportar PDF
-                                            </Button>
-                                            <Button onClick={() => handleExportDailyBook(acc, 'share')} variant="secondary" className="rounded-xl bg-primary text-slate-900 h-10 font-black uppercase text-[10px] italic">
-                                                <Share2 className="mr-2 h-4 w-4" /> Compartir
                                             </Button>
                                         </div>
                                     </div>
@@ -386,7 +475,8 @@ const AccountingPage = () => {
                                 <CardContent className="p-0">
                                     <Table>
                                         <TableHeader className="bg-slate-950/50"><TableRow className="border-white/5">
-                                            <TableHead className="px-8 py-6 text-[10px] font-black uppercase text-white/40 italic">Fecha</TableHead>
+                                            <TableHead className="w-12 px-4 py-6 text-[10px] font-black uppercase text-white/40 italic">Ord.</TableHead>
+                                            <TableHead className="px-4 py-6 text-[10px] font-black uppercase text-white/40 italic">Fecha</TableHead>
                                             <TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción / Concepto</TableHead>
                                             <TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Ingreso (+)</TableHead>
                                             <TableHead className="text-right text-[10px] font-black uppercase text-white/40 italic">Egreso (-)</TableHead>
@@ -394,26 +484,57 @@ const AccountingPage = () => {
                                         </TableRow></TableHeader>
                                         <TableBody>
                                             <TableRow className="bg-white/5 text-[10px] font-black text-white/30 italic">
-                                                <TableCell colSpan={4} className="px-8 py-4 uppercase">SALDO INICIAL AL 01 DE ESTE MES</TableCell>
+                                                <TableCell colSpan={5} className="px-4 py-4 uppercase">SALDO INICIAL AL 01 DE ESTE MES</TableCell>
                                                 <TableCell className="text-right pr-8">{formatMoney(startBalance, acc.id)}</TableCell>
                                             </TableRow>
-                                            {transactions.map((tx, i) => (
-                                                <TableRow key={i} className="hover:bg-white/5 transition-colors border-white/5">
-                                                    <TableCell className="px-8 py-5 font-bold text-white/40 text-xs italic">{format(tx.date, 'dd/MM/yy')}</TableCell>
-                                                    <TableCell className="font-black text-white uppercase italic text-xs leading-tight">{tx.descripcion}</TableCell>
-                                                    <TableCell className="text-right text-emerald-500 font-black italic">
-                                                        {tx.credit ? (esDolares ? `+$ ${formatCurrency(tx.credit)}` : `+Bs. ${formatCurrency(tx.credit)}`) : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-right text-red-500 font-black italic">
-                                                        {tx.debit ? (esDolares ? `-$ ${formatCurrency(tx.debit)}` : `-Bs. ${formatCurrency(tx.debit)}`) : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-black pr-8 text-white italic">
-                                                        {esDolares ? `$ ${formatCurrency(tx.balance)}` : `Bs. ${formatCurrency(tx.balance)}`}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {transactions.map((tx, i) => {
+                                                const canMoveUp = i > 0 && tx.date.getTime() === transactions[i - 1]?.date?.getTime();
+                                                const canMoveDown = i < transactions.length - 1 && tx.date.getTime() === transactions[i + 1]?.date?.getTime();
+                                                const isMoving = movingTx === tx.id;
+                                                return (
+                                                    <TableRow key={tx.id || i} className="hover:bg-white/5 transition-colors border-white/5 group">
+                                                        <TableCell className="px-4 py-5">
+                                                            <div className="flex flex-col gap-0.5">
+                                                                {canMoveUp && (
+                                                                    <Button 
+                                                                        variant="ghost" 
+                                                                        size="icon" 
+                                                                        className="h-5 w-5 text-white/20 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                        onClick={() => handleMoveUp(tx.id, acc.id)}
+                                                                        disabled={isMoving}
+                                                                    >
+                                                                        {isMoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUp className="h-3 w-3" />}
+                                                                    </Button>
+                                                                )}
+                                                                {canMoveDown && (
+                                                                    <Button 
+                                                                        variant="ghost" 
+                                                                        size="icon" 
+                                                                        className="h-5 w-5 text-white/20 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                        onClick={() => handleMoveDown(tx.id, acc.id)}
+                                                                        disabled={isMoving}
+                                                                    >
+                                                                        {isMoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDown className="h-3 w-3" />}
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="px-4 py-5 font-bold text-white/40 text-xs italic">{format(tx.date, 'dd/MM/yy')}</TableCell>
+                                                        <TableCell className="font-black text-white uppercase italic text-xs leading-tight">{tx.descripcion}</TableCell>
+                                                        <TableCell className="text-right text-emerald-500 font-black italic">
+                                                            {tx.credit ? (esDolares ? `+$ ${formatCurrency(tx.credit)}` : `+Bs. ${formatCurrency(tx.credit)}`) : '-'}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-red-500 font-black italic">
+                                                            {tx.debit ? (esDolares ? `-$ ${formatCurrency(tx.debit)}` : `-Bs. ${formatCurrency(tx.debit)}`) : '-'}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-black pr-8 text-white italic">
+                                                            {esDolares ? `$ ${formatCurrency(tx.balance)}` : `Bs. ${formatCurrency(tx.balance)}`}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                             {transactions.length === 0 && (
-                                                <TableRow><TableCell colSpan={5} className="text-center py-20 text-white/20 italic font-black uppercase tracking-widest text-xs">No se registran movimientos en el período.</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={6} className="text-center py-20 text-white/20 italic font-black uppercase tracking-widest text-xs">No se registran movimientos en el período.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>

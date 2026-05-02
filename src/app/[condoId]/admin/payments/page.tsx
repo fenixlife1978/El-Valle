@@ -442,7 +442,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                     const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                     transaction.set(transRef, {
-                        monto: payment.totalAmount, 
+                        monto: isDolares ? 0 : payment.totalAmount,
+                        montoUSD: isDolares ? payment.totalAmount : 0,
+                        tipoCuenta: isDolares ? 'dolares' : 'bs', 
                         tipo: 'ingreso', 
                         cuentaId: targetAccountId, 
                         nombreCuenta: targetAccountName,

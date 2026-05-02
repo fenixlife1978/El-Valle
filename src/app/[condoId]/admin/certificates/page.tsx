@@ -227,12 +227,13 @@ export default function CertificatesPage() {
             h1 { text-align: center; font-size: 18pt; font-weight: bold; text-transform: uppercase; margin: 40px 0 30px 0; letter-spacing: 2px; }
             .content { text-align: justify; }
             .content p { margin-bottom: 16px; }
-            .signature { margin-top: 80px; text-align: center; }
+            .signature { margin-top: 60px; text-align: center; }
             .signature-line { width: 250px; margin: 20px auto 10px auto; border-top: 1px solid #000; }
-            .barcode-container { text-align: center; margin-top: 30px; }
-            .barcode-container .barcode-number { font-size: 8pt; font-family: 'Courier New', monospace; margin-top: 5px; color: #333; }
-            .footer { margin-top: 30px; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 10px; }
+            .footer { margin-top: 20px; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 10px; }
             .warning { margin-top: 5px; font-size: 7pt; color: #c00; font-weight: bold; }
+            .barcode-container { text-align: center; margin-top: 15px; padding-bottom: 10px; }
+            .barcode-container svg { display: block; margin: 0 auto; max-width: 180px; height: 45px; }
+            .barcode-number { font-size: 7pt; font-family: 'Courier New', monospace; margin-top: 4px; color: #555; }
         </style>
         </head>
         <body>
@@ -247,13 +248,13 @@ export default function CertificatesPage() {
                 <div class="signature-line"></div>
                 <p><strong>Por: ${nombreCondominio}</strong></p>
             </div>
-            <div class="barcode-container">
-                <svg id="barcode-${numeroConstancia}"></svg>
-                <div class="barcode-number">N° ${numeroConstancia}</div>
-            </div>
             <div class="footer">
                 <p>${footerText}</p>
                 ${showStampWarning ? `<p class="warning">⚠️ Debe ser presentado ante la Junta de Condominio para su estampado de sello y firma oficial.</p>` : ''}
+            </div>
+            <div class="barcode-container">
+                <svg id="barcode-${numeroConstancia}"></svg>
+                <div class="barcode-number">N° ${numeroConstancia}</div>
             </div>
             <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
             <script>
@@ -261,7 +262,7 @@ export default function CertificatesPage() {
                     JsBarcode("#barcode-${numeroConstancia}", "${numeroConstancia}", {
                         format: "CODE128",
                         width: 2,
-                        height: 50,
+                        height: 40,
                         displayValue: false,
                         margin: 0
                     });
