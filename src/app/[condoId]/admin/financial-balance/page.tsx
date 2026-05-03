@@ -332,7 +332,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
                 // Separar transacciones en Bs y USD
                 const txsBs = allTxs.filter(t => t.tipoCuenta !== 'dolares');
-                const txsUSD = allTxs.filter(t => t.tipoCuenta === 'dolares');
+                const txsUSD = allTxs.filter(t => t.tipoCuenta === 'dolares' || t.tipoCuenta === 'dólares');
 
                 // Egresos en Bs
                 const egresosBs = txsBs.filter(t => t.tipo === 'egreso').map(t => ({ 

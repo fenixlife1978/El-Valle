@@ -27,6 +27,7 @@ interface Transaction {
     nombreCuenta: string; 
     descripcion: string; 
     referencia?: string; 
+    montoUSD?: number | string;
     sourcePaymentId?: string;
     orden?: number;
 }
@@ -69,7 +70,7 @@ const AccountingPage = () => {
 
     const isDolarAccount = (accountId: string): boolean => {
         const acc = accounts.find(a => a.id === accountId);
-        return acc?.tipo === 'dolares';
+        return acc?.tipo === 'dolares' || acc?.tipo === 'dólares';
     };
 
     const formatMoney = (amount: number, accountId?: string): string => {
@@ -141,8 +142,8 @@ const AccountingPage = () => {
                 date, 
                 descripcion: tx.descripcion || 'SIN CONCEPTO', 
                 reference: tx.referencia || 'N/A', 
-                credit: tx.tipo === 'ingreso' ? tx.monto : 0, 
-                debit: tx.tipo === 'egreso' ? tx.monto : 0, 
+                credit: tx.tipo === 'ingreso' ? (isDolarAccount(tx.cuentaId) ? (Number(tx.montoUSD) || tx.monto) : tx.monto) : 0, 
+                debit: tx.tipo === 'egreso' ? (isDolarAccount(tx.cuentaId) ? (Number(tx.montoUSD) || tx.monto) : tx.monto) : 0, 
                 balance: 0,
                 orden: tx.orden || 0,
                 txIndex: globalIndex++
