@@ -137,13 +137,16 @@ const AccountingPage = () => {
         let globalIndex = 0;
         allTransactions.forEach(tx => {
             const date = tx.fecha.toDate();
+            const esCuentaDolar = isDolarAccount(tx.cuentaId);
+            const montoEfectivo = esCuentaDolar ? (Number(tx.montoUSD) || tx.monto) : tx.monto;
+            
             const entry: ProcessedTransaction = { 
                 id: tx.id,
                 date, 
                 descripcion: tx.descripcion || 'SIN CONCEPTO', 
                 reference: tx.referencia || 'N/A', 
-                credit: tx.tipo === 'ingreso' ? (isDolarAccount(tx.cuentaId) ? (Number(tx.montoUSD) || tx.monto) : tx.monto) : 0, 
-                debit: tx.tipo === 'egreso' ? (isDolarAccount(tx.cuentaId) ? (Number(tx.montoUSD) || tx.monto) : tx.monto) : 0, 
+                credit: tx.tipo === 'ingreso' ? montoEfectivo : 0, 
+                debit: tx.tipo === 'egreso' ? montoEfectivo : 0, 
                 balance: 0,
                 orden: tx.orden || 0,
                 txIndex: globalIndex++
@@ -345,6 +348,7 @@ const AccountingPage = () => {
         const data = periodData[account.id];
         if (!data) return;
 
+        const esDolares = account.tipo === 'dolares' || account.tipo === 'dólares';
         const periodLabel = `${months.find(m => m.value === selectedMonth)?.label.toUpperCase()} ${selectedYear}`;
         
         const infoParaPDF = {
@@ -368,6 +372,7 @@ const AccountingPage = () => {
             periodo: periodLabel,
             saldoInicial: data.startBalance,
             bancoInfo: {
+                moneda: esDolares ? 'USD' : 'BS',
                 nombre: account.nombre,
                 cuenta: account.id
             }
@@ -457,7 +462,7 @@ const AccountingPage = () => {
                 
                 {accounts.map(acc => {
                     const { transactions, startBalance } = periodData[acc.id] || { transactions: [], startBalance: 0 };
-                    const esDolares = acc.tipo === 'dolares';
+                    const esDolares = acc.tipo === 'dolares' || acc.tipo === 'dólares';
                     return (
                         <TabsContent key={acc.id} value={acc.id} className="mt-4">
                             <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-slate-900 border border-white/5">

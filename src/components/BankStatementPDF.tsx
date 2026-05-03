@@ -21,10 +21,10 @@ interface BankStatementPDFProps {
   bancoInfo?: {
     nombre: string;
     cuenta: string;
+    moneda?: string;
   };
 }
 
-// Función para generar código de barras en SVG puro (más grande)
 const generarCodigoBarrasSVG = (texto: string): string => {
   const chars = texto.split('');
   let patron = '';
@@ -35,8 +35,8 @@ const generarCodigoBarrasSVG = (texto: string): string => {
     }
   }
   
-  const anchoBarra = 3; // Aumentado de 2 a 3
-  const alto = 50; // Aumentado de 30 a 50
+  const anchoBarra = 3;
+  const alto = 50;
   let svg = `<svg width="${patron.length * anchoBarra}" height="${alto}" xmlns="http://www.w3.org/2000/svg">`;
   svg += `<rect width="100%" height="100%" fill="white"/>`;
   
@@ -65,6 +65,10 @@ export const PDFContent = ({
   saldoInicial,
   bancoInfo = { nombre: "BANCO DE VENEZUELA", cuenta: "" }
 }: BankStatementPDFProps): string => {
+  
+  const esDolares = bancoInfo.moneda === 'USD';
+  const localeStr = esDolares ? 'en-US' : 'es-VE';
+  const simboloMoneda = esDolares ? '$' : 'Bs.';
   
   let saldoActual = saldoInicial;
   const transactionsWithBalance = transactions.map(t => {
@@ -257,7 +261,7 @@ export const PDFContent = ({
         <div class="info-row">
           <div class="info-card">
             <label>Saldo Inicial</label>
-            <value>Bs. ${saldoInicial.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</value>
+            <value>${simboloMoneda} ${saldoInicial.toLocaleString(localeStr, { minimumFractionDigits: 2 })}</value>
           </div>
           <div class="info-card">
             <label>Período</label>
@@ -275,9 +279,9 @@ export const PDFContent = ({
               <th class="text-left">FECHA</th>
               <th class="text-left">DESCRIPCIÓN</th>
               <th class="text-left">REFERENCIA</th>
-              <th class="text-right">INGRESO (Bs)</th>
-              <th class="text-right">EGRESO (Bs)</th>
-              <th class="text-right">SALDO (Bs)</th>
+              <th class="text-right">INGRESO (${simboloMoneda})</th>
+              <th class="text-right">EGRESO (${simboloMoneda})</th>
+              <th class="text-right">SALDO (${simboloMoneda})</th>
             </tr>
           </thead>
           <tbody>
@@ -287,13 +291,13 @@ export const PDFContent = ({
                 <td class="text-left">${t.descripcion}</td>
                 <td class="text-left">${t.referencia}</td>
                 <td class="text-right ${t.ingreso ? 'ingreso' : ''}">
-                  ${t.ingreso ? t.ingreso.toLocaleString('es-VE', { minimumFractionDigits: 2 }) : '-'}
+                  ${t.ingreso ? t.ingreso.toLocaleString(localeStr, { minimumFractionDigits: 2 }) : '-'}
                 </td>
                 <td class="text-right ${t.egreso ? 'egreso' : ''}">
-                  ${t.egreso ? t.egreso.toLocaleString('es-VE', { minimumFractionDigits: 2 }) : '-'}
+                  ${t.egreso ? t.egreso.toLocaleString(localeStr, { minimumFractionDigits: 2 }) : '-'}
                 </td>
                 <td class="text-right saldo">
-                  ${t.saldoActual.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  ${t.saldoActual.toLocaleString(localeStr, { minimumFractionDigits: 2 })}
                 </td>
               </tr>
             `).join('')}
@@ -302,7 +306,7 @@ export const PDFContent = ({
             <tr style="background: #f1f5f9; font-weight: 900;">
               <td colspan="5" class="text-right">SALDO FINAL:</td>
               <td class="text-right saldo">
-                ${transactionsWithBalance[transactionsWithBalance.length - 1]?.saldoActual.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                ${transactionsWithBalance[transactionsWithBalance.length - 1]?.saldoActual.toLocaleString(localeStr, { minimumFractionDigits: 2 })}
               </td>
             </tr>
           </tfoot>
