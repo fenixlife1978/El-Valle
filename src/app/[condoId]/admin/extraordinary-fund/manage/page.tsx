@@ -27,6 +27,7 @@ interface Owner {
     email?: string;
     properties: { street: string, house: string }[];
     balance?: number;
+    excluidoExtraordinario?: boolean;
 }
 
 interface ExtraordinaryCampaign {
@@ -130,8 +131,18 @@ export default function ManageExtraordinaryFundPage() {
         return () => { unsubCampaigns(); unsubDebts(); };
     }, [condoId]);
 
+    // ✅ Filtrar propietarios excluidos de extraordinarias
+    const activeExtraordinaryOwners = owners.filter(o => !o.excluidoExtraordinario);
+
+    // ✅ Filtrar deudas SOLO de propietarios NO excluidos
+    const filteredExtraordinaryDebts = extraordinaryDebts.filter(debt => {
+        const owner = owners.find(o => o.id === debt.ownerId);
+        return owner && !owner.excluidoExtraordinario;
+    });
+
     const getCampaignStats = (campaignId: string) => {
-        const campaignDebts = extraordinaryDebts.filter(d => d.debtId === campaignId);
+        // ✅ Usar filteredExtraordinaryDebts en lugar de extraordinaryDebts
+        const campaignDebts = filteredExtraordinaryDebts.filter(d => d.debtId === campaignId);
         const totalAmount = campaignDebts.reduce((sum, d) => sum + d.amountUSD, 0);
         const paidAmount = campaignDebts.filter(d => d.status === 'paid').reduce((sum, d) => sum + d.amountUSD, 0);
         const partialPaid = campaignDebts.filter(d => d.status === 'partial').reduce((sum, d) => sum + (d.amountUSD - (d.pendingUSD || 0)), 0);
@@ -139,7 +150,8 @@ export default function ManageExtraordinaryFundPage() {
     };
 
     const getSortedOwnersWithProperties = () => {
-        const ownersWithProps = owners.map(owner => ({ ...owner, sortedProperties: sortProperties(owner.properties || []) }));
+        // ✅ Solo incluir propietarios NO excluidos
+        const ownersWithProps = activeExtraordinaryOwners.map(owner => ({ ...owner, sortedProperties: sortProperties(owner.properties || []) }));
         return ownersWithProps.sort((a, b) => {
             const aProp = a.sortedProperties[0], bProp = b.sortedProperties[0];
             if (!aProp) return 1; if (!bProp) return -1;
@@ -159,7 +171,8 @@ export default function ManageExtraordinaryFundPage() {
                 description: formData.description.toUpperCase(), amountUSD, status: 'active', createdAt: serverTimestamp()
             });
             const batch = writeBatch(db);
-            for (const owner of owners) {
+            // ✅ Solo crear deudas para propietarios NO excluidos
+            for (const owner of activeExtraordinaryOwners) {
                 for (const prop of sortProperties(owner.properties || [])) {
                     const debtRef = doc(collection(db, 'condominios', condoId, 'owner_extraordinary_debts'));
                     batch.set(debtRef, {
@@ -171,7 +184,8 @@ export default function ManageExtraordinaryFundPage() {
                 }
             }
             await batch.commit();
-            toast({ title: 'Éxito' }); setIsCreateDialogOpen(false); setFormData({ description: '', amountUSD: '' });
+            toast({ title: 'Éxito', description: `Cuota cargada a ${activeExtraordinaryOwners.length} propietarios.` });
+            setIsCreateDialogOpen(false); setFormData({ description: '', amountUSD: '' });
         } catch (error) { toast({ variant: 'destructive', title: 'Error' }); }
         finally { setLoading(false); }
     };
@@ -185,7 +199,8 @@ export default function ManageExtraordinaryFundPage() {
 
     const generateCampaignReport = async (campaign: ExtraordinaryCampaign, type: 'pending' | 'paid' | 'all') => {
         const sortedOwners = getSortedOwnersWithProperties();
-        const campaignDebts = extraordinaryDebts.filter(d => d.debtId === campaign.id);
+        // ✅ Usar filteredExtraordinaryDebts
+        const campaignDebts = filteredExtraordinaryDebts.filter(d => d.debtId === campaign.id);
         let filteredDebts: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[] = [];
         let counter = 1;
         for (const owner of sortedOwners) {
@@ -230,14 +245,14 @@ export default function ManageExtraordinaryFundPage() {
             <div class="summary-card"><label>Total Pendiente</label><value>$${formatUSD(stats.pending)}</value></div>
             <div class="summary-card"><label>Propietarios</label><value>${items.length}</value></div>
         </div>
-        <table><thead><tr><th>#</th><th class="text-left">Propietario</th><th class="text-left">Propiedad</th><th class="text-right">Monto (USD)</th><th class="text-right">Estado</th></tr></thead><tbody>
+        <table><thead>\n<th>#</th><th class="text-left">Propietario</th><th class="text-left">Propiedad</th><th class="text-right">Monto (USD)</th><th class="text-right">Estado</th></thead><tbody>
         ${items.map(item => {
             const sortedProps = sortProperties(item.owner.properties || []);
             const propertyDisplay = sortedProps[0] ? `${sortedProps[0].street} - ${sortedProps[0].house}` : (item.debt?.property || 'N/A');
             const displayAmount = type === 'POR PAGAR' ? (item.debt?.pendingUSD || item.debt?.amountUSD || 0) : (item.debt?.amountUSD || 0);
             const statusClass = item.debt?.status === 'paid' ? 'status-pagado' : item.debt?.status === 'partial' ? 'status-parcial' : 'status-pendiente';
             const statusText = item.debt?.status === 'paid' ? 'PAGADO' : item.debt?.status === 'partial' ? `PARCIAL (PEND: $${formatUSD(item.debt?.pendingUSD || 0)})` : 'PENDIENTE';
-            return `<tr><td>${item.index}</td><td class="text-left">${item.owner.name}</td><td class="text-left">${propertyDisplay}</td><td class="text-right">$${formatUSD(displayAmount)}</td><td class="text-right ${statusClass}">${statusText}</td></tr>`;
+            return `<tr><td class="text-center">${item.index}</td><td class="text-left">${item.owner.name}</td><td class="text-left">${propertyDisplay}</td><td class="text-right">$${formatUSD(displayAmount)}</td><td class="text-right ${statusClass}">${statusText}</td></tr>`;
         }).join('')}
         </tbody></table>
         <div class="footer"><p>Documento generado por <strong>EFASCondoSys</strong></p></div></div></body></html>`;
@@ -267,6 +282,12 @@ export default function ManageExtraordinaryFundPage() {
                         {activeCampaigns.map(campaign => {
                             const stats = getCampaignStats(campaign.id);
                             const isOpen = selectedCampaign?.id === campaign.id;
+                            // ✅ Contar solo deudas de propietarios NO excluidos
+                            const activeDebtsCount = filteredExtraordinaryDebts.filter(d => d.debtId === campaign.id).length;
+                            
+                            // ✅ Obtener deudas filtradas para la tabla desplegable
+                            const campaignFilteredDebts = filteredExtraordinaryDebts.filter(d => d.debtId === campaign.id);
+                            
                             return (
                                 <Card key={campaign.id} className="rounded-[2rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                                     <CardContent className="p-6">
@@ -277,17 +298,43 @@ export default function ManageExtraordinaryFundPage() {
                                         <div className="grid grid-cols-3 gap-3 mb-4 pt-4 border-t border-white/10">
                                             <div className="text-center"><p className="text-[8px] text-white/40">Recaudado</p><p className="font-black text-emerald-400 text-sm">${formatUSD(stats.collected)}</p></div>
                                             <div className="text-center"><p className="text-[8px] text-white/40">Pendiente</p><p className="font-black text-yellow-400 text-sm">${formatUSD(stats.pending)}</p></div>
-                                            <div className="text-center"><p className="text-[8px] text-white/40">Propietarios</p><p className="font-black text-white text-sm">{extraordinaryDebts.filter(d => d.debtId === campaign.id).length}</p></div>
+                                            <div className="text-center"><p className="text-[8px] text-white/40">Propietarios</p><p className="font-black text-white text-sm">{activeDebtsCount}</p></div>
                                         </div>
                                         <div className="flex gap-2">
                                             <Button onClick={() => generateCampaignReport(campaign, 'pending')} variant="outline" size="sm" className="flex-1 rounded-xl border-yellow-500/30 text-yellow-400 font-black uppercase text-[9px]"><FileText className="mr-1 h-3 w-3" /> Por Pagar</Button>
                                             <Button onClick={() => generateCampaignReport(campaign, 'paid')} variant="outline" size="sm" className="flex-1 rounded-xl border-emerald-500/30 text-emerald-400 font-black uppercase text-[9px]"><FileText className="mr-1 h-3 w-3" /> Pagados</Button>
-                                            {/* ✅ NUEVO BOTÓN: Lista Completa */}
                                             <Button onClick={() => generateCampaignReport(campaign, 'all')} variant="outline" size="sm" className="flex-1 rounded-xl border-sky-500/30 text-sky-400 font-black uppercase text-[9px]"><FileText className="mr-1 h-3 w-3" /> Lista</Button>
                                             <Button onClick={() => setSelectedCampaign(isOpen ? null : campaign)} variant="outline" size="sm" className="rounded-xl border-white/10 text-white font-black uppercase text-[9px]">{isOpen ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}</Button>
                                         </div>
                                         {isOpen && (
-                                            <div className="mt-4 pt-4 border-t border-white/10"><div className="max-h-64 overflow-y-auto"><Table><TableHeader><TableRow className="border-white/10"><TableHead className="text-[8px] font-black uppercase text-slate-400">#</TableHead><TableHead className="text-[8px] font-black uppercase text-slate-400">Propietario</TableHead><TableHead className="text-right text-[8px] font-black uppercase text-slate-400">Estado</TableHead></TableRow></TableHeader><TableBody>{sortedOwners.map((owner, idx) => { const debt = extraordinaryDebts.find(d => d.ownerId === owner.id && d.debtId === campaign.id); if (!debt) return null; const statusText = debt.status === 'paid' ? 'PAGADO' : debt.status === 'partial' ? `PARCIAL ($${formatUSD(debt.pendingUSD || 0)})` : 'PENDIENTE'; return (<TableRow key={owner.id} className="border-white/10"><TableCell className="text-[9px] text-white/60">{idx + 1}</TableCell><TableCell className="text-[9px] font-black text-white uppercase">{owner.name}</TableCell><TableCell className="text-right text-[9px] font-black" style={{ color: debt.status === 'paid' ? '#10b981' : debt.status === 'partial' ? '#3b82f6' : '#eab308' }}>{statusText}</TableCell></TableRow>); })}</TableBody></Table></div></div>
+                                            <div className="mt-4 pt-4 border-t border-white/10">
+                                                <div className="max-h-64 overflow-y-auto">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow className="border-white/10">
+                                                                <TableHead className="text-[8px] font-black uppercase text-slate-400">#</TableHead>
+                                                                <TableHead className="text-[8px] font-black uppercase text-slate-400">Propietario</TableHead>
+                                                                <TableHead className="text-right text-[8px] font-black uppercase text-slate-400">Estado</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {/* ✅ Usar sortedOwners (que ya excluye) y campaignFilteredDebts */}
+                                                            {sortedOwners.map((owner, idx) => { 
+                                                                const debt = campaignFilteredDebts.find(d => d.ownerId === owner.id); 
+                                                                if (!debt) return null; 
+                                                                const statusText = debt.status === 'paid' ? 'PAGADO' : debt.status === 'partial' ? `PARCIAL ($${formatUSD(debt.pendingUSD || 0)})` : 'PENDIENTE'; 
+                                                                return (
+                                                                    <TableRow key={owner.id} className="border-white/10">
+                                                                        <TableCell className="text-[9px] text-white/60">{idx + 1}</TableCell>
+                                                                        <TableCell className="text-[9px] font-black text-white uppercase">{owner.name}</TableCell>
+                                                                        <TableCell className="text-right text-[9px] font-black" style={{ color: debt.status === 'paid' ? '#10b981' : debt.status === 'partial' ? '#3b82f6' : '#eab308' }}>{statusText}</TableCell>
+                                                                    </TableRow>
+                                                                ); 
+                                                            })}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -298,20 +345,65 @@ export default function ManageExtraordinaryFundPage() {
             )}
 
             {closedCampaigns.length > 0 && (
-                <div className="space-y-4"><h3 className="text-lg font-black uppercase text-white/40 tracking-wider">Historial de Campañas</h3><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{closedCampaigns.map(campaign => { const stats = getCampaignStats(campaign.id); return (<Card key={campaign.id} className="rounded-[2rem] border-none shadow-xl bg-slate-900/50 overflow-hidden border border-white/5"><CardContent className="p-4"><p className="text-[9px] font-black uppercase text-white/40">{campaign.description}</p><p className="text-[8px] text-white/40">Monto: ${formatUSD(campaign.amountUSD)}</p><div className="flex justify-between mt-2"><span className="text-[8px] text-emerald-400">Recaudado: ${formatUSD(stats.collected)}</span><Button onClick={() => generateCampaignReport(campaign, 'all')} variant="ghost" size="sm" className="h-6 rounded-lg text-[8px] font-black text-primary"><FileText className="h-2 w-2 mr-1" /> Reporte</Button></div></CardContent></Card>); })}</div></div>
+                <div className="space-y-4">
+                    <h3 className="text-lg font-black uppercase text-white/40 tracking-wider">Historial de Campañas</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {closedCampaigns.map(campaign => { 
+                            const stats = getCampaignStats(campaign.id); 
+                            return (
+                                <Card key={campaign.id} className="rounded-[2rem] border-none shadow-xl bg-slate-900/50 overflow-hidden border border-white/5">
+                                    <CardContent className="p-4">
+                                        <p className="text-[9px] font-black uppercase text-white/40">{campaign.description}</p>
+                                        <p className="text-[8px] text-white/40">Monto: ${formatUSD(campaign.amountUSD)}</p>
+                                        <div className="flex justify-between mt-2">
+                                            <span className="text-[8px] text-emerald-400">Recaudado: ${formatUSD(stats.collected)}</span>
+                                            <Button onClick={() => generateCampaignReport(campaign, 'all')} variant="ghost" size="sm" className="h-6 rounded-lg text-[8px] font-black text-primary"><FileText className="h-2 w-2 mr-1" /> Reporte</Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ); 
+                        })}
+                    </div>
+                </div>
             )}
 
-            <div className="flex justify-end"><Button onClick={() => router.push(`/${condoId}/admin/extraordinary-fund`)} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10"><DollarSign className="mr-2 h-4 w-4" /> Ver Libro Diario</Button></div>
+            <div className="flex justify-end">
+                <Button onClick={() => router.push(`/${condoId}/admin/extraordinary-fund`)} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10">
+                    <DollarSign className="mr-2 h-4 w-4" /> Ver Libro Diario
+                </Button>
+            </div>
 
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic max-w-md">
-                    <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-white flex items-center gap-2"><Plus className="h-5 w-5 text-primary" /> Nueva Cuota Extraordinaria</DialogTitle><DialogDescription className="text-slate-400 text-sm">Esta cuota se asignará a todos los propietarios</DialogDescription></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase italic text-white flex items-center gap-2">
+                            <Plus className="h-5 w-5 text-primary" /> Nueva Cuota Extraordinaria
+                        </DialogTitle>
+                        <DialogDescription className="text-slate-400 text-sm">Esta cuota se asignará a todos los propietarios activos</DialogDescription>
+                    </DialogHeader>
                     <div className="py-6 space-y-4">
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Descripción</Label><Input placeholder="Ej: MEJORAS DE ILUMINACIÓN" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="rounded-xl bg-slate-800 border-none text-white font-black uppercase" /></div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Monto (USD)</Label><Input type="number" placeholder="0.00" value={formData.amountUSD} onChange={e => setFormData({...formData, amountUSD: e.target.value})} className="rounded-xl bg-slate-800 border-none text-white font-black" /></div>
-                        <div className="bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20"><p className="text-[9px] text-yellow-400 font-black uppercase flex items-center gap-2"><AlertCircle className="h-3 w-3" />Se asignará a {owners.length} propietarios</p></div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500">Descripción</Label>
+                            <Input placeholder="Ej: MEJORAS DE ILUMINACIÓN" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="rounded-xl bg-slate-800 border-none text-white font-black uppercase" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500">Monto (USD)</Label>
+                            <Input type="number" placeholder="0.00" value={formData.amountUSD} onChange={e => setFormData({...formData, amountUSD: e.target.value})} className="rounded-xl bg-slate-800 border-none text-white font-black" />
+                        </div>
+                        <div className="bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20">
+                            <p className="text-[9px] text-yellow-400 font-black uppercase flex items-center gap-2">
+                                <AlertCircle className="h-3 w-3" />
+                                Se asignará a {activeExtraordinaryOwners.length} propietarios
+                            </p>
+                        </div>
                     </div>
-                    <DialogFooter><Button variant="ghost" onClick={() => setIsCreateDialogOpen(false)} className="rounded-xl font-black uppercase text-[10px]">Cancelar</Button><Button onClick={handleCreateCampaign} disabled={loading || !formData.description || !formData.amountUSD} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] italic">{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}Cargar a Todos los Propietarios</Button></DialogFooter>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setIsCreateDialogOpen(false)} className="rounded-xl font-black uppercase text-[10px]">Cancelar</Button>
+                        <Button onClick={handleCreateCampaign} disabled={loading || !formData.description || !formData.amountUSD} className="rounded-xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] italic">
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+                            Cargar a Todos los Propietarios
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
