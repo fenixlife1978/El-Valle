@@ -39,7 +39,9 @@ import {
     AlertCircle,
     FileText,
     Eye,
-    DollarSign
+    DollarSign,
+    Plus,
+    X
 } from 'lucide-react';
 
 import { Button } from "@/components/ui/button";
@@ -57,7 +59,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { downloadPDF } from '@/lib/print-pdf';
+import { Separator } from '@/components/ui/separator';
 
 interface Account {
     id: string;
@@ -124,6 +126,9 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
     const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
     const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+
+    // Estado para repartir egresos de fondos extraordinarios
+    const [extraDistributions, setExtraDistributions] = useState<{ campaignId: string, amount: string }[]>([]);
 
     const [accountForm, setAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoInicial: '0' });
     const [editAccountForm, setEditAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoActual: '0' });
@@ -200,6 +205,24 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         return cuenta?.tipo === 'dolares';
     };
 
+    const addDistribution = () => {
+        setExtraDistributions([...extraDistributions, { campaignId: '', amount: '' }]);
+    };
+
+    const removeDistribution = (index: number) => {
+        setExtraDistributions(extraDistributions.filter((_, i) => i !== index));
+    };
+
+    const updateDistribution = (index: number, field: string, value: string) => {
+        const updated = [...extraDistributions];
+        (updated[index] as any)[field] = value;
+        setExtraDistributions(updated);
+    };
+
+    const totalDistributed = useMemo(() => {
+        return extraDistributions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+    }, [extraDistributions]);
+
     const handleSaveAccount = async () => {
         if (!accountForm.nombre) return;
         setIsSubmitting(true);
@@ -257,10 +280,27 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
     const handleSaveTransaction = async () => {
         if (!transForm.cuentaId || !transForm.monto || !transForm.descripcion) return;
+        
+        const isDistributedExtraordinary = transForm.categoria === 'extraordinaria' && transForm.tipo === 'egreso' && extraDistributions.length > 0;
+        const montoNum = parseFloat(transForm.monto);
+
+        if (isDistributedExtraordinary) {
+            if (Math.abs(totalDistributed - montoNum) > 0.01) {
+                toast({ variant: 'destructive', title: "Error de distribución", description: "La suma de los montos distribuidos debe ser igual al monto total." });
+                return;
+            }
+            if (extraDistributions.some(d => !d.campaignId || !d.amount)) {
+                toast({ variant: 'destructive', title: "Error de distribución", description: "Todas las líneas de distribución deben tener campaña y monto." });
+                return;
+            }
+        } else if (transForm.categoria === 'extraordinaria' && !selectedCampaignId) {
+            toast({ variant: 'destructive', title: "Error", description: "Debe seleccionar una campaña." });
+            return;
+        }
+
         setIsSubmitting(true);
         
         const esDolares = isCuentaDolares(transForm.cuentaId);
-        let montoNum = parseFloat(transForm.monto);
         let montoUSD = 0;
         
         // Obtener exchange rate para conversiones
@@ -277,30 +317,13 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         }
         
         if (esDolares) {
-            // Cuenta en dólares: el monto principal ES en USD
             montoUSD = parseFloat(transForm.montoUSD || transForm.monto);
-            montoNum = montoUSD * currentExchangeRate;
+            // Si es cuenta dólar, el monto real es el USD
         } else {
-            // Cuenta en Bs: calcular equivalente USD
             montoUSD = currentExchangeRate > 0 ? montoNum / currentExchangeRate : 0;
         }
         
         const cuentaRef = doc(db, 'condominios', condoId, 'cuentas', transForm.cuentaId);
-        
-        // Validación para movimientos extraordinarios
-        if (transForm.categoria === 'extraordinaria' && !selectedCampaignId) {
-            toast({ variant: 'destructive', title: "Error", description: "Debe seleccionar una campaña." });
-            setIsSubmitting(false);
-            return;
-        }
-        
-        let campaignName = '';
-        let campaignAmountUSD = 0;
-        if (selectedCampaignId) {
-            const campaign = activeCampaigns.find(c => c.id === selectedCampaignId);
-            campaignName = campaign?.description || '';
-            campaignAmountUSD = campaign?.amountUSD || 0;
-        }
         
         try {
             await runTransaction(db, async (transaction) => {
@@ -308,8 +331,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 if (!accountDoc.exists()) throw new Error("La cuenta no existe.");
                 
                 const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
-                
-                // Determinar el saldo de la cuenta
                 const saldoActual = accountDoc.data().saldoActual || 0;
                 const nuevoSaldo = transForm.tipo === 'ingreso' 
                     ? saldoActual + (esDolares ? montoUSD : montoNum)
@@ -331,31 +352,59 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     createdAt: serverTimestamp()
                 });
                 
-                // Guardar en extraordinary_funds si aplica
+                // Procesar fondos extraordinarios
                 if (transForm.categoria === 'extraordinaria') {
-                    const extraordinaryRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
-                    transaction.set(extraordinaryRef, {
-                        tipo: transForm.tipo,
-                        monto: montoNum,
-                        montoUSD: montoUSD,
-                        exchangeRate: currentExchangeRate,
-                        descripcion: transForm.descripcion.toUpperCase(),
-                        referencia: transForm.referencia?.toUpperCase() || '',
-                        fecha: Timestamp.fromDate(transForm.fecha),
-                        categoria: 'extraordinaria',
-                        sourceTransactionId: newTransRef.id,
-                        createdBy: user?.email,
-                        campaignId: selectedCampaignId,
-                        campaignName: campaignName,
-                        campaignAmountUSD: campaignAmountUSD,
-                        tipoCuenta: esDolares ? 'dolares' : 'bs',
-                        createdAt: serverTimestamp()
-                    });
+                    if (isDistributedExtraordinary) {
+                        // Repartir entre varias campañas
+                        for (const dist of extraDistributions) {
+                            const distAmountBs = parseFloat(dist.amount);
+                            const distAmountUSD = currentExchangeRate > 0 ? distAmountBs / currentExchangeRate : 0;
+                            const campaign = activeCampaigns.find(c => c.id === dist.campaignId);
+
+                            const extraordinaryRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
+                            transaction.set(extraordinaryRef, {
+                                tipo: transForm.tipo,
+                                monto: distAmountBs,
+                                montoUSD: esDolares ? distAmountBs : distAmountUSD,
+                                exchangeRate: currentExchangeRate,
+                                descripcion: `${transForm.descripcion.toUpperCase()} [DISTRIBUCIÓN]`,
+                                referencia: transForm.referencia?.toUpperCase() || '',
+                                fecha: Timestamp.fromDate(transForm.fecha),
+                                categoria: 'extraordinaria',
+                                sourceTransactionId: newTransRef.id,
+                                createdBy: user?.email,
+                                campaignId: dist.campaignId,
+                                campaignName: campaign?.description || '',
+                                campaignAmountUSD: campaign?.amountUSD || 0,
+                                tipoCuenta: esDolares ? 'dolares' : 'bs',
+                                createdAt: serverTimestamp()
+                            });
+                        }
+                    } else {
+                        // Una sola campaña
+                        const campaign = activeCampaigns.find(c => c.id === selectedCampaignId);
+                        const extraordinaryRef = doc(collection(db, 'condominios', condoId, 'extraordinary_funds'));
+                        transaction.set(extraordinaryRef, {
+                            tipo: transForm.tipo,
+                            monto: montoNum,
+                            montoUSD: esDolares ? montoNum : montoUSD,
+                            exchangeRate: currentExchangeRate,
+                            descripcion: transForm.descripcion.toUpperCase(),
+                            referencia: transForm.referencia?.toUpperCase() || '',
+                            fecha: Timestamp.fromDate(transForm.fecha),
+                            categoria: 'extraordinaria',
+                            sourceTransactionId: newTransRef.id,
+                            createdBy: user?.email,
+                            campaignId: selectedCampaignId,
+                            campaignName: campaign?.description || '',
+                            campaignAmountUSD: campaign?.amountUSD || 0,
+                            tipoCuenta: esDolares ? 'dolares' : 'bs',
+                            createdAt: serverTimestamp()
+                        });
+                    }
                 }
                 
-                transaction.update(cuentaRef, { 
-                    saldoActual: nuevoSaldo
-                });
+                transaction.update(cuentaRef, { saldoActual: nuevoSaldo });
             });
             
             toast({ title: "Movimiento procesado con éxito" });
@@ -365,6 +414,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 referencia: '', fecha: new Date(), categoria: 'ordinaria', montoUSD: '' 
             });
             setSelectedCampaignId('');
+            setExtraDistributions([]);
         } catch (error: any) { 
             toast({ variant: 'destructive', title: "Fallo en transacción", description: error.message }); 
         }
@@ -442,7 +492,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 const esDestinoDolares = destSnap.data().tipo === 'dolares';
                 const srcSaldo = srcSnap.data().saldoActual || 0;
                 
-                // No permitir transferencias entre cuentas de distinta moneda
                 if (esOrigenDolares !== esDestinoDolares) {
                     throw new Error("No se permiten transferencias entre cuentas de distinta moneda.");
                 }
@@ -734,14 +783,20 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* DIÁLOGO NUEVO MOVIMIENTO */}
-            <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto">
+            {/* DIÁLOGO NUEVO MOVIMIENTO CON REPARTO DE FONDOS */}
+            <Dialog open={isTransactionDialogOpen} onOpenChange={(open) => {
+                setIsTransactionDialogOpen(open);
+                if (!open) {
+                    setExtraDistributions([]);
+                    setSelectedCampaignId('');
+                }
+            }}>
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-h-[90vh] overflow-y-auto max-w-2xl">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Registrar <span className="text-primary">Movimiento</span></DialogTitle></DialogHeader>
-                    <div className="grid gap-4 py-4">
+                    <div className="grid gap-6 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Categoría</Label>
-                                <Select value={transForm.categoria || "ordinaria"} onValueChange={(v) => { setTransactionForm({...transForm, categoria: v}); setSelectedCampaignId(''); }}>
+                                <Select value={transForm.categoria || "ordinaria"} onValueChange={(v) => { setTransactionForm({...transForm, categoria: v}); setSelectedCampaignId(''); setExtraDistributions([]); }}>
                                     <SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                     <SelectContent className="bg-slate-900 border-white/10 text-white italic">
                                         <SelectItem value="ordinaria" className="font-black uppercase text-[10px] italic">General</SelectItem>
@@ -750,7 +805,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                 </Select>
                             </div>
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Tipo</Label>
-                                <Select value={transForm.tipo} onValueChange={(v: any) => setTransactionForm({...transForm, tipo: v})}>
+                                <Select value={transForm.tipo} onValueChange={(v: any) => { setTransactionForm({...transForm, tipo: v}); if (v === 'ingreso') setExtraDistributions([]); }}>
                                     <SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue /></SelectTrigger>
                                     <SelectContent className="bg-slate-900 border-white/10 text-white italic">
                                         <SelectItem value="ingreso" className="text-emerald-500 font-black italic">INGRESO (+)</SelectItem>
@@ -759,9 +814,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                 </Select>
                             </div>
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta</Label>
-                                <Select value={transForm.cuentaId} onValueChange={v => {
-                                    setTransactionForm({...transForm, cuentaId: v, montoUSD: ''});
-                                }}>
+                                <Select value={transForm.cuentaId} onValueChange={v => setTransactionForm({...transForm, cuentaId: v, montoUSD: ''})}>
                                     <SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                     <SelectContent className="bg-slate-900 border-white/10 text-white italic">
                                         {accounts.map(acc => (
@@ -772,16 +825,23 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                     </SelectContent>
                                 </Select>
                             </div>
+                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Fecha</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl justify-start font-black bg-white/5 border-none text-white italic"><CalendarIcon className="mr-2 h-4 w-4 text-primary" /> {format(transForm.fecha, 'dd/MM/yyyy')}</Button></PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+                                        <Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es} fromYear={2024} toYear={2026} />
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                         </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             {isCuentaDolares(transForm.cuentaId) ? (
                                 <>
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto USD $</Label>
                                         <Input type="number" placeholder="0.00" value={transForm.montoUSD || ''} 
-                                            onChange={e => {
-                                                setTransactionForm({...transForm, montoUSD: e.target.value, monto: e.target.value});
-                                            }} 
+                                            onChange={e => setTransactionForm({...transForm, montoUSD: e.target.value, monto: e.target.value})} 
                                             className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-yellow-500 italic" />
                                     </div>
                                     <div className="space-y-2">
@@ -796,35 +856,116 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                             ) : (
                                 <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto Bs.</Label><Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-white italic" /></div>
                             )}
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Fecha</Label>
-                                <Popover>
-                                    <PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl justify-start font-black bg-white/5 border-none text-white italic"><CalendarIcon className="mr-2 h-4 w-4 text-primary" /> {format(transForm.fecha, 'dd/MM/yyyy')}</Button></PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
-                                        <Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es} fromYear={2024} toYear={2026} />
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
                         </div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Descripción</Label><Input placeholder="EJ: PAGO CUOTA EN DÓLARES" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
+
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Descripción</Label><Input placeholder="EJ: PAGO DE REPARACIONES" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Referencia (Opcional)</Label><Input placeholder="EJ: 123456" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                         
+                        {/* SECCIÓN DE REPARTO DE FONDOS EXTRAORDINARIOS (SOLO EGRESOS) */}
                         {transForm.categoria === 'extraordinaria' && (
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Campaña del Fondo Extraordinario</Label>
-                                <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
-                                    <SelectTrigger className="rounded-xl h-12 bg-white/5 border-none text-white font-black uppercase text-[10px]">
-                                        <SelectValue placeholder="Seleccionar campaña..." />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-slate-900 border-white/10 text-white">
-                                        {activeCampaigns.map(c => (
-                                            <SelectItem key={c.id} value={c.id} className="font-black uppercase text-[10px]">📁 {c.description}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                <div className="flex justify-between items-center">
+                                    <Label className="text-[11px] font-black uppercase text-primary italic tracking-widest">Distribución por Campaña</Label>
+                                    {transForm.tipo === 'egreso' && (
+                                        <Button type="button" onClick={addDistribution} size="sm" variant="outline" className="h-8 rounded-lg font-black uppercase text-[9px] border-primary text-primary hover:bg-primary/10">
+                                            <Plus className="h-3 w-3 mr-1" /> Añadir Reparto
+                                        </Button>
+                                    )}
+                                </div>
+
+                                {transForm.tipo === 'ingreso' ? (
+                                    <div className="space-y-2">
+                                        <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+                                            <SelectTrigger className="rounded-xl h-12 bg-white/5 border-none text-white font-black uppercase text-[10px]">
+                                                <SelectValue placeholder="Seleccionar campaña para ingreso..." />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                                {activeCampaigns.map(c => (
+                                                    <SelectItem key={c.id} value={c.id} className="font-black uppercase text-[10px]">📁 {c.description}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {extraDistributions.length === 0 ? (
+                                            <div className="p-4 rounded-xl bg-white/5 border border-dashed border-white/10 text-center">
+                                                <p className="text-[10px] font-black text-white/30 uppercase">Seleccione una o más campañas para el egreso</p>
+                                                <div className="mt-4">
+                                                    <Select value={selectedCampaignId} onValueChange={(v) => { setSelectedCampaignId(v); if (extraDistributions.length === 0) setExtraDistributions([{ campaignId: v, amount: transForm.monto }]); }}>
+                                                        <SelectTrigger className="rounded-xl h-12 bg-slate-800 border-none text-white font-black uppercase text-[10px] w-full">
+                                                            <SelectValue placeholder="O elegir una sola campaña..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                                            {activeCampaigns.map(c => (
+                                                                <SelectItem key={c.id} value={c.id} className="font-black uppercase text-[10px]">📁 {c.description}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {extraDistributions.map((dist, idx) => (
+                                                    <div key={idx} className="grid grid-cols-12 gap-3 items-end p-4 bg-white/5 rounded-2xl border border-white/5">
+                                                        <div className="col-span-7 space-y-1.5">
+                                                            <Label className="text-[9px] font-black uppercase text-white/40 ml-1">Campaña</Label>
+                                                            <Select value={dist.campaignId} onValueChange={(v) => updateDistribution(idx, 'campaignId', v)}>
+                                                                <SelectTrigger className="h-10 bg-slate-800 border-none rounded-xl text-white font-black uppercase text-[10px]">
+                                                                    <SelectValue placeholder="Campaña..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent className="bg-slate-900 text-white border-white/10">
+                                                                    {activeCampaigns.map(c => (
+                                                                        <SelectItem key={c.id} value={c.id} className="font-black uppercase text-[10px]">{c.description}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="col-span-4 space-y-1.5">
+                                                            <Label className="text-[9px] font-black uppercase text-white/40 ml-1">Monto {esDolares ? 'USD' : 'Bs.'}</Label>
+                                                            <Input type="number" value={dist.amount} onChange={(e) => updateDistribution(idx, 'amount', e.target.value)} className="h-10 bg-slate-800 border-none rounded-xl text-white font-black text-right" placeholder="0.00" />
+                                                        </div>
+                                                        <div className="col-span-1 pb-1 text-right">
+                                                            <Button type="button" onClick={() => removeDistribution(idx)} variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-500/10 rounded-full">
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                
+                                                <div className="p-4 bg-slate-950 rounded-2xl flex justify-between items-center border border-white/5">
+                                                    <div className="text-[10px] font-black uppercase text-white/40">Total Distribuido:</div>
+                                                    <div className={cn(
+                                                        "text-lg font-black italic",
+                                                        Math.abs(totalDistributed - parseFloat(transForm.monto || '0')) < 0.01 ? "text-emerald-500" : "text-red-500"
+                                                    )}>
+                                                        {esDolares ? `$ ${formatUSD(totalDistributed)}` : `Bs. ${formatCurrency(totalDistributed)}`}
+                                                    </div>
+                                                </div>
+                                                
+                                                {Math.abs(totalDistributed - parseFloat(transForm.monto || '0')) > 0.01 && (
+                                                    <div className="flex items-center gap-2 p-2 bg-red-500/10 rounded-xl">
+                                                        <AlertCircle className="h-3 w-3 text-red-500" />
+                                                        <span className="text-[9px] font-bold text-red-500 uppercase italic">La distribución no coincide con el monto total (Faltan: {formatCurrency(Math.abs(parseFloat(transForm.monto || '0') - totalDistributed))})</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
-                    <DialogFooter><Button onClick={handleSaveTransaction} disabled={isSubmitting} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}Procesar Movimiento</Button></DialogFooter>
+                    <DialogFooter>
+                        <Button 
+                            onClick={handleSaveTransaction} 
+                            disabled={isSubmitting || (transForm.categoria === 'extraordinaria' && transForm.tipo === 'egreso' && extraDistributions.length > 0 && Math.abs(totalDistributed - parseFloat(transForm.monto || '0')) > 0.01)} 
+                            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic"
+                        >
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}
+                            Procesar Movimiento
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
