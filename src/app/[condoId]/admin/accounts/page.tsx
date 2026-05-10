@@ -205,6 +205,11 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         return cuenta?.tipo === 'dolares';
     };
 
+    // Función para determinar si la moneda actual es dólares (basado en la cuenta seleccionada)
+    const isCurrentCurrencyDolares = () => {
+        return isCuentaDolares(transForm.cuentaId);
+    };
+
     const addDistribution = () => {
         setExtraDistributions([...extraDistributions, { campaignId: '', amount: '' }]);
     };
@@ -783,7 +788,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* DIÁLOGO NUEVO MOVIMIENTO CON REPARTO DE FONDOS */}
+            {/* DIÁLOGO NUEVO MOVIMIENTO CON REPARTO DE FONDOS - CORREGIDO */}
             <Dialog open={isTransactionDialogOpen} onOpenChange={(open) => {
                 setIsTransactionDialogOpen(open);
                 if (!open) {
@@ -861,7 +866,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Descripción</Label><Input placeholder="EJ: PAGO DE REPARACIONES" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Referencia (Opcional)</Label><Input placeholder="EJ: 123456" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                         
-                        {/* SECCIÓN DE REPARTO DE FONDOS EXTRAORDINARIOS (SOLO EGRESOS) */}
+                        {/* SECCIÓN DE REPARTO DE FONDOS EXTRAORDINARIOS (SOLO EGRESOS) - CORREGIDO */}
                         {transForm.categoria === 'extraordinaria' && (
                             <div className="space-y-4 pt-4 border-t border-white/5">
                                 <div className="flex justify-between items-center">
@@ -922,7 +927,9 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                                             </Select>
                                                         </div>
                                                         <div className="col-span-4 space-y-1.5">
-                                                            <Label className="text-[9px] font-black uppercase text-white/40 ml-1">Monto {esDolares ? 'USD' : 'Bs.'}</Label>
+                                                            <Label className="text-[9px] font-black uppercase text-white/40 ml-1">
+                                                                Monto {isCurrentCurrencyDolares() ? 'USD' : 'Bs.'}
+                                                            </Label>
                                                             <Input type="number" value={dist.amount} onChange={(e) => updateDistribution(idx, 'amount', e.target.value)} className="h-10 bg-slate-800 border-none rounded-xl text-white font-black text-right" placeholder="0.00" />
                                                         </div>
                                                         <div className="col-span-1 pb-1 text-right">
@@ -939,7 +946,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                                         "text-lg font-black italic",
                                                         Math.abs(totalDistributed - parseFloat(transForm.monto || '0')) < 0.01 ? "text-emerald-500" : "text-red-500"
                                                     )}>
-                                                        {esDolares ? `$ ${formatUSD(totalDistributed)}` : `Bs. ${formatCurrency(totalDistributed)}`}
+                                                        {isCurrentCurrencyDolares() ? `$ ${formatUSD(totalDistributed)}` : `Bs. ${formatCurrency(totalDistributed)}`}
                                                     </div>
                                                 </div>
                                                 
