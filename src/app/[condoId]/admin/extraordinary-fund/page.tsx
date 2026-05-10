@@ -14,9 +14,7 @@ import {
     updateDoc, 
     getDocs, 
     where, 
-    getDoc,
-    writeBatch,
-    serverTimestamp
+    getDoc 
 } from 'firebase/firestore';
 import { 
     Card, 
@@ -48,8 +46,8 @@ import {
     Eye,
     Share2,
     Download,
-    ChevronUp,
-    ChevronDown
+    ArrowUp,
+    ArrowDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -90,7 +88,6 @@ interface ExtraordinaryTransaction {
     previousPendingUSD?: number;
     createdAt: Timestamp;
     orden?: number;
-    balanceAcumulado?: number;
 }
 
 interface ExtraordinaryCampaign {
@@ -128,13 +125,13 @@ export default function ExtraordinaryFundPage() {
     const [campaigns, setCampaigns] = useState<ExtraordinaryCampaign[]>([]);
     const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
     const [loading, setLoading] = useState(true);
-    const [isReordering, setIsReordering] = useState(false);
     const [balance, setBalance] = useState(0);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState<ExtraordinaryTransaction | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [exchangeRate, setExchangeRate] = useState(0);
     const [condominioData, setCondominioData] = useState<any>(null);
+    const [movingTx, setMovingTx] = useState<string | null>(null);
     
     // Diálogo para ver libro diario individual de campaña
     const [campaignDetailDialogOpen, setCampaignDetailDialogOpen] = useState(false);
@@ -198,8 +195,7 @@ export default function ExtraordinaryFundPage() {
 
         const q = query(
             collection(db, 'condominios', condoId, 'extraordinary_funds'),
-            orderBy('fecha', 'asc'),
-            orderBy('orden', 'asc')
+            orderBy('fecha', 'asc')
         );
 
         const unsubscribe = onSnapshot(q, (snap) => {
@@ -213,134 +209,6 @@ export default function ExtraordinaryFundPage() {
 
         return () => unsubscribe();
     }, [condoId]);
-
-    // Función para reordenar movimientos (solo misma fecha)
-    const reorderTransaction = async (
-        currentItem: ExtraordinaryTransaction, 
-        direction: 'up' | 'down',
-        campaignIdFilter?: string
-    ) => {
-        setIsReordering(true);
-        
-        try {
-            // Obtener todos los movimientos de la misma fecha y misma campaña (si aplica)
-            const targetDate = format(currentItem.fecha.toDate(), 'yyyy-MM-dd');
-            let sameDateItems = transactions.filter(tx => 
-                format(tx.fecha.toDate(), 'yyyy-MM-dd') === targetDate
-            );
-            
-            // Si hay filtro de campaña, aplicar también
-            if (campaignIdFilter && campaignIdFilter !== 'all') {
-                sameDateItems = sameDateItems.filter(tx => tx.campaignId === campaignIdFilter);
-            }
-            
-            // Ordenar por orden (o fecha si no tienen orden)
-            const sorted = [...sameDateItems].sort((a, b) => {
-                const ordenA = a.orden !== undefined ? a.orden : 0;
-                const ordenB = b.orden !== undefined ? b.orden : 0;
-                return ordenA - ordenB;
-            });
-            
-            const currentIndex = sorted.findIndex(i => i.id === currentItem.id);
-            
-            // Validar si se puede mover
-            if (direction === 'up' && currentIndex === 0) {
-                toast({ title: "No se puede mover", description: "Ya es el primer movimiento de esta fecha" });
-                return;
-            }
-            if (direction === 'down' && currentIndex === sorted.length - 1) {
-                toast({ title: "No se puede mover", description: "Ya es el último movimiento de esta fecha" });
-                return;
-            }
-            
-            // Crear nuevo orden
-            const newOrdered = [...sorted];
-            const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-            [newOrdered[currentIndex], newOrdered[targetIndex]] = [newOrdered[targetIndex], newOrdered[currentIndex]];
-            
-            // Obtener el saldo acumulado ANTES de esta fecha
-            let allItemsForBalance = [...transactions];
-            if (campaignIdFilter && campaignIdFilter !== 'all') {
-                allItemsForBalance = allItemsForBalance.filter(tx => tx.campaignId === campaignIdFilter);
-            }
-            
-            const itemsBeforeDate = allItemsForBalance.filter(tx => 
-                format(tx.fecha.toDate(), 'yyyy-MM-dd') < targetDate
-            );
-            
-            let accumulatedBalance = itemsBeforeDate.reduce((sum, tx) => {
-                return sum + (tx.tipo === 'ingreso' ? tx.monto : -tx.monto);
-            }, 0);
-            
-            // Preparar batch para actualizar
-            const batch = writeBatch(db);
-            
-            // Recalcular balances para todos los movimientos de esta fecha
-            for (let i = 0; i < newOrdered.length; i++) {
-                const tx = newOrdered[i];
-                const montoReal = tx.tipo === 'ingreso' ? tx.monto : -tx.monto;
-                accumulatedBalance += montoReal;
-                
-                const txRef = doc(db, 'condominios', condoId, 'extraordinary_funds', tx.id);
-                batch.update(txRef, {
-                    orden: i,
-                    balanceAcumulado: accumulatedBalance,
-                    updatedAt: serverTimestamp()
-                });
-            }
-            
-            await batch.commit();
-            
-            toast({ 
-                title: "Movimiento reordenado", 
-                description: `Se ha ${direction === 'up' ? 'subido' : 'bajado'} el movimiento y recalculado los saldos.`
-            });
-            
-        } catch (error) {
-            console.error("Error reordenando:", error);
-            toast({ variant: "destructive", title: "Error", description: "No se pudo reordenar el movimiento" });
-        } finally {
-            setIsReordering(false);
-        }
-    };
-
-    // Verificar si un movimiento puede moverse hacia arriba
-    const canMoveUp = (tx: ExtraordinaryTransaction, campaignIdFilter?: string) => {
-        const targetDate = format(tx.fecha.toDate(), 'yyyy-MM-dd');
-        let sameDateItems = transactions.filter(t => format(t.fecha.toDate(), 'yyyy-MM-dd') === targetDate);
-        
-        if (campaignIdFilter && campaignIdFilter !== 'all') {
-            sameDateItems = sameDateItems.filter(t => t.campaignId === campaignIdFilter);
-        }
-        
-        const sorted = [...sameDateItems].sort((a, b) => {
-            const ordenA = a.orden !== undefined ? a.orden : 0;
-            const ordenB = b.orden !== undefined ? b.orden : 0;
-            return ordenA - ordenB;
-        });
-        
-        const currentIndex = sorted.findIndex(i => i.id === tx.id);
-        return currentIndex > 0;
-    };
-    
-    // Verificar si un movimiento puede moverse hacia abajo
-    const canMoveDown = (tx: ExtraordinaryTransaction, campaignIdFilter?: string) => {
-        const targetDate = format(tx.fecha.toDate(), 'yyyy-MM-dd');
-        let sameDateItems = transactions.filter(t => format(t.fecha.toDate(), 'yyyy-MM-dd') === targetDate);
-        
-        if (campaignIdFilter && campaignIdFilter !== 'all') {
-            sameDateItems = sameDateItems.filter(t => t.campaignId === campaignIdFilter);
-        }
-        
-        const sorted = [...sameDateItems].sort((a, b) => {
-            const ordenA = a.orden !== undefined ? a.orden : 0;
-            const ordenB = b.orden !== undefined ? b.orden : 0;
-            return ordenA - ordenB;
-        });
-        
-        const currentIndex = sorted.findIndex(i => i.id === tx.id);
-        return currentIndex < sorted.length - 1;
-    };
 
     // Calcular balances por campaña
     const getCampaignBalances = (): Record<string, CampaignBalance> => {
@@ -382,24 +250,14 @@ export default function ExtraordinaryFundPage() {
         setBalance(totalBalance);
     }, [transactions]);
 
-    // Filtrar transacciones
+    // Filtrar transacciones (manteniendo el orden original por fecha)
     const filteredTransactions = selectedCampaignId === 'all' 
         ? transactions 
         : transactions.filter(tx => tx.campaignId === selectedCampaignId);
 
     const getTransactionsWithRunningBalance = () => {
-        // Ordenar por fecha y luego por orden
-        const sorted = [...filteredTransactions].sort((a, b) => {
-            const fechaA = a.fecha.toMillis();
-            const fechaB = b.fecha.toMillis();
-            if (fechaA !== fechaB) return fechaA - fechaB;
-            const ordenA = a.orden !== undefined ? a.orden : 0;
-            const ordenB = b.orden !== undefined ? b.orden : 0;
-            return ordenA - ordenB;
-        });
-        
         let runningBalance = 0;
-        return sorted.map(tx => {
+        return filteredTransactions.map(tx => {
             if (tx.tipo === 'ingreso') {
                 runningBalance += tx.monto;
             } else {
@@ -408,6 +266,102 @@ export default function ExtraordinaryFundPage() {
             return { ...tx, runningBalance };
         });
     };
+
+    // ==================== NUEVAS FUNCIONES PARA MOVER ASIENTOS ====================
+    
+    const handleMoveUp = async (txId: string, currentDate: Date) => {
+        if (!condoId) return;
+        
+        // Encontrar las transacciones de la misma fecha
+        const sameDateTransactions = filteredTransactions.filter(tx => 
+            format(tx.fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
+        );
+        
+        if (sameDateTransactions.length <= 1) {
+            toast({ 
+                variant: 'destructive', 
+                title: "No permitido", 
+                description: "No hay otros movimientos en esta fecha para intercambiar." 
+            });
+            return;
+        }
+        
+        // Ordenar por orden actual (si tienen) o por el orden en que aparecen
+        const sorted = [...sameDateTransactions].sort((a, b) => {
+            return (a.orden || 0) - (b.orden || 0);
+        });
+        
+        const currentIndex = sorted.findIndex(tx => tx.id === txId);
+        if (currentIndex <= 0) return;
+        
+        const currentTx = sorted[currentIndex];
+        const prevTx = sorted[currentIndex - 1];
+        
+        setMovingTx(txId);
+        try {
+            // Intercambiar órdenes
+            const newOrdenCurrent = prevTx.orden || 0;
+            const newOrdenPrev = currentTx.orden || 0;
+            
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', currentTx.id), { orden: newOrdenCurrent });
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', prevTx.id), { orden: newOrdenPrev });
+            
+            toast({ title: "Asiento movido", description: "Los saldos se han recalculado automáticamente." });
+        } catch (error) {
+            console.error("Error moviendo asiento:", error);
+            toast({ variant: 'destructive', title: "Error", description: "No se pudo mover el asiento." });
+        } finally {
+            setMovingTx(null);
+        }
+    };
+
+    const handleMoveDown = async (txId: string, currentDate: Date) => {
+        if (!condoId) return;
+        
+        // Encontrar las transacciones de la misma fecha
+        const sameDateTransactions = filteredTransactions.filter(tx => 
+            format(tx.fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
+        );
+        
+        if (sameDateTransactions.length <= 1) {
+            toast({ 
+                variant: 'destructive', 
+                title: "No permitido", 
+                description: "No hay otros movimientos en esta fecha para intercambiar." 
+            });
+            return;
+        }
+        
+        // Ordenar por orden actual (si tienen) o por el orden en que aparecen
+        const sorted = [...sameDateTransactions].sort((a, b) => {
+            return (a.orden || 0) - (b.orden || 0);
+        });
+        
+        const currentIndex = sorted.findIndex(tx => tx.id === txId);
+        if (currentIndex < 0 || currentIndex >= sorted.length - 1) return;
+        
+        const currentTx = sorted[currentIndex];
+        const nextTx = sorted[currentIndex + 1];
+        
+        setMovingTx(txId);
+        try {
+            // Intercambiar órdenes
+            const newOrdenCurrent = nextTx.orden || 0;
+            const newOrdenNext = currentTx.orden || 0;
+            
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', currentTx.id), { orden: newOrdenCurrent });
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', nextTx.id), { orden: newOrdenNext });
+            
+            toast({ title: "Asiento movido", description: "Los saldos se han recalculado automáticamente." });
+        } catch (error) {
+            console.error("Error moviendo asiento:", error);
+            toast({ variant: 'destructive', title: "Error", description: "No se pudo mover el asiento." });
+        } finally {
+            setMovingTx(null);
+        }
+    };
+
+    // ==================== FIN FUNCIONES MOVER ASIENTOS ====================
 
     const handleDeleteTransaction = async () => {
         if (!selectedTransaction || !condoId) return;
@@ -513,7 +467,7 @@ export default function ExtraordinaryFundPage() {
         const saldo = totalIngresos - totalEgresos;
         const logo = condominioData?.logo || companyInfo?.logo || "/logos/efascondosys-logo.png";
         const nombre = condominioData?.nombre || condominioData?.name || companyInfo?.nombre || companyInfo?.name || "CONDOMINIO";
-        const rif = condominioData?.rif || companyInfo?.rif || "J-40587208-0";
+        const rif = condominioData?.rif || companyInfo?.rif || "J-00000000-0";
         
         return `
             <!DOCTYPE html>
@@ -546,7 +500,7 @@ export default function ExtraordinaryFundPage() {
                     .text-right { text-align: right; }
                     .text-left { text-align: left; }
                     .liquidation { color: #F28705; font-weight: 700; }
-                    .footer { margin-top: 30px; padding-top: 15px; text-align: center; font-size: 8px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+                    .footer { margin-top: 30px; padding-top: 15px; text-align: center; font-size: 8px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
                 </style>
             </head>
             <body>
@@ -594,7 +548,7 @@ export default function ExtraordinaryFundPage() {
                                     <td class="text-right">Bs. ${formatCurrency(t.runningBalance)}</td>
                                 </tr>
                             `}).join('')}
-                            ${txs.length === 0 ? '<tr><td colspan="6" class="text-center">No hay movimientos registrados</td></tr>' : ''}
+                            ${txs.length === 0 ? '<tr><td colspan="6" class="text-center">No hay movimientos registrados</td>' : ''}
                         </tbody>
                     </table>
                     <div class="footer"><p>Documento generado por <strong>EFASCondoSys</strong> - Sistema de Autogestión de Condominios</p></div>
@@ -604,7 +558,47 @@ export default function ExtraordinaryFundPage() {
         `;
     };
 
-    const handleExportConsolidatedPDF = () => {
+    const handleExportCampaignPDF = (campaign: ExtraordinaryCampaign) => {
+        const txs = campaignBalances[campaign.id]?.transacciones || [];
+        const txsWithBalance = (() => {
+            let runningBalance = 0;
+            return txs.map(tx => {
+                if (tx.tipo === 'ingreso') runningBalance += tx.monto;
+                else runningBalance -= tx.monto;
+                return { ...tx, runningBalance };
+            });
+        })();
+        
+        const html = generateCampaignDetailHTML(campaign, txsWithBalance);
+        const fileName = `Libro_Diario_${campaign.description.replace(/ /g, '_')}_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
+        downloadPDF(html, fileName);
+        toast({ title: "PDF generado", description: "Libro diario descargado correctamente." });
+    };
+
+    const handleShareCampaignPDF = async (campaign: ExtraordinaryCampaign) => {
+        const txs = campaignBalances[campaign.id]?.transacciones || [];
+        const txsWithBalance = (() => {
+            let runningBalance = 0;
+            return txs.map(tx => {
+                if (tx.tipo === 'ingreso') runningBalance += tx.monto;
+                else runningBalance -= tx.monto;
+                return { ...tx, runningBalance };
+            });
+        })();
+        
+        const html = generateCampaignDetailHTML(campaign, txsWithBalance);
+        const fileName = `Libro_Diario_${campaign.description.replace(/ /g, '_')}_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
+        
+        try {
+            await sharePDF(html, fileName, `Libro Diario - ${campaign.description}`);
+            toast({ title: "Compartir", description: "Selecciona cómo compartir el PDF." });
+        } catch (error) {
+            console.error("Error compartiendo PDF:", error);
+            toast({ variant: "destructive", title: "Error", description: "No se pudo compartir el PDF." });
+        }
+    };
+
+    const handleGenerateConsolidatedPDF = () => {
         const transactionsWithBalance = getTransactionsWithRunningBalance();
         const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
         const campaignDisplayName = selectedCampaign ? selectedCampaign.description : "Consolidado";
@@ -712,62 +706,6 @@ export default function ExtraordinaryFundPage() {
         downloadPDF(html, fileName);
     };
 
-    const handleExportCampaignPDF = (campaign: ExtraordinaryCampaign) => {
-        const txs = campaignBalances[campaign.id]?.transacciones || [];
-        const txsWithBalance = (() => {
-            const sorted = [...txs].sort((a, b) => {
-                const fechaA = a.fecha.toMillis();
-                const fechaB = b.fecha.toMillis();
-                if (fechaA !== fechaB) return fechaA - fechaB;
-                const ordenA = a.orden !== undefined ? a.orden : 0;
-                const ordenB = b.orden !== undefined ? b.orden : 0;
-                return ordenA - ordenB;
-            });
-            let runningBalance = 0;
-            return sorted.map(tx => {
-                if (tx.tipo === 'ingreso') runningBalance += tx.monto;
-                else runningBalance -= tx.monto;
-                return { ...tx, runningBalance };
-            });
-        })();
-        
-        const html = generateCampaignDetailHTML(campaign, txsWithBalance);
-        const fileName = `Libro_Diario_${campaign.description.replace(/ /g, '_')}_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
-        downloadPDF(html, fileName);
-        toast({ title: "PDF generado", description: "Libro diario descargado correctamente." });
-    };
-
-    const handleShareCampaignPDF = async (campaign: ExtraordinaryCampaign) => {
-        const txs = campaignBalances[campaign.id]?.transacciones || [];
-        const txsWithBalance = (() => {
-            const sorted = [...txs].sort((a, b) => {
-                const fechaA = a.fecha.toMillis();
-                const fechaB = b.fecha.toMillis();
-                if (fechaA !== fechaB) return fechaA - fechaB;
-                const ordenA = a.orden !== undefined ? a.orden : 0;
-                const ordenB = b.orden !== undefined ? b.orden : 0;
-                return ordenA - ordenB;
-            });
-            let runningBalance = 0;
-            return sorted.map(tx => {
-                if (tx.tipo === 'ingreso') runningBalance += tx.monto;
-                else runningBalance -= tx.monto;
-                return { ...tx, runningBalance };
-            });
-        })();
-        
-        const html = generateCampaignDetailHTML(campaign, txsWithBalance);
-        const fileName = `Libro_Diario_${campaign.description.replace(/ /g, '_')}_${format(new Date(), 'yyyy_MM_dd')}.pdf`;
-        
-        try {
-            await sharePDF(html, fileName, `Libro Diario - ${campaign.description}`);
-            toast({ title: "Compartir", description: "Selecciona cómo compartir el PDF." });
-        } catch (error) {
-            console.error("Error compartiendo PDF:", error);
-            toast({ variant: "destructive", title: "Error", description: "No se pudo compartir el PDF." });
-        }
-    };
-
     const openCampaignDetail = (campaign: ExtraordinaryCampaign) => {
         setSelectedCampaignForDetail(campaign);
         setCampaignDetailDialogOpen(true);
@@ -789,20 +727,12 @@ export default function ExtraordinaryFundPage() {
     const campaignDisplayName = selectedCampaign ? selectedCampaign.description : "Consolidado";
 
     const detailTransactions = selectedCampaignForDetail 
-        ? (campaignBalances[selectedCampaignForDetail.id]?.transacciones || [])
+        ? campaignBalances[selectedCampaignForDetail.id]?.transacciones || []
         : [];
     
     const detailTransactionsWithBalance = () => {
-        const sorted = [...detailTransactions].sort((a, b) => {
-            const fechaA = a.fecha.toMillis();
-            const fechaB = b.fecha.toMillis();
-            if (fechaA !== fechaB) return fechaA - fechaB;
-            const ordenA = a.orden !== undefined ? a.orden : 0;
-            const ordenB = b.orden !== undefined ? b.orden : 0;
-            return ordenA - ordenB;
-        });
         let runningBalance = 0;
-        return sorted.map(tx => {
+        return detailTransactions.map(tx => {
             if (tx.tipo === 'ingreso') {
                 runningBalance += tx.monto;
             } else {
@@ -844,7 +774,7 @@ export default function ExtraordinaryFundPage() {
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Button onClick={handleExportConsolidatedPDF} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
+                        <Button onClick={handleGenerateConsolidatedPDF} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
                             <FileText className="mr-2 h-4 w-4" /> Exportar {selectedCampaignId === 'all' ? 'Consolidado' : 'Campaña'}
                         </Button>
                     </div>
@@ -964,7 +894,7 @@ export default function ExtraordinaryFundPage() {
                 </Card>
             </div>
 
-            {/* Libro Diario - Consolidado o por Campaña */}
+            {/* Libro Diario - Consolidado o por Campaña CON BOTONES DE MOVER */}
             <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                 <CardHeader className="bg-gradient-to-r from-white/5 to-transparent p-6 border-b border-white/5">
                     <div className="flex justify-between items-center">
@@ -984,14 +914,14 @@ export default function ExtraordinaryFundPage() {
                         <Table>
                             <TableHeader className="bg-slate-800/30">
                                 <TableRow className="border-white/5">
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400 w-24">FECHA</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400 w-12">ORD.</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">FECHA</TableHead>
                                     <TableHead className="text-[10px] font-black uppercase text-slate-400">DESCRIPCIÓN</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase text-slate-400 w-24">REFERENCIA</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 w-28">DEBE (Bs.)</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 w-28">HABER (Bs.)</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 w-28">SALDO (Bs.)</TableHead>
-                                    <TableHead className="text-center text-[10px] font-black uppercase text-slate-400 w-24">ORDEN</TableHead>
-                                    <TableHead className="text-center text-[10px] font-black uppercase text-slate-400 w-20">ACCIÓN</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">REFERENCIA</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">DEBE (Bs.)</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">HABER (Bs.)</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">SALDO (Bs.)</TableHead>
+                                    <TableHead className="text-center text-[10px] font-black uppercase text-slate-400">ACCIÓN</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1002,12 +932,46 @@ export default function ExtraordinaryFundPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    transactionsWithBalance.map((tx) => {
-                                        const moveUpEnabled = canMoveUp(tx, selectedCampaignId);
-                                        const moveDownEnabled = canMoveDown(tx, selectedCampaignId);
+                                    transactionsWithBalance.map((tx, idx) => {
+                                        const currentDate = tx.fecha.toDate();
+                                        const sameDateCount = transactionsWithBalance.filter(t => 
+                                            format(t.fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
+                                        ).length;
+                                        
+                                        const canMoveUp = idx > 0 && 
+                                            format(transactionsWithBalance[idx - 1].fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd');
+                                        const canMoveDown = idx < transactionsWithBalance.length - 1 && 
+                                            format(transactionsWithBalance[idx + 1].fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd');
+                                        const isMoving = movingTx === tx.id;
                                         
                                         return (
-                                            <TableRow key={tx.id} className="border-white/5 hover:bg-white/5 transition-colors">
+                                            <TableRow key={tx.id} className="border-white/5 hover:bg-white/5 transition-colors group">
+                                                <TableCell className="px-2 py-5">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        {canMoveUp && (
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                className="h-5 w-5 text-white/20 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                onClick={() => handleMoveUp(tx.id, currentDate)}
+                                                                disabled={!!isMoving}
+                                                            >
+                                                                {isMoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUp className="h-3 w-3" />}
+                                                            </Button>
+                                                        )}
+                                                        {canMoveDown && (
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                className="h-5 w-5 text-white/20 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                onClick={() => handleMoveDown(tx.id, currentDate)}
+                                                                disabled={!!isMoving}
+                                                            >
+                                                                {isMoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDown className="h-3 w-3" />}
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell className="font-black text-white text-xs italic">
                                                     {tx.fecha?.toDate ? format(tx.fecha.toDate(), 'dd/MM/yyyy') : 'N/A'}
                                                 </TableCell>
@@ -1038,28 +1002,6 @@ export default function ExtraordinaryFundPage() {
                                                     Bs. {formatCurrency(tx.runningBalance)}
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => reorderTransaction(tx, 'up', selectedCampaignId)}
-                                                            disabled={isReordering || !moveUpEnabled}
-                                                            className="h-7 w-7 text-white/40 hover:text-primary disabled:opacity-30"
-                                                        >
-                                                            <ChevronUp className="h-3 w-3" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => reorderTransaction(tx, 'down', selectedCampaignId)}
-                                                            disabled={isReordering || !moveDownEnabled}
-                                                            className="h-7 w-7 text-white/40 hover:text-primary disabled:opacity-30"
-                                                        >
-                                                            <ChevronDown className="h-3 w-3" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-center">
                                                     <Button 
                                                         variant="ghost" 
                                                         size="icon" 
@@ -1082,7 +1024,7 @@ export default function ExtraordinaryFundPage() {
                 </CardContent>
             </Card>
 
-            {/* Diálogo para ver libro diario individual de campaña - CON BOTONES DE ORDEN */}
+            {/* Diálogo para ver libro diario individual de campaña */}
             <Dialog open={campaignDetailDialogOpen} onOpenChange={setCampaignDetailDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic max-w-6xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
@@ -1142,22 +1084,53 @@ export default function ExtraordinaryFundPage() {
                             <Table>
                                 <TableHeader className="bg-slate-800/30">
                                     <TableRow className="border-white/5">
-                                        <TableHead className="text-[10px] font-black uppercase text-slate-400 w-24">FECHA</TableHead>
+                                        <TableHead className="text-[10px] font-black uppercase text-slate-400 w-12">ORD.</TableHead>
+                                        <TableHead className="text-[10px] font-black uppercase text-slate-400">FECHA</TableHead>
                                         <TableHead className="text-[10px] font-black uppercase text-slate-400">DESCRIPCIÓN</TableHead>
-                                        <TableHead className="text-[10px] font-black uppercase text-slate-400 w-24">REFERENCIA</TableHead>
-                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 w-28">DEBE (Bs.)</TableHead>
-                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 w-28">HABER (Bs.)</TableHead>
-                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 w-28">SALDO (Bs.)</TableHead>
-                                        <TableHead className="text-center text-[10px] font-black uppercase text-slate-400 w-20">ORDEN</TableHead>
+                                        <TableHead className="text-[10px] font-black uppercase text-slate-400">REFERENCIA</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">DEBE (Bs.)</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">HABER (Bs.)</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-400">SALDO (Bs.)</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {detailTransactionsWithBalance().map((tx) => {
-                                        const moveUpEnabled = canMoveUp(tx, selectedCampaignForDetail?.id);
-                                        const moveDownEnabled = canMoveDown(tx, selectedCampaignForDetail?.id);
+                                    {detailTransactionsWithBalance().map((tx, idx) => {
+                                        const currentDate = tx.fecha.toDate();
+                                        const detailTxList = detailTransactionsWithBalance();
+                                        const canMoveUp = idx > 0 && 
+                                            format(detailTxList[idx - 1].fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd');
+                                        const canMoveDown = idx < detailTxList.length - 1 && 
+                                            format(detailTxList[idx + 1].fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd');
+                                        const isMoving = movingTx === tx.id;
                                         
                                         return (
-                                            <TableRow key={tx.id} className="border-white/5 hover:bg-white/5">
+                                            <TableRow key={tx.id} className="border-white/5 hover:bg-white/5 group">
+                                                <TableCell className="px-2 py-5">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        {canMoveUp && (
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                className="h-5 w-5 text-white/20 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                onClick={() => handleMoveUp(tx.id, currentDate)}
+                                                                disabled={!!isMoving}
+                                                            >
+                                                                {isMoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUp className="h-3 w-3" />}
+                                                            </Button>
+                                                        )}
+                                                        {canMoveDown && (
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                className="h-5 w-5 text-white/20 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                onClick={() => handleMoveDown(tx.id, currentDate)}
+                                                                disabled={!!isMoving}
+                                                            >
+                                                                {isMoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDown className="h-3 w-3" />}
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell className="font-black text-white text-xs">
                                                     {tx.fecha?.toDate ? format(tx.fecha.toDate(), 'dd/MM/yyyy') : 'N/A'}
                                                 </TableCell>
@@ -1183,28 +1156,6 @@ export default function ExtraordinaryFundPage() {
                                                 </TableCell>
                                                 <TableCell className="text-right font-black text-primary">
                                                     Bs. {formatCurrency(tx.runningBalance)}
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => reorderTransaction(tx, 'up', selectedCampaignForDetail?.id)}
-                                                            disabled={isReordering || !moveUpEnabled}
-                                                            className="h-7 w-7 text-white/40 hover:text-primary disabled:opacity-30"
-                                                        >
-                                                            <ChevronUp className="h-3 w-3" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => reorderTransaction(tx, 'down', selectedCampaignForDetail?.id)}
-                                                            disabled={isReordering || !moveDownEnabled}
-                                                            className="h-7 w-7 text-white/40 hover:text-primary disabled:opacity-30"
-                                                        >
-                                                            <ChevronDown className="h-3 w-3" />
-                                                        </Button>
-                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -1233,7 +1184,6 @@ export default function ExtraordinaryFundPage() {
                             <p className="text-[9px] text-white/60 mt-1">
                                 Este módulo muestra los movimientos reales del Fondo Extraordinario. 
                                 Los montos en las tarjetas coinciden exactamente con el libro diario consolidado.
-                                <span className="block mt-2 text-yellow-400/80">✨ Los botones ↑↓ permiten reordenar movimientos de la misma fecha. Los saldos se recalcularán automáticamente.</span>
                             </p>
                         </div>
                     </div>
