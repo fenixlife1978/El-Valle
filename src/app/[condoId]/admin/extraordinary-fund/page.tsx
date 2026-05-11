@@ -87,7 +87,6 @@ interface ExtraordinaryTransaction {
     isLiquidation?: boolean;
     previousPendingUSD?: number;
     createdAt: Timestamp;
-    orden?: number;
 }
 
 interface ExtraordinaryCampaign {
@@ -189,7 +188,7 @@ export default function ExtraordinaryFundPage() {
         return () => unsubCampaigns();
     }, [condoId]);
 
-    // Cargar TODAS las transacciones una sola vez
+    // Cargar TODAS las transacciones ordenadas por fecha ascendente
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
 
@@ -200,7 +199,9 @@ export default function ExtraordinaryFundPage() {
 
         const unsubscribe = onSnapshot(q, (snap) => {
             const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExtraordinaryTransaction));
-            setTransactions(data);
+            // Ordenar por fecha (timestamp)
+            const sorted = [...data].sort((a, b) => a.fecha.toMillis() - b.fecha.toMillis());
+            setTransactions(sorted);
             setLoading(false);
         }, (error) => {
             console.error("Error cargando fondo extraordinario:", error);
@@ -250,14 +251,20 @@ export default function ExtraordinaryFundPage() {
         setBalance(totalBalance);
     }, [transactions]);
 
-    // Filtrar transacciones (manteniendo el orden original por fecha)
-    const filteredTransactions = selectedCampaignId === 'all' 
-        ? transactions 
-        : transactions.filter(tx => tx.campaignId === selectedCampaignId);
+    // Filtrar transacciones por campaña y ordenar por fecha
+    const filteredTransactions = () => {
+        const filtered = selectedCampaignId === 'all' 
+            ? [...transactions] 
+            : transactions.filter(tx => tx.campaignId === selectedCampaignId);
+        
+        // Ordenar por fecha (timestamp)
+        return filtered.sort((a, b) => a.fecha.toMillis() - b.fecha.toMillis());
+    };
 
     const getTransactionsWithRunningBalance = () => {
+        const sorted = filteredTransactions();
         let runningBalance = 0;
-        return filteredTransactions.map(tx => {
+        return sorted.map(tx => {
             if (tx.tipo === 'ingreso') {
                 runningBalance += tx.monto;
             } else {
@@ -267,44 +274,45 @@ export default function ExtraordinaryFundPage() {
         });
     };
 
-    // ==================== NUEVAS FUNCIONES PARA MOVER ASIENTOS ====================
+    // ==================== FUNCIONES PARA MOVER ASIENTOS USANDO TIMESTAMP ====================
     
     const handleMoveUp = async (txId: string, currentDate: Date) => {
         if (!condoId) return;
         
-        // Encontrar las transacciones de la misma fecha
-        const sameDateTransactions = filteredTransactions.filter(tx => 
-            format(tx.fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
-        );
+        const sorted = filteredTransactions();
         
-        if (sameDateTransactions.length <= 1) {
-            toast({ 
-                variant: 'destructive', 
-                title: "No permitido", 
-                description: "No hay otros movimientos en esta fecha para intercambiar." 
-            });
-            return;
-        }
-        
-        // Ordenar por orden actual (si tienen) o por el orden en que aparecen
-        const sorted = [...sameDateTransactions].sort((a, b) => {
-            return (a.orden || 0) - (b.orden || 0);
-        });
-        
+        // Encontrar el índice actual
         const currentIndex = sorted.findIndex(tx => tx.id === txId);
         if (currentIndex <= 0) return;
         
         const currentTx = sorted[currentIndex];
         const prevTx = sorted[currentIndex - 1];
         
+        // Verificar misma fecha
+        const currentDateStr = format(currentTx.fecha.toDate(), 'yyyy-MM-dd');
+        const prevDateStr = format(prevTx.fecha.toDate(), 'yyyy-MM-dd');
+        
+        if (currentDateStr !== prevDateStr) {
+            toast({ 
+                variant: 'destructive', 
+                title: "No permitido", 
+                description: "Solo se pueden reordenar asientos de la misma fecha." 
+            });
+            return;
+        }
+        
         setMovingTx(txId);
         try {
-            // Intercambiar órdenes
-            const newOrdenCurrent = prevTx.orden || 0;
-            const newOrdenPrev = currentTx.orden || 0;
+            const currentTime = currentTx.fecha.toMillis();
+            const prevTime = prevTx.fecha.toMillis();
             
-            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', currentTx.id), { orden: newOrdenCurrent });
-            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', prevTx.id), { orden: newOrdenPrev });
+            // Intercambiar timestamps (sumar/restar 1 milisegundo para evitar duplicados)
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', currentTx.id), { 
+                fecha: Timestamp.fromMillis(prevTime + 1)
+            });
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', prevTx.id), { 
+                fecha: Timestamp.fromMillis(currentTime - 1)
+            });
             
             toast({ title: "Asiento movido", description: "Los saldos se han recalculado automáticamente." });
         } catch (error) {
@@ -318,39 +326,40 @@ export default function ExtraordinaryFundPage() {
     const handleMoveDown = async (txId: string, currentDate: Date) => {
         if (!condoId) return;
         
-        // Encontrar las transacciones de la misma fecha
-        const sameDateTransactions = filteredTransactions.filter(tx => 
-            format(tx.fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
-        );
+        const sorted = filteredTransactions();
         
-        if (sameDateTransactions.length <= 1) {
-            toast({ 
-                variant: 'destructive', 
-                title: "No permitido", 
-                description: "No hay otros movimientos en esta fecha para intercambiar." 
-            });
-            return;
-        }
-        
-        // Ordenar por orden actual (si tienen) o por el orden en que aparecen
-        const sorted = [...sameDateTransactions].sort((a, b) => {
-            return (a.orden || 0) - (b.orden || 0);
-        });
-        
+        // Encontrar el índice actual
         const currentIndex = sorted.findIndex(tx => tx.id === txId);
         if (currentIndex < 0 || currentIndex >= sorted.length - 1) return;
         
         const currentTx = sorted[currentIndex];
         const nextTx = sorted[currentIndex + 1];
         
+        // Verificar misma fecha
+        const currentDateStr = format(currentTx.fecha.toDate(), 'yyyy-MM-dd');
+        const nextDateStr = format(nextTx.fecha.toDate(), 'yyyy-MM-dd');
+        
+        if (currentDateStr !== nextDateStr) {
+            toast({ 
+                variant: 'destructive', 
+                title: "No permitido", 
+                description: "Solo se pueden reordenar asientos de la misma fecha." 
+            });
+            return;
+        }
+        
         setMovingTx(txId);
         try {
-            // Intercambiar órdenes
-            const newOrdenCurrent = nextTx.orden || 0;
-            const newOrdenNext = currentTx.orden || 0;
+            const currentTime = currentTx.fecha.toMillis();
+            const nextTime = nextTx.fecha.toMillis();
             
-            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', currentTx.id), { orden: newOrdenCurrent });
-            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', nextTx.id), { orden: newOrdenNext });
+            // Intercambiar timestamps
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', currentTx.id), { 
+                fecha: Timestamp.fromMillis(nextTime - 1)
+            });
+            await updateDoc(doc(db, 'condominios', condoId, 'extraordinary_funds', nextTx.id), { 
+                fecha: Timestamp.fromMillis(currentTime + 1)
+            });
             
             toast({ title: "Asiento movido", description: "Los saldos se han recalculado automáticamente." });
         } catch (error) {
@@ -548,7 +557,7 @@ export default function ExtraordinaryFundPage() {
                                     <td class="text-right">Bs. ${formatCurrency(t.runningBalance)}</td>
                                 </tr>
                             `}).join('')}
-                            ${txs.length === 0 ? '<tr><td colspan="6" class="text-center">No hay movimientos registrados</td>' : ''}
+                            ${txs.length === 0 ? '<td><td colspan="6" class="text-center">No hay movimientos registrados</td>' : ''}
                         </tbody>
                     </table>
                     <div class="footer"><p>Documento generado por <strong>EFASCondoSys</strong> - Sistema de Autogestión de Condominios</p></div>
@@ -603,8 +612,8 @@ export default function ExtraordinaryFundPage() {
         const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
         const campaignDisplayName = selectedCampaign ? selectedCampaign.description : "Consolidado";
         
-        const totalIngresos = filteredTransactions.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
-        const totalEgresos = filteredTransactions.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
+        const totalIngresos = transactionsWithBalance.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
+        const totalEgresos = transactionsWithBalance.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
         const saldoActual = totalIngresos - totalEgresos;
         
         const logo = condominioData?.logo || companyInfo?.logo || "/logos/efascondosys-logo.png";
@@ -691,7 +700,7 @@ export default function ExtraordinaryFundPage() {
                                     <td class="text-right">Bs. ${formatCurrency(t.runningBalance)}</td>
                                 </tr>
                             `}).join('')}
-                            ${transactionsWithBalance.length === 0 ? '<tr><td colspan="6" class="text-center">No hay movimientos registrados</td>' : ''}
+                            ${transactionsWithBalance.length === 0 ? '</table><td colspan="6" class="text-center">No hay movimientos registrados</td>' : ''}
                         </tbody>
                     </table>
                     <div class="footer"><p>Documento generado por <strong>EFASCondoSys</strong> - Sistema de Autogestión de Condominios</p></div>
@@ -721,13 +730,13 @@ export default function ExtraordinaryFundPage() {
     }
 
     const transactionsWithBalance = getTransactionsWithRunningBalance();
-    const totalIngresos = filteredTransactions.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
-    const totalEgresos = filteredTransactions.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
+    const totalIngresos = transactionsWithBalance.filter(t => t.tipo === 'ingreso').reduce((s, t) => s + t.monto, 0);
+    const totalEgresos = transactionsWithBalance.filter(t => t.tipo === 'egreso').reduce((s, t) => s + t.monto, 0);
     const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
     const campaignDisplayName = selectedCampaign ? selectedCampaign.description : "Consolidado";
 
     const detailTransactions = selectedCampaignForDetail 
-        ? campaignBalances[selectedCampaignForDetail.id]?.transacciones || []
+        ? (campaignBalances[selectedCampaignForDetail.id]?.transacciones || []).sort((a, b) => a.fecha.toMillis() - b.fecha.toMillis())
         : [];
     
     const detailTransactionsWithBalance = () => {
@@ -934,10 +943,6 @@ export default function ExtraordinaryFundPage() {
                                 ) : (
                                     transactionsWithBalance.map((tx, idx) => {
                                         const currentDate = tx.fecha.toDate();
-                                        const sameDateCount = transactionsWithBalance.filter(t => 
-                                            format(t.fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
-                                        ).length;
-                                        
                                         const canMoveUp = idx > 0 && 
                                             format(transactionsWithBalance[idx - 1].fecha.toDate(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd');
                                         const canMoveDown = idx < transactionsWithBalance.length - 1 && 
