@@ -15,9 +15,10 @@ import {
     Search, CheckCircle, XCircle, Eye, MoreHorizontal, 
     Download, Loader2, Calendar as CalendarIcon,
     UserPlus, WalletCards, Trash2, FileText, Save, Share2, FileDown,
-    Calculator, Receipt, Check, DollarSign, Plus, Info, Hash, Banknote, AlertCircle, CheckCircle2
+    Calculator, Receipt, Check, DollarSign, Plus, Info, Hash, Banknote, AlertCircle, CheckCircle2,
+    TrendingUp, History, ArrowRight, ArrowUpRight
 } from 'lucide-react';
-import { format, addMonths, startOfMonth } from 'date-fns';
+import { format, addMonths, startOfMonth, limit } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { 
@@ -43,6 +44,7 @@ import Decimal from 'decimal.js';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 
+// --- UTILIDADES ---
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
@@ -66,7 +68,9 @@ const formatUSD = (num: number) => {
 
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
+const SUPER_ADMIN_EMAIL = "vallecondo@gmail.com";
 
+// --- TIPOS ---
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | '';
@@ -94,55 +98,110 @@ type Payment = {
     totalPagado?: number;
 };
 
-// --- COMPONENTE DE VERIFICACIÓN ---
-function VerificationComponent({ condoId }: { condoId: string }) {
+// --- COMPONENTE 1: PAGOS EN TRÁNSITO (CON SIMULACIÓN) ---
+function TransitPaymentsComponent({ condoId }: { condoId: string }) {
     const { user } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
 
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [activeTab, setActiveTab] = useState('pendiente');
-    const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
     const [isVerifying, setIsVerifying] = useState(false);
+    const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
-    const [localCompanyInfo, setLocalCompanyInfo] = useState<any>(null);
-    const [cuentasDolares, setCuentasDolares] = useState<any[]>([]);
+    
+    // Estados de simulación
+    const [simulation, setSimulation] = useState<any>(null);
+    const [isSimulating, setIsSimulating] = useState(false);
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
-        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-        return onSnapshot(settingsRef, (snap) => {
-            if (snap.exists()) setLocalCompanyInfo(snap.data().companyInfo);
-        });
-    }, [condoId]);
-
-    useEffect(() => {
-        if (!condoId || condoId === "[condoId]") return;
-        const q = query(collection(db, 'condominios', condoId, 'payments'), orderBy('reportedAt', 'desc'));
+        const q = query(
+            collection(db, 'condominios', condoId, 'payments'), 
+            where('status', '==', 'pendiente'),
+            orderBy('reportedAt', 'desc')
+        );
         return onSnapshot(q, (snapshot) => {
             setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment)));
             setLoading(false);
         });
     }, [condoId]);
 
-    useEffect(() => {
-        if (!condoId || condoId === "[condoId]") return;
-        const q = query(collection(db, 'condominios', condoId, 'cuentas'), where('tipo', '==', 'dolares'));
-        return onSnapshot(q, (snap) => setCuentasDolares(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    }, [condoId]);
+    // Función de simulación: se ejecuta al hacer clic en "Ver Detalles"
+    const runSimulation = async (payment: Payment) => {
+        setIsSimulating(true);
+        try {
+            const results = [];
+            const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
+            const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
-    const filteredPayments = useMemo(() => {
-        return payments.filter(p => {
-            if (p.status !== activeTab) return false;
-            if (!searchTerm) return true;
-            const search = searchTerm.toLowerCase();
-            return p.reference?.toLowerCase().includes(search) || p.beneficiaries?.some(b => b.ownerName?.toLowerCase().includes(search));
-        });
-    }, [payments, activeTab, searchTerm]);
+            for (const ben of payment.beneficiaries) {
+                const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ben.ownerId));
+                if (!ownerSnap.exists()) continue;
+
+                const saldoPrevio = new Decimal(ownerSnap.data().balance || 0);
+                const montoPago = new Decimal(ben.amount);
+                let saldoDisponible = saldoPrevio.plus(montoPago);
+                let montoAbonado = new Decimal(0);
+                const concepts: any[] = [];
+
+                if (ben.category === 'extraordinaria' && ben.extraordinaryDebtId) {
+                    const extraSnap = await getDoc(doc(db, 'condominios', condoId, 'owner_extraordinary_debts', ben.extraordinaryDebtId));
+                    if (extraSnap.exists()) {
+                        const data = extraSnap.data();
+                        const isDolarPayment = payment.paymentMethod?.includes('usd');
+                        const paidUSD = isDolarPayment ? ben.amount : ben.amount / payment.exchangeRate;
+                        const isLiq = (data.amountUSD - ((data.amountPaidUSD || 0) + paidUSD)) <= 0.01;
+                        
+                        montoAbonado = montoAbonado.plus(ben.amount);
+                        saldoDisponible = saldoDisponible.minus(ben.amount);
+                        concepts.push({ 
+                            desc: (isLiq ? `CUOTA EXTRAORDINARIA: ${data.description}` : `ABONO EXTRAORDINARIA: ${data.description}`).toUpperCase(), 
+                            montoUSD: paidUSD 
+                        });
+                    }
+                } else {
+                    const debtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', ben.ownerId), where('status', 'in', ['pending', 'vencida'])));
+                    const pendingDebts = debtsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).sort((a,b) => a.year - b.year || a.month - b.month);
+                    
+                    for (const debt of pendingDebts) {
+                        const debtBs = new Decimal(debt.amountUSD).times(payment.exchangeRate);
+                        if (saldoDisponible.gte(debtBs)) {
+                            saldoDisponible = saldoDisponible.minus(debtBs);
+                            montoAbonado = montoAbonado.plus(debtBs);
+                            concepts.push({ desc: debt.description.toUpperCase(), montoUSD: debt.amountUSD, period: `${monthsLocale[debt.month]} ${debt.year}` });
+                        } else break;
+                    }
+
+                    const advanceBs = new Decimal(currentFee).times(payment.exchangeRate);
+                    while (saldoDisponible.gte(advanceBs)) {
+                        saldoDisponible = saldoDisponible.minus(advanceBs);
+                        montoAbonado = montoAbonado.plus(advanceBs);
+                        concepts.push({ desc: 'CUOTA ADELANTADA', montoUSD: currentFee });
+                    }
+                }
+
+                results.push({
+                    ownerName: ben.ownerName,
+                    saldoAnterior: saldoPrevio.toNumber(),
+                    montoRecibido: ben.amount,
+                    totalAbonado: montoAbonado.toNumber(),
+                    excedente: montoPago.minus(montoAbonado).toNumber(),
+                    saldoActual: saldoDisponible.toNumber(),
+                    concepts
+                });
+            }
+            setSimulation(results);
+            setSelectedPayment(payment);
+        } catch (e) {
+            console.error(e);
+            toast({ variant: 'destructive', title: "Error en simulación" });
+        } finally {
+            setIsSimulating(false);
+        }
+    };
 
     const handleApprove = (payment: Payment) => {
         requestAuthorization(async () => {
@@ -152,242 +211,432 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const method = (payment.paymentMethod || "").toLowerCase().trim();
                 const isDolares = method.includes('usd') || method.includes('dolares');
                 const isDigital = method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil');
-                let targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
-                let targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
                 
-                if (isDolares && cuentasDolares.length > 0) {
-                    targetAccountId = cuentasDolares[0].id;
-                    targetAccountName = cuentasDolares[0].nombre;
+                // Buscar cuenta destino
+                const cuentasSnap = await getDocs(query(collection(db, 'condominios', condoId, 'cuentas')));
+                const cuentas = cuentasSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+                
+                let targetAccountId = "";
+                let targetAccountName = "";
+
+                if (isDolares) {
+                    const acc = cuentas.find(c => c.tipo === 'dolares');
+                    targetAccountId = acc?.id || "";
+                    targetAccountName = acc?.nombre || "CUENTA DÓLARES";
+                } else {
+                    targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
+                    targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
                 }
 
                 const monthId = format(payment.paymentDate.toDate(), 'yyyy-MM');
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
-                // 1. PRE-LECTURA DE DATOS
-                const ownerRefs = payment.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
-                const ownerSnapsPromises = ownerRefs.map(ref => getDoc(ref));
-                
-                const preparedDebtsData: Record<string, any> = {};
-                for (const ben of payment.beneficiaries) {
-                    if (ben.category === 'extraordinaria' && ben.extraordinaryDebtId) {
-                        preparedDebtsData[ben.extraordinaryDebtId] = await getDoc(doc(db, 'condominios', condoId, 'owner_extraordinary_debts', ben.extraordinaryDebtId));
-                    } else {
-                        preparedDebtsData[ben.ownerId] = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', ben.ownerId), where('status', 'in', ['pending', 'vencida'])));
-                        preparedDebtsData[`${ben.ownerId}_all`] = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', ben.ownerId)));
-                    }
-                }
-
-                const ownerSnaps = await Promise.all(ownerSnapsPromises);
-
-                // 2. INICIO DE TRANSACCIÓN ATÓMICA
                 await runTransaction(db, async (transaction) => {
+                    // PRE-LECTURA: Obtener todos los perfiles de beneficiarios primero
+                    const ownerRefs = payment.beneficiaries.map(ben => doc(db, 'condominios', condoId, ownersCollectionName, ben.ownerId));
+                    const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
+
                     const receiptNumbers: { [ownerId: string]: string } = {};
                     const liquidatedConcepts: LiquidatedConcept[] = [];
                     let saldoAnteriorGlobal = new Decimal(0);
                     let totalAbonadoDeudasGlobal = new Decimal(0);
 
                     for (let i = 0; i < payment.beneficiaries.length; i++) {
-                        const beneficiary = payment.beneficiaries[i];
+                        const ben = payment.beneficiaries[i];
                         const ownerSnap = ownerSnaps[i];
                         const ownerRef = ownerRefs[i];
+
                         if (!ownerSnap.exists()) continue;
 
                         const saldoAnterior = new Decimal(ownerSnap.data().balance || 0);
                         saldoAnteriorGlobal = saldoAnteriorGlobal.plus(saldoAnterior);
                         
-                        const montoPagoHoy = new Decimal(beneficiary.amount);
-                        let saldoActualizado = saldoAnterior.plus(montoPagoHoy);
-                        let montoAplicadoDePagoHoy = new Decimal(0);
+                        const montoRecibido = new Decimal(ben.amount);
+                        let saldoDisponible = saldoAnterior.plus(montoRecibido);
+                        let montoAplicadoPagoHoy = new Decimal(0);
 
-                        // --- LIQUIDACIÓN DE EXTRAORDINARIAS ---
-                        if (beneficiary.category === 'extraordinaria' && beneficiary.extraordinaryDebtId) {
-                            const debtSnap = preparedDebtsData[beneficiary.extraordinaryDebtId];
-                            if (debtSnap && debtSnap.exists()) {
-                                const debtData = debtSnap.data();
-                                const paidUSD = isDolares ? beneficiary.amount : beneficiary.amount / payment.exchangeRate;
-                                const newPaidUSD = (debtData.amountPaidUSD || 0) + paidUSD;
-                                const isLiquidation = (debtData.amountUSD - newPaidUSD) <= 0.01;
+                        if (ben.category === 'extraordinaria' && ben.extraordinaryDebtId) {
+                            const extraRef = doc(db, 'condominios', condoId, 'owner_extraordinary_debts', ben.extraordinaryDebtId);
+                            const extraSnap = await transaction.get(extraRef);
+                            if (extraSnap.exists()) {
+                                const data = extraSnap.data();
+                                const paidUSD = isDolares ? ben.amount : ben.amount / payment.exchangeRate;
+                                const newPaidUSD = (data.amountPaidUSD || 0) + paidUSD;
+                                const isLiq = (data.amountUSD - newPaidUSD) <= 0.01;
 
-                                transaction.update(debtSnap.ref, {
-                                    status: isLiquidation ? 'paid' : 'partial',
-                                    pendingUSD: Math.max(0, debtData.amountUSD - newPaidUSD),
-                                    paidAt: isLiquidation ? payment.paymentDate : null,
-                                    paymentId: isLiquidation ? payment.id : null,
-                                    amountPaidBs: (debtData.amountPaidBs || 0) + beneficiary.amount,
+                                transaction.update(extraRef, {
+                                    status: isLiq ? 'paid' : 'partial',
+                                    pendingUSD: Math.max(0, data.amountUSD - newPaidUSD),
+                                    paidAt: isLiq ? payment.paymentDate : null,
+                                    paymentId: isLiq ? payment.id : null,
+                                    amountPaidBs: (data.amountPaidBs || 0) + ben.amount,
                                     amountPaidUSD: newPaidUSD,
                                     updatedAt: serverTimestamp()
                                 });
 
-                                montoAplicadoDePagoHoy = montoAplicadoDePagoHoy.plus(beneficiary.amount);
-                                saldoActualizado = saldoActualizado.minus(beneficiary.amount);
+                                montoAplicadoPagoHoy = montoAplicadoPagoHoy.plus(ben.amount);
+                                saldoDisponible = saldoDisponible.minus(ben.amount);
                                 liquidatedConcepts.push({
-                                    ownerId: beneficiary.ownerId,
-                                    description: (isLiquidation ? `CUOTA EXTRAORDINARIA: ${debtData.description}` : `ABONO PARCIAL CUOTA EXTRAORDINARIA: ${debtData.description}`).toUpperCase(),
+                                    ownerId: ben.ownerId,
+                                    description: (isLiq ? `CUOTA EXTRAORDINARIA: ${data.description}` : `ABONO EXTRAORDINARIA: ${data.description}`).toUpperCase(),
                                     amountUSD: paidUSD,
                                     period: format(payment.paymentDate.toDate(), 'MMMM yyyy', { locale: es }).toUpperCase(),
-                                    type: isLiquidation ? 'extraordinaria' : 'abono_extraordinaria'
+                                    type: isLiq ? 'extraordinaria' : 'abono_extraordinaria'
                                 });
                             }
                         } else {
-                            // --- LIQUIDACIÓN DE ORDINARIAS ---
-                            const pendingDebts = preparedDebtsData[beneficiary.ownerId].docs.map((d: any) => ({ id: d.id, ref: d.ref, ...d.data() })).sort((a: any, b: any) => a.year - b.year || a.month - b.month);
-                            const allDebtsSorted = preparedDebtsData[`${beneficiary.ownerId}_all`].docs.map((d: any) => d.data()).sort((a: any, b: any) => a.year - b.year || a.month - b.month);
+                            const debtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', ben.ownerId), where('status', 'in', ['pending', 'vencida'])));
+                            const pendingDebts = debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any)).sort((a,b) => a.year - b.year || a.month - b.month);
 
                             for (const debt of pendingDebts) {
                                 const debtBs = new Decimal(debt.amountUSD).times(payment.exchangeRate);
-                                if (saldoActualizado.gte(debtBs)) {
-                                    saldoActualizado = saldoActualizado.minus(debtBs);
-                                    montoAplicadoDePagoHoy = montoAplicadoDePagoHoy.plus(debtBs);
+                                if (saldoDisponible.gte(debtBs)) {
+                                    saldoDisponible = saldoDisponible.minus(debtBs);
+                                    montoAplicadoPagoHoy = montoAplicadoPagoHoy.plus(debtBs);
                                     transaction.update(debt.ref, { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: payment.paymentDate, paymentId: payment.id });
-                                    liquidatedConcepts.push({ ownerId: beneficiary.ownerId, description: `${debt.description} (${beneficiary.street || ''} ${beneficiary.house || ''})`.toUpperCase(), amountUSD: debt.amountUSD, period: `${monthsLocale[debt.month]} ${debt.year}`, type: 'deuda' });
+                                    liquidatedConcepts.push({ ownerId: ben.ownerId, description: debt.description.toUpperCase(), amountUSD: debt.amountUSD, period: `${monthsLocale[debt.month]} ${debt.year}`, type: 'deuda' });
                                 } else break;
                             }
 
-                            // --- ADELANTOS ---
                             const advanceBs = new Decimal(currentFee).times(payment.exchangeRate);
-                            let nextDate = addMonths(new Date(), 1);
-                            if (allDebtsSorted.length > 0) { nextDate = addMonths(new Date(allDebtsSorted[allDebtsSorted.length - 1].year, allDebtsSorted[allDebtsSorted.length - 1].month - 1), 1); }
-                            
-                            while (saldoActualizado.gte(advanceBs)) {
-                                const y = nextDate.getFullYear(), m = nextDate.getMonth() + 1;
-                                transaction.set(doc(collection(db, 'condominios', condoId, 'debts')), { ownerId: beneficiary.ownerId, property: { street: beneficiary.street || '', house: beneficiary.house || '' }, year: y, month: m, amountUSD: currentFee, description: 'CUOTA DE CONDOMINIO (ADELANTADO)', status: 'paid', paidAmountUSD: currentFee, paymentDate: payment.paymentDate, paymentId: payment.id, published: true });
-                                montoAplicadoDePagoHoy = montoAplicadoDePagoHoy.plus(advanceBs);
-                                saldoActualizado = saldoActualizado.minus(advanceBs);
-                                liquidatedConcepts.push({ ownerId: beneficiary.ownerId, description: `CUOTA ADELANTADA (${beneficiary.street || ''} ${beneficiary.house || ''})`.toUpperCase(), amountUSD: currentFee, period: `${monthsLocale[m]} ${y}`, type: 'adelanto' });
-                                nextDate = addMonths(nextDate, 1);
-                            }
-
-                            // CÁLCULO DE EXCEDENTE REAL DEL PAGO DE HOY
-                            const excedentePagoHoy = montoPagoHoy.minus(montoAplicadoDePagoHoy);
-                            if (excedentePagoHoy.gt(0)) {
-                                liquidatedConcepts.push({ 
-                                    ownerId: beneficiary.ownerId, 
-                                    description: `EXCEDENTE DE PAGO APLICADO A SALDO A FAVOR`.toUpperCase(), 
-                                    amountUSD: excedentePagoHoy.div(payment.exchangeRate).toNumber(), 
-                                    period: 'EXCEDENTE', 
-                                    type: 'abono' 
+                            while (saldoDisponible.gte(advanceBs)) {
+                                const nextDate = addMonths(new Date(), conceptsForAdvance(liquidatedConcepts, ben.ownerId));
+                                const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
+                                transaction.set(newDebtRef, { 
+                                    ownerId: ben.ownerId, property: { street: ben.street || '', house: ben.house || '' }, 
+                                    year: nextDate.getFullYear(), month: nextDate.getMonth() + 1, amountUSD: currentFee, 
+                                    description: 'CUOTA DE CONDOMINIO (ADELANTADO)', status: 'paid', 
+                                    paidAmountUSD: currentFee, paymentDate: payment.paymentDate, paymentId: payment.id, published: true 
                                 });
+                                montoAplicadoPagoHoy = montoAplicadoPagoHoy.plus(advanceBs);
+                                saldoDisponible = saldoDisponible.minus(advanceBs);
+                                liquidatedConcepts.push({ ownerId: ben.ownerId, description: 'CUOTA ADELANTADA', amountUSD: currentFee, period: `${monthsLocale[nextDate.getMonth()+1]} ${nextDate.getFullYear()}`, type: 'adelanto' });
                             }
                         }
 
-                        totalAbonadoDeudasGlobal = totalAbonadoDeudasGlobal.plus(montoAplicadoDePagoHoy);
-                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
-                        transaction.update(ownerRef, { balance: saldoActualizado.toDecimalPlaces(2).toNumber() });
+                        totalAbonadoDeudasGlobal = totalAbonadoDeudasGlobal.plus(montoAplicadoPagoHoy);
+                        receiptNumbers[ben.ownerId] = `REC-${Date.now().toString().substring(6)}-${ben.ownerId.slice(-4)}`.toUpperCase();
+                        transaction.update(ownerRef, { balance: saldoDisponible.toDecimalPlaces(2).toNumber() });
                     }
 
-                    transaction.update(doc(db, 'condominios', condoId, 'cuentas', targetAccountId), { saldoActual: increment(payment.totalAmount) });
-                    transaction.set(doc(db, 'condominios', condoId, 'financial_stats', monthId), { periodo: monthId, totalIngresosMes: increment(payment.totalAmount), updatedAt: serverTimestamp() }, { merge: true });
-                    transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), { monto: isDolares ? 0 : payment.totalAmount, montoUSD: isDolares ? payment.totalAmount : 0, tipoCuenta: isDolares ? 'dolares' : 'bs', tipo: 'ingreso', cuentaId: targetAccountId, nombreCuenta: targetAccountName, descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(), referencia: payment.reference, fecha: payment.paymentDate, sourcePaymentId: payment.id, createdAt: serverTimestamp(), createdBy: user?.email });
+                    if (targetAccountId) {
+                        transaction.update(doc(db, 'condominios', condoId, 'cuentas', targetAccountId), { saldoActual: increment(payment.totalAmount) });
+                        transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), { 
+                            monto: isDolares ? 0 : payment.totalAmount, montoUSD: isDolares ? payment.totalAmount : 0, 
+                            tipoCuenta: isDolares ? 'dolares' : 'bs', tipo: 'ingreso', cuentaId: targetAccountId, 
+                            nombreCuenta: targetAccountName, descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`.toUpperCase(), 
+                            referencia: payment.reference, fecha: payment.paymentDate, sourcePaymentId: payment.id, 
+                            createdAt: serverTimestamp(), createdBy: user?.email 
+                        });
+                    }
 
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
-                        status: 'aprobado', 
-                        receiptNumbers, 
-                        liquidatedConcepts, 
-                        saldoAnterior: saldoAnteriorGlobal.toNumber(), 
-                        montoRecibido: Number(payment.totalAmount), 
-                        totalAbonadoDeudas: totalAbonadoDeudasGlobal.toDecimalPlaces(2).toNumber(), 
-                        saldoActual: saldoAnteriorGlobal.plus(payment.totalAmount).minus(totalAbonadoDeudasGlobal).toDecimalPlaces(2).toNumber(), 
-                        totalPagado: Number(payment.totalAmount), 
-                        observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' 
+                        status: 'aprobado', receiptNumbers, liquidatedConcepts, 
+                        saldoAnterior: saldoAnteriorGlobal.toNumber(), montoRecibido: payment.totalAmount,
+                        totalAbonadoDeudas: totalAbonadoDeudasGlobal.toNumber(), 
+                        saldoActual: saldoAnteriorGlobal.plus(payment.totalAmount).minus(totalAbonadoDeudasGlobal).toNumber(),
+                        totalPagado: payment.totalAmount,
+                        approvedAt: serverTimestamp(), approvedBy: user?.email
                     });
                 });
-                toast({ title: "Pago Validado con Éxito" });
+                toast({ title: "Pago Aprobado y Asentado" });
                 setSelectedPayment(null);
-            } catch (error: any) { toast({ variant: 'destructive', title: "Fallo Contable", description: error.message }); } finally { setIsVerifying(false); }
+            } catch (e: any) {
+                console.error(e);
+                toast({ variant: 'destructive', title: "Error en aprobación", description: e.message });
+            } finally {
+                setIsVerifying(false);
+            }
         });
     };
 
-    const handleReject = (payment: Payment) => {
-        if (!rejectionReason) return toast({ variant: 'destructive', title: "Motivo requerido" });
-        requestAuthorization(async () => {
-            if (!condoId) return;
-            try {
-                await updateDoc(doc(db, 'condominios', condoId, 'payments', payment.id), { status: 'rechazado', observations: rejectionReason.toUpperCase(), rejectedBy: user?.email, rejectedAt: serverTimestamp() });
-                toast({ title: "Pago Rechazado" });
-                setSelectedPayment(null);
-            } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
-        });
+    const handleReject = async (p: Payment) => {
+        if (!rejectionReason) return;
+        setIsVerifying(true);
+        try {
+            await updateDoc(doc(db, 'condominios', condoId, 'payments', p.id), {
+                status: 'rechazado',
+                observations: rejectionReason.toUpperCase(),
+                rejectedAt: serverTimestamp(),
+                rejectedBy: user?.email
+            });
+            toast({ title: "Pago Rechazado" });
+            setSelectedPayment(null);
+            setRejectionReason('');
+        } catch (e) { console.error(e); }
+        finally { setIsVerifying(false); }
+    }
+
+    const conceptsForAdvance = (concepts: any[], ownerId: string) => {
+        return concepts.filter(c => c.ownerId === ownerId && (c.type === 'deuda' || c.type === 'adelanto')).length;
     };
 
-    const handleExportPDF = async (payment: Payment, ownerId: string) => {
+    if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div>;
+
+    return (
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {payments.length === 0 ? (
+                    <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
+                        <CheckCircle2 className="h-12 w-12 text-white/10 mx-auto mb-4" />
+                        <p className="text-white/30 font-black uppercase text-[10px] tracking-widest italic">No hay reportes en tránsito</p>
+                    </div>
+                ) : (
+                    payments.map(p => (
+                        <Card key={p.id} className="rounded-[2.5rem] bg-slate-900 border-white/5 hover:border-primary/30 transition-all group overflow-hidden">
+                            <CardHeader className="pb-2">
+                                <div className="flex justify-between items-start">
+                                    <Badge className="bg-primary/20 text-primary border-none text-[8px] font-black uppercase tracking-tighter">
+                                        {p.paymentMethod}
+                                    </Badge>
+                                    <span className="text-[9px] font-bold text-white/20 uppercase italic">
+                                        {format(p.reportedAt.toDate(), 'dd/MM HH:mm')}
+                                    </span>
+                                </div>
+                                <CardTitle className="text-white font-black uppercase italic text-sm mt-3 leading-tight">
+                                    {p.beneficiaries.map(b => b.ownerName).join(", ")}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-black text-white italic tracking-tighter">Bs. {formatCurrency(p.totalAmount)}</div>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">REF: {p.reference || 'S/R'} • {p.bank}</div>
+                            </CardContent>
+                            <CardFooter className="bg-white/5 p-4 flex gap-2">
+                                <Button onClick={() => runSimulation(p)} className="flex-1 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black uppercase text-[10px] h-10 italic">
+                                    {isSimulating ? <Loader2 className="animate-spin h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />} Ver y Simular
+                                </Button>
+                                <Button onClick={() => handleApprove(p)} disabled={isVerifying} className="flex-1 rounded-xl bg-primary text-slate-900 font-black uppercase text-[10px] h-10 italic">
+                                    Aprobar
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    ))
+                )}
+            </div>
+
+            {/* DIÁLOGO DE DETALLE Y SIMULACIÓN */}
+            {selectedPayment && simulation && (
+                <Dialog open={!!selectedPayment} onOpenChange={() => { setSelectedPayment(null); setSimulation(null); }}>
+                    <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Auditoría de <span className="text-primary">Transmisión</span></DialogTitle>
+                            <DialogDescription className="text-white/40 font-bold text-[10px] uppercase">Previsualización del impacto contable antes de asentar.</DialogDescription>
+                        </DialogHeader>
+
+                        <div className="py-6 space-y-8">
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="p-5 bg-white/5 rounded-3xl border border-white/5">
+                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Monto Reportado</p>
+                                    <p className="text-3xl font-black text-white italic tracking-tighter">Bs. {formatCurrency(selectedPayment.totalAmount)}</p>
+                                    <p className="text-[9px] font-bold text-primary mt-1 uppercase italic">Equiv: ${formatUSD(selectedPayment.totalAmount / selectedPayment.exchangeRate)} USD (Tasa: {selectedPayment.exchangeRate})</p>
+                                </div>
+                                <div className="p-5 bg-white/5 rounded-3xl border border-white/5">
+                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Referencia Bancaria</p>
+                                    <p className="text-3xl font-black text-white italic tracking-tighter uppercase">{selectedPayment.reference}</p>
+                                    <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase italic">{selectedPayment.bank}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 text-primary">
+                                    <TrendingUp className="h-5 w-5" />
+                                    <h3 className="font-black uppercase text-xs tracking-widest">Plan de Liquidación Estimado</h3>
+                                </div>
+
+                                {simulation.map((res: any, idx: number) => (
+                                    <Card key={idx} className="bg-slate-950 border-white/10 rounded-3xl overflow-hidden">
+                                        <CardHeader className="bg-white/5 py-4 px-6 border-b border-white/5 flex flex-row justify-between items-center">
+                                            <CardTitle className="text-xs font-black uppercase text-white italic">{res.ownerName}</CardTitle>
+                                            <Badge variant="outline" className="text-[9px] border-emerald-500/20 text-emerald-500">PROPIETARIO</Badge>
+                                        </CardHeader>
+                                        <CardContent className="p-6 space-y-4">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="space-y-1"><p className="text-[8px] font-black text-slate-500 uppercase">Saldo Previo</p><p className="font-black text-white text-xs">Bs. {formatCurrency(res.saldoAnterior)}</p></div>
+                                                <div className="space-y-1"><p className="text-[8px] font-black text-slate-500 uppercase">Abonado a Deudas</p><p className="font-black text-primary text-xs">Bs. {formatCurrency(res.totalAbonado)}</p></div>
+                                                <div className="space-y-1"><p className="text-[8px] font-black text-slate-500 uppercase">Remanente</p><p className="font-black text-emerald-500 text-xs">Bs. {formatCurrency(res.excedente)}</p></div>
+                                                <div className="space-y-1"><p className="text-[8px] font-black text-slate-500 uppercase">Saldo Proyectado</p><p className="font-black text-white text-sm">Bs. {formatCurrency(res.saldoActual)}</p></div>
+                                            </div>
+                                            <div className="pt-4 border-t border-white/5 space-y-2">
+                                                <p className="text-[9px] font-black text-slate-600 uppercase">Conceptos que se liquidarán:</p>
+                                                {res.concepts.map((c: any, ci: number) => (
+                                                    <div key={ci} className="flex justify-between items-center bg-white/5 px-4 py-2 rounded-xl">
+                                                        <span className="text-[10px] font-bold text-white uppercase italic">{c.desc} {c.period && `(${c.period})`}</span>
+                                                        <span className="text-[10px] font-black text-primary">${formatUSD(c.montoUSD)}</span>
+                                                    </div>
+                                                ))}
+                                                {res.excedente > 0 && (
+                                                    <div className="flex justify-between items-center bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20">
+                                                        <span className="text-[10px] font-black uppercase italic">EXCEDENTE DE PAGO APLICADO A SALDO A FAVOR</span>
+                                                        <span className="text-[10px] font-black text-emerald-500">Bs. {formatCurrency(res.excedente)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+
+                            {selectedPayment.receiptUrl && (
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-primary ml-2">Comprobante Original</Label>
+                                    <img src={selectedPayment.receiptUrl} className="rounded-[2rem] border border-white/10 w-full shadow-2xl" />
+                                </div>
+                            )}
+
+                            <div className="space-y-2 pt-4 border-t border-white/5">
+                                <Label className="text-[10px] font-black uppercase text-red-500 ml-2">Acción Correctiva (Motivo de Rechazo)</Label>
+                                <Textarea 
+                                    value={rejectionReason} 
+                                    onChange={e => setRejectionReason(e.target.value)} 
+                                    placeholder="Indique por qué el pago no cumple con los requisitos para ser aprobado..."
+                                    className="bg-white/5 border-none rounded-2xl min-h-[100px] text-xs font-bold p-4"
+                                />
+                            </div>
+                        </div>
+
+                        <DialogFooter className="gap-3">
+                            <Button variant="ghost" onClick={() => handleReject(selectedPayment)} disabled={isVerifying || !rejectionReason} className="rounded-xl font-black uppercase text-[10px] h-12 text-red-500 hover:bg-red-500/10 border-red-500/20">
+                                Rechazar Pago
+                            </Button>
+                            <Button onClick={() => handleApprove(selectedPayment)} disabled={isVerifying} className="bg-primary hover:bg-primary/90 text-slate-900 rounded-xl font-black uppercase text-[10px] px-12 h-14 italic shadow-2xl">
+                                {isVerifying ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle className="mr-2 h-4 w-4" />} Confirmar Auditoría y Aprobar
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
+        </div>
+    );
+}
+
+// --- COMPONENTE 2: HISTORIAL DE PAGOS ---
+function HistoryPaymentsComponent({ condoId }: { condoId: string }) {
+    const { user } = useAuth();
+    const [payments, setPayments] = useState<Payment[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [activeStatus, setActiveStatus] = useState<'aprobado' | 'rechazado'>('aprobado');
+    const [localCompanyInfo, setLocalCompanyInfo] = useState<any>(null);
+
+    const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
+    useEffect(() => {
+        if (!condoId || condoId === "[condoId]") return;
+        const q = query(
+            collection(db, 'condominios', condoId, 'payments'), 
+            where('status', '==', activeStatus),
+            orderBy('paymentDate', 'desc'),
+            limit(50)
+        );
+        return onSnapshot(q, (snap) => {
+            setPayments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Payment)));
+            setLoading(false);
+        });
+    }, [condoId, activeStatus]);
+
+    useEffect(() => {
+        if (!condoId) return;
+        getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings')).then(snap => {
+            if (snap.exists()) setLocalCompanyInfo(snap.data().companyInfo);
+        });
+    }, [condoId]);
+
+    const filtered = useMemo(() => {
+        if (!searchTerm) return payments;
+        const s = searchTerm.toLowerCase();
+        return payments.filter(p => p.reference?.toLowerCase().includes(s) || p.beneficiaries?.some(b => b.ownerName.toLowerCase().includes(s)));
+    }, [payments, searchTerm]);
+
+    const handleExportReceipt = async (p: Payment, ownerId: string) => {
         if (!localCompanyInfo) return;
-        const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+        const beneficiary = p.beneficiaries.find(b => b.ownerId === ownerId);
         if (!beneficiary) return;
+
         const ownerSnap = await getDoc(doc(db, 'condominios', condoId, ownersCollectionName, ownerId));
         const ownerData = ownerSnap.exists() ? ownerSnap.data() : null;
-        const propString = beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : (ownerData?.properties?.[0] ? `${ownerData.properties[0].street} - ${ownerData.properties[0].house}` : 'N/A');
-        const pDate = payment.paymentDate?.toDate?.() || (payment.paymentDate ? new Date(payment.paymentDate as any) : new Date());
-        const isDol = (payment.paymentMethod || '').includes('usd') || (payment.paymentMethod || '').includes('dolares');
+        
+        const isDol = (p.paymentMethod || '').includes('usd') || (p.paymentMethod || '').includes('dolares');
         
         const receiptData = {
-            condoName: localCompanyInfo.name, rif: localCompanyInfo.rif, receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N', ownerName: beneficiary.ownerName, property: propString, method: payment.paymentMethod, bank: payment.bank || 'N/A', reference: payment.reference || 'N/A', date: format(pDate, 'dd/MM/yyyy'), rate: formatCurrency(payment.exchangeRate), receivedAmount: formatCurrency(payment.montoRecibido || payment.totalAmount), totalDebtPaid: formatCurrency(payment.totalAbonadoDeudas || 0), prevBalance: formatCurrency(payment.saldoAnterior || 0), currentBalance: formatCurrency(payment.saldoActual || ownerData?.balance || 0), observations: payment.observations,
-            concepts: (payment.liquidatedConcepts || []).filter(c => c.ownerId === ownerId).map(c => [c.period, c.description.toUpperCase(), (c.type === 'abono' || c.type === 'abono_extraordinaria') ? '' : `$ ${formatToTwoDecimals(c.amountUSD)}`, isDol ? `$ ${formatUSD(c.amountUSD)}` : `Bs. ${formatCurrency(c.amountUSD * payment.exchangeRate)}`])
+            condoName: localCompanyInfo.name,
+            rif: localCompanyInfo.rif,
+            receiptNumber: p.receiptNumbers?.[ownerId] || 'S/N',
+            ownerName: beneficiary.ownerName,
+            property: `${beneficiary.street || ''} ${beneficiary.house || ''}`,
+            method: p.paymentMethod,
+            bank: p.bank || 'N/A',
+            reference: p.reference || 'N/A',
+            date: format(p.paymentDate.toDate(), 'dd/MM/yyyy'),
+            rate: formatCurrency(p.exchangeRate),
+            receivedAmount: formatCurrency(p.montoRecibido || p.totalAmount),
+            totalDebtPaid: formatCurrency(p.totalAbonadoDeudas || 0),
+            prevBalance: formatCurrency(p.saldoAnterior || 0),
+            currentBalance: formatCurrency(p.saldoActual || ownerData?.balance || 0),
+            observations: p.observations,
+            concepts: (p.liquidatedConcepts || []).filter(c => c.ownerId === ownerId).map(c => [
+                c.period, 
+                c.description.toUpperCase(), 
+                (c.type === 'abono' || c.type === 'abono_extraordinaria') ? '' : `$ ${formatUSD(c.amountUSD)}`, 
+                isDol ? `$ ${formatUSD(c.amountUSD)}` : `Bs. ${formatCurrency(c.amountUSD * p.exchangeRate)}`
+            ])
         };
         await generatePaymentReceipt(receiptData, localCompanyInfo.logo, 'download');
     };
 
     return (
-        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat italic">
-            <CardHeader className="p-8 border-b border-white/5"><div className="flex flex-col md:flex-row justify-between items-center gap-4"><CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">Bandeja de <span className="text-primary">Validación</span></CardTitle><div className="relative w-full md:w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-800 border-none text-white font-bold" /></div></div></CardHeader>
+        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden">
+            <CardHeader className="p-8 border-b border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex gap-2 p-1 bg-slate-800 rounded-2xl w-full md:w-auto">
+                    <Button onClick={() => setActiveStatus('aprobado')} variant={activeStatus === 'aprobado' ? 'default' : 'ghost'} className="rounded-xl font-black uppercase text-[10px] h-10 italic">Aprobados</Button>
+                    <Button onClick={() => setActiveStatus('rechazado')} variant={activeStatus === 'rechazado' ? 'default' : 'ghost'} className="rounded-xl font-black uppercase text-[10px] h-10 italic">Rechazados</Button>
+                </div>
+                <div className="relative w-full md:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                    <Input placeholder="Buscar por REF o Propietario..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-12 bg-slate-800 border-none rounded-xl text-white font-bold" />
+                </div>
+            </CardHeader>
             <CardContent className="p-0">
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid grid-cols-3 mx-8 mt-6 mb-6 h-12 bg-slate-800/50 rounded-xl p-1"><TabsTrigger value="pendiente" className="rounded-lg font-black uppercase text-[10px]">Pendientes</TabsTrigger><TabsTrigger value="aprobado" className="rounded-lg font-black uppercase text-[10px]">Aprobados</TabsTrigger><TabsTrigger value="rechazado" className="rounded-lg font-black uppercase text-[10px]">Rechazados</TabsTrigger></TabsList>
-                    {loading ? (<div className="text-center p-20"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div>) : (
-                        <div className="overflow-x-auto">
-                            <Table><TableHeader className="bg-slate-800/20"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-40 text-center text-slate-500 font-bold italic uppercase text-[10px]">Sin reportes</TableCell></TableRow>) : (
-                                    filteredPayments.map(p => (
-                                        <TableRow key={p.id} className="hover:bg-white/5 border-white/5 transition-colors">
-                                            <TableCell className="px-8 py-6"><div className="font-black text-white text-xs uppercase italic">{(p.beneficiaries || []).map(b => b.ownerName).join(", ")}</div><div className="text-[9px] font-black text-primary uppercase mt-1">{p.paymentMethod} • {p.bank}</div></TableCell>
-                                            <TableCell className="text-slate-400 font-bold text-xs">{p.paymentDate?.toDate ? format(p.paymentDate.toDate(), 'dd/MM/yy') : 'N/A'}</TableCell>
-                                            <TableCell className="font-black text-white text-lg italic">Bs. {formatCurrency(p.totalAmount)}</TableCell>
-                                            <TableCell className="font-mono text-[10px] text-slate-500">{p.reference}</TableCell>
-                                            <TableCell className="text-right pr-8">
-                                                <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white italic">
-                                                    <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Ver Detalles</DropdownMenuItem>
-                                                    {p.status === 'pendiente' && <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Aprobar Pago</DropdownMenuItem>}
-                                                    {p.status === 'aprobado' && <DropdownMenuItem onClick={() => handleExportPDF(p, p.beneficiaries[0]?.ownerId)} className="font-black uppercase text-[10px] p-3 gap-2"><FileDown className="h-4 w-4" /> Recibo PDF</DropdownMenuItem>}
-                                                </DropdownMenuContent></DropdownMenu>
-                                            </TableCell></TableRow>
-                                    ))
-                                )}</TableBody></Table>
-                        </div>
-                    )}
-                </Tabs>
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader className="bg-slate-800/30">
+                            <TableRow className="border-white/5">
+                                <TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 italic">Fecha</TableHead>
+                                <TableHead className="text-[10px] font-black uppercase text-slate-400 italic">Residente</TableHead>
+                                <TableHead className="text-[10px] font-black uppercase text-slate-400 italic text-right">Monto</TableHead>
+                                <TableHead className="text-[10px] font-black uppercase text-slate-400 italic text-right pr-8">Acciones</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? <TableRow><TableCell colSpan={4} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-primary"/></TableCell></TableRow> : 
+                             filtered.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-20 text-slate-500 italic font-black uppercase text-[10px]">Sin movimientos en este historial</TableCell></TableRow> : 
+                             filtered.map(p => (
+                                <TableRow key={p.id} className="border-white/5 hover:bg-white/5 transition-colors group">
+                                    <TableCell className="px-8 font-bold text-slate-400 text-xs italic">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
+                                    <TableCell>
+                                        <div className="font-black text-white uppercase text-xs italic">{p.beneficiaries.map(b => b.ownerName).join(", ")}</div>
+                                        <div className="text-[9px] font-bold text-slate-600 mt-1">REF: {p.reference} • {p.bank}</div>
+                                    </TableCell>
+                                    <TableCell className="text-right font-black text-emerald-400 italic text-lg">Bs. {formatCurrency(p.totalAmount)}</TableCell>
+                                    <TableCell className="text-right pr-8">
+                                        {p.status === 'aprobado' && (
+                                            <Button onClick={() => handleExportReceipt(p, p.beneficiaries[0].ownerId)} variant="ghost" className="h-10 px-4 rounded-xl text-primary font-black uppercase text-[10px] hover:bg-primary/10 italic">
+                                                <FileDown className="mr-2 h-4 w-4" /> Recibo PDF
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                             ))}
+                        </TableBody>
+                    </Table>
+                </div>
             </CardContent>
-            {selectedPayment && (
-                <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
-                    <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Detalle del <span className="text-primary">Pago</span></DialogTitle></DialogHeader>
-                        <div className="space-y-6 py-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-white/5 p-4 rounded-xl"><p className="text-[8px] font-black uppercase text-slate-500">Monto Total</p><p className="font-black text-emerald-400 text-xl">Bs. {formatCurrency(selectedPayment.totalAmount)}</p></div>
-                                <div className="bg-white/5 p-4 rounded-xl"><p className="text-[8px] font-black uppercase text-slate-500">Referencia</p><p className="font-black text-white text-xl uppercase italic">{selectedPayment.reference}</p></div>
-                            </div>
-                            <div className="space-y-2"><p className="text-[10px] font-black uppercase text-primary">Beneficiarios</p>{selectedPayment.beneficiaries.map((b, i) => (<div key={i} className="flex justify-between p-3 bg-white/5 rounded-lg"><span>{b.ownerName}</span><span className="font-black">Bs. {formatCurrency(b.amount)}</span></div>))}</div>
-                            {selectedPayment.receiptUrl && (<div className="space-y-2"><p className="text-[10px] font-black uppercase text-primary">Comprobante Adjunto</p><img src={selectedPayment.receiptUrl} className="rounded-xl border border-white/10 w-full" /></div>)}
-                            {selectedPayment.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-red-500">Motivo de Rechazo (Si aplica)</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="bg-slate-800 border-none rounded-xl" placeholder="Indique por qué rechaza el pago..." /></div>)}
-                        </div>
-                        <DialogFooter className="gap-2">
-                            {selectedPayment.status === 'pendiente' ? (
-                                <>
-                                    <Button variant="destructive" onClick={() => handleReject(selectedPayment)} disabled={isVerifying} className="rounded-xl font-black uppercase text-[10px]">Rechazar</Button>
-                                    <Button onClick={() => handleApprove(selectedPayment)} disabled={isVerifying} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-[10px] px-8 italic">{isVerifying ? <Loader2 className="animate-spin" /> : "Aprobar Pago"}</Button>
-                                </>
-                            ) : (<Button variant="ghost" onClick={() => setSelectedPayment(null)} className="rounded-xl font-black uppercase text-[10px]">Cerrar</Button>)}
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            )}
         </Card>
     );
 }
 
-// --- COMPONENTE DE REPORTE MANUAL ---
-function ReportPaymentComponent({ condoId }: { condoId: string }) {
+// --- COMPONENTE 3: REPORTE MANUAL ---
+function ReportManualComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
     const { user: authUser } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
@@ -398,18 +647,18 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const [bank, setBank] = useState('');
     const [reference, setReference] = useState('');
     const [totalAmount, setTotalAmount] = useState<string>('');
-    const [receiptImage, setReceiptImage] = useState<string | null>(null);
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     
-    const isDolares = paymentMethod === 'efectivo_usd';
+    const isDolares = paymentMethod === 'efectivo_usd' as any;
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
-            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
+            setAllOwners(data.filter(o => o.email !== SUPER_ADMIN_EMAIL).sort((a,b) => a.name.localeCompare(b.name)));
         });
     }, [condoId, ownersCollectionName]);
 
@@ -418,8 +667,10 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         const fetchRate = async () => {
             const docSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
             if (docSnap.exists() && paymentDate) {
-                const applicable = (docSnap.data().exchangeRates || []).filter((r:any) => r.date <= format(paymentDate, 'yyyy-MM-dd')).sort((a:any, b:any) => b.date.localeCompare(a.date));
-                setExchangeRate(applicable.length > 0 ? applicable[0].rate : null);
+                const allRates = (docSnap.data().exchangeRates || []);
+                const dateStr = format(paymentDate, 'yyyy-MM-dd');
+                const app = allRates.filter((r:any) => r.date <= dateStr).sort((a:any, b:any) => b.date.localeCompare(a.date));
+                setExchangeRate(app.length > 0 ? app[0].rate : null);
             }
         };
         fetchRate();
@@ -438,49 +689,71 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         if (Math.abs(balance) > 0.01) return toast({ variant: 'destructive', title: 'Error de distribución' });
         setIsSubmitting(true);
         try {
-            const beneficiaries = beneficiaryRows.filter(r => r.owner).map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, amount: Number(row.amount), street: row.selectedProperty?.street, house: row.selectedProperty?.house }));
-            await addDoc(collection(db, "condominios", condoId, "payments"), { reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b => b.ownerId), totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), paymentMethod, bank: isDolares ? 'Efectivo' : bank, reference: isDolares ? 'EFECTIVO USD' : reference, receiptUrl: receiptImage || "", status: 'pendiente', reportedAt: serverTimestamp() });
-            toast({ title: 'Reporte Enviado' });
-            setTotalAmount(''); setReference(''); setReceiptImage(null); setBeneficiaryRows([]);
+            const beneficiaries = beneficiaryRows.filter(r => r.owner).map(row => ({ 
+                ownerId: row.owner!.id, 
+                ownerName: row.owner!.name, 
+                amount: Number(row.amount), 
+                street: row.selectedProperty?.street, 
+                house: row.selectedProperty?.house 
+            }));
+            await addDoc(collection(db, "condominios", condoId, "payments"), { 
+                reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b => b.ownerId), 
+                totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), 
+                paymentMethod, bank: isDolares ? 'Efectivo' : bank, reference: isDolares ? 'EFECTIVO USD' : reference, 
+                receiptUrl: "", status: 'pendiente', reportedAt: serverTimestamp() 
+            });
+            toast({ title: 'Reporte Manual Creado' });
+            setTotalAmount(''); setReference(''); setBeneficiaryRows([]);
         } catch (error) { toast({ variant: "destructive", title: "Error" }); } finally { setIsSubmitting(false); }
     };
 
     return (
         <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat italic">
-            <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">Reporte <span className="text-primary">Manual</span></CardTitle></CardHeader>
+            <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">Registro <span className="text-primary">Manual</span></CardTitle></CardHeader>
             <form onSubmit={handleSubmit}>
-                <CardContent className="p-8 space-y-10">
-                    <div className="grid md:grid-cols-2 gap-8">
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Fecha Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa Bs.</Label><Input type="number" value={isDolares ? '1.00' : (exchangeRate || '')} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem><SelectItem value="efectivo_usd">💲 Efectivo USD</SelectItem></SelectContent></Select></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left" onClick={() => setIsBankModalOpen(true)} disabled={paymentMethod === 'efectivo_bs' || isDolares}>{isDolares ? 'EFECTIVO USD' : (bank || "Seleccionar...")}</Button></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} disabled={paymentMethod === 'efectivo_bs' || isDolares} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic" placeholder="N° REF" /></div>
-                        <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto {isDolares ? 'USD' : 'Bs.'}</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div><div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equiv. {isDolares ? 'Bs.' : 'USD'}</Label><Input value={isDolares ? formatCurrency((parseFloat(totalAmount) || 0) * (exchangeRate || 0)) : ((parseFloat(totalAmount) || 0) / (exchangeRate || 1)).toFixed(2)} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
+                <CardContent className="p-8 space-y-8">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tasa BCV</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black italic" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Banco</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left" onClick={() => setIsBankModalOpen(true)}>{bank || "Seleccionar..."}</Button></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic text-center tracking-widest" placeholder="######" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto Total Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
                     </div>
-                    <div className="space-y-6"><Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-2">Asignación de Beneficiarios</Label>
+
+                    <div className="space-y-6 pt-6 border-t border-white/5">
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-2">Asignación de Beneficiarios</Label>
                         {beneficiaryRows.map((row) => (
-                            <div key={row.id} className="p-6 bg-white/5 border border-white/5 rounded-[2rem] space-y-4">
-                                {!row.owner ? (
-                                    <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" value={row.searchTerm} onChange={(e) => setBeneficiaryRows(rows => rows.map(r => r.id === row.id ? { ...r, searchTerm: e.target.value } : r))} />
-                                        {row.searchTerm.length >= 2 && (<Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(row.searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>)}
-                                    </div>
-                                ) : (
-                                    <div className="flex justify-between items-center"><div className="flex flex-col"><span className="font-black text-primary text-xs uppercase">{row.owner.name}</span>{row.selectedProperty && <span className="text-[9px] font-bold text-slate-500 uppercase">{row.selectedProperty.street} - {row.selectedProperty.house}</span>}</div><Input type="number" value={row.amount} onChange={e => setBeneficiaryRows(rows => rows.map(r => r.id === row.id ? { ...r, amount: e.target.value } : r))} className="w-32 h-10 bg-slate-800 border-none text-white font-black text-right" /><Button type="button" variant="ghost" size="icon" onClick={() => setBeneficiaryRows(rows => rows.filter(r => r.id !== row.id))} className="text-red-500 h-10 w-10"><Trash2/></Button></div>
-                                )}
+                            <div key={row.id} className="p-6 bg-white/5 border border-white/5 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-6">
+                                <div className="flex-1 w-full">
+                                    {!row.owner ? (
+                                        <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs italic" value={row.searchTerm} onChange={(e) => setBeneficiaryRows(rows => rows.map(r => r.id === row.id ? { ...r, searchTerm: e.target.value } : r))} />
+                                            {row.searchTerm.length >= 2 && (<Card className="absolute z-50 w-full mt-2 bg-slate-950 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(row.searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/10 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5 italic">{o.name}</div>))}</ScrollArea></Card>)}
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-4"><div className="bg-primary/10 p-3 rounded-2xl text-primary"><UserPlus/></div><div><p className="font-black text-white text-base uppercase italic">{row.owner.name}</p><p className="text-[9px] font-bold text-slate-500 uppercase">{row.selectedProperty?.street} - {row.selectedProperty?.house}</p></div></div>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-4 w-full md:w-auto">
+                                    <Input type="number" placeholder="Monto Bs." value={row.amount} onChange={e => setBeneficiaryRows(rows => rows.map(r => r.id === row.id ? { ...r, amount: e.target.value } : r))} className="w-full md:w-32 h-12 bg-slate-800 border-none text-white font-black text-right rounded-xl italic" />
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => setBeneficiaryRows(rows => rows.filter(r => r.id !== row.id))} className="text-red-500 h-12 w-12 hover:bg-red-500/10 rounded-full"><Trash2/></Button>
+                                </div>
                             </div>
                         ))}
-                        <Button type="button" variant="outline" size="sm" onClick={() => setBeneficiaryRows([...beneficiaryRows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }])} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"><UserPlus className="mr-2 h-4 w-4 text-primary"/> Añadir Beneficiario</Button>
+                        <Button type="button" variant="outline" onClick={() => setBeneficiaryRows([...beneficiaryRows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }])} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5 italic"><Plus className="mr-2 h-4 w-4 text-primary"/> Añadir Línea de Reparto</Button>
                     </div>
                 </CardContent>
-                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6"><div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: {formatCurrency(Math.abs(balance))}</div><Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">{isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR</Button></CardFooter>
+                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: Bs. {formatCurrency(Math.abs(balance))}</div>
+                    <Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">{isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR</Button>
+                </CardFooter>
             </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
         </Card>
     );
 }
 
-// --- COMPONENTE DE CALCULADORA ---
+// --- COMPONENTE 4: CALCULADORA DE PAGOS (ADMIN) ---
 function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
@@ -497,7 +770,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
         const q = query(collection(db, 'condominios', condoId, ownersCol), where('role', '==', 'propietario'));
-        return onSnapshot(q, snap => setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).filter(o => o.email !== 'vallecondo@gmail.com').sort((a,b) => a.name.localeCompare(b.name))));
+        return onSnapshot(q, snap => setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).filter(o => o.email !== SUPER_ADMIN_EMAIL).sort((a,b) => a.name.localeCompare(b.name))));
     }, [condoId, ownersCol]);
 
     useEffect(() => {
@@ -544,34 +817,44 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                     <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic tracking-tighter">1. Seleccionar Residente</CardTitle></CardHeader>
                     <CardContent className="p-8">
                         {!selectedOwner ? (
-                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 h-5 w-5"/><Input placeholder="BUSCAR PROPIETARIO..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none font-black text-xs uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 h-5 w-5"/><Input placeholder="BUSCAR POR NOMBRE O PROPIEDAD..." className="pl-12 h-16 rounded-2xl bg-slate-800 border-none font-black text-sm uppercase italic tracking-widest focus-visible:ring-primary" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
                                 {searchTerm.length >= 2 && (
                                     <Card className="absolute z-50 w-full mt-2 bg-slate-950 border border-white/10 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-primary/20">
-                                        <ScrollArea className="h-64">{allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => setSelectedOwner(o)} className="p-5 hover:bg-white/10 cursor-pointer font-black text-sm uppercase border-b border-white/5 transition-colors text-white">{o.name}</div>))}</ScrollArea>
+                                        <ScrollArea className="h-64">{allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => setSelectedOwner(o)} className="p-5 hover:bg-white/10 cursor-pointer font-black text-base uppercase border-b border-white/5 transition-colors text-white italic">{o.name}</div>))}</ScrollArea>
                                     </Card>
                                 )}</div>
                         ) : (
-                            <div className="flex justify-between items-center p-6 bg-slate-800 rounded-3xl border border-primary/20"><div className="flex items-center gap-4"><div className="bg-primary/10 p-3 rounded-2xl text-primary"><UserPlus /></div><div><p className="font-black text-xl uppercase tracking-tighter">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{selectedOwner.properties?.map(p => `${p.street} ${p.house}`).join(' | ')}</p></div></div><Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedDebts([]); setSelectedAdvanceMonths([]); }} className="text-red-500 hover:bg-red-500/10 rounded-full h-12 w-12"><XCircle /></Button></div>
+                            <div className="flex justify-between items-center p-6 bg-slate-800 rounded-3xl border border-primary/20 animate-in zoom-in-95"><div className="flex items-center gap-4"><div className="bg-primary/10 p-4 rounded-2xl text-primary"><UserPlus className="h-6 w-6"/></div><div><p className="font-black text-2xl uppercase tracking-tighter italic">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{selectedOwner.properties?.map(p => `${p.street} ${p.house}`).join(' | ')}</p></div></div><Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedDebts([]); setSelectedAdvanceMonths([]); }} className="text-red-500 hover:bg-red-500/10 rounded-full h-12 w-12"><XCircle /></Button></div>
                         )}
                     </CardContent>
                 </Card>
                 {selectedOwner && (
-                    <><Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]"><CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic tracking-tighter">2. Deudas Pendientes</CardTitle></CardHeader>
+                    <><Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem] animate-in slide-in-from-bottom-4"><CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic tracking-tighter">2. Deudas Atrasadas</CardTitle></CardHeader>
                         <CardContent className="p-0">{loading ? <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary h-10 w-10"/></div> : (
                             <Table><TableHeader className="bg-slate-800/30"><TableRow className="border-white/5"><TableHead className="w-16 px-8 py-6 text-center">PAGAR</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">PERÍODO</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">CONCEPTO</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">MONTO BS.</TableHead></TableRow></TableHeader>
-                            <TableBody>{debts.length === 0 ? (<TableRow><TableCell colSpan={4} className="h-24 text-center text-slate-500 font-bold uppercase text-[10px]">Sin deudas pendientes</TableCell></TableRow>) : debts.sort((a,b) => a.year - b.year || a.month - b.month).map(d => (
-                                <TableRow key={d.id} className="border-white/5 hover:bg-white/5 transition-colors"><TableCell className="px-8 py-6 text-center"><Checkbox className="border-primary data-[state=checked]:bg-primary" checked={selectedDebts.includes(d.id)} onCheckedChange={c => setSelectedDebts(p => c ? [...p, d.id] : p.filter(id => id !== d.id))}/></TableCell><TableCell className="font-black text-white text-xs uppercase">{monthsLocale[d.month]} {d.year}</TableCell><TableCell className="text-[10px] font-bold text-slate-500 uppercase">{d.description}</TableCell><TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell></TableRow>
+                            <TableBody>{debts.length === 0 ? (<TableRow><TableCell colSpan={4} className="h-24 text-center text-slate-500 font-bold uppercase text-[10px] italic">Sin deudas vencidas</TableCell></TableRow>) : debts.sort((a,b) => a.year - b.year || a.month - b.month).map(d => (
+                                <TableRow key={d.id} className="border-white/5 hover:bg-white/5 transition-colors"><TableCell className="px-8 py-6 text-center"><Checkbox className="border-primary data-[state=checked]:bg-primary h-5 w-5" checked={selectedDebts.includes(d.id)} onCheckedChange={c => setSelectedDebts(p => c ? [...p, d.id] : p.filter(id => id !== d.id))}/></TableCell><TableCell className="font-black text-white text-xs uppercase italic">{monthsLocale[d.month]} {d.year}</TableCell><TableCell className="text-[10px] font-bold text-slate-500 uppercase">{d.description}</TableCell><TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell></TableRow>
                             ))}</TableBody></Table>
                         )}</CardContent></Card>
-                        <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]"><CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic tracking-tighter">3. Meses por Adelantado</CardTitle><CardDescription className="text-white/40 font-bold text-[10px] uppercase">Cuota actual: ${condoFee.toFixed(2)}</CardDescription></CardHeader><CardContent className="p-8"><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => (<Button key={month.value} variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className={cn("h-14 rounded-2xl font-black uppercase text-[10px] tracking-tighter transition-all", selectedAdvanceMonths.includes(month.value) ? "bg-primary text-slate-900" : "border-white/10 text-white hover:bg-white/5")} onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m => m !== month.value) : [...p, month.value])}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-3 w-3 mr-1" />}{month.label}</Button>))}</div></CardContent></Card>
+                        <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem] animate-in slide-in-from-bottom-4"><CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic tracking-tighter">3. Adelantar Meses</CardTitle><CardDescription className="text-white/40 font-bold text-[10px] uppercase">Proyección basada en cuota de ${condoFee.toFixed(2)}</CardDescription></CardHeader><CardContent className="p-8"><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => (<Button key={month.value} variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className={cn("h-14 rounded-2xl font-black uppercase text-[10px] tracking-tighter transition-all", selectedAdvanceMonths.includes(month.value) ? "bg-primary text-slate-900 shadow-lg scale-105" : "border-white/10 text-white hover:bg-white/5")} onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m => m !== month.value) : [...p, month.value])}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-3 w-3 mr-1" />}{month.label}</Button>))}</div></CardContent></Card>
                     </>
                 )}
             </div>
             <div className="lg:sticky lg:top-24">
                 <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[3rem] border border-white/5">
                     <CardHeader className="bg-primary text-slate-900 p-8 text-center"><CardTitle className="text-2xl font-black uppercase italic tracking-tighter flex items-center justify-center gap-3"><Calculator /> Liquidación</CardTitle></CardHeader>
-                    <CardContent className="p-8 space-y-6"><div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-500">TASA BCV</span><Badge variant="outline" className="font-black text-primary border-primary/20">Bs. {formatCurrency(activeRate)}</Badge></div><Separator className="bg-white/5"/><div className="space-y-4"><div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-400">Sub-Total Deuda</span><span className="font-black text-white italic">Bs. {formatCurrency(totals.subTotalBs)}</span></div><div className="flex justify-between items-center text-emerald-500"><span className="text-[10px] font-black uppercase">(-) Saldo a Favor</span><span className="font-black italic">Bs. {formatCurrency(totals.balanceBs)}</span></div></div>
-                        <div className="flex flex-col gap-1 text-center bg-white/5 p-6 rounded-[2rem] border border-white/5 shadow-inner"><span className="text-[10px] font-black uppercase text-primary tracking-widest">TOTAL A PAGAR</span><span className="text-4xl font-black text-white italic drop-shadow-2xl">Bs. {formatCurrency(totals.totalToPayBs)}</span><span className="text-[10px] font-bold text-emerald-500 uppercase mt-1">EQUIV: ${formatToTwoDecimals(totals.totalToPayBs / (activeRate || 1))}</span></div>
+                    <CardContent className="p-8 space-y-6">
+                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-500">TASA BCV</span><Badge variant="outline" className="font-black text-primary border-primary/20 bg-slate-800">Bs. {formatCurrency(activeRate)}</Badge></div>
+                        <Separator className="bg-white/5"/>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-400">Sub-Total Deuda</span><span className="font-black text-white italic text-lg">Bs. {formatCurrency(totals.subTotalBs)}</span></div>
+                            <div className="flex justify-between items-center text-emerald-500"><span className="text-[10px] font-black uppercase">(-) Saldo a Favor</span><span className="font-black italic text-lg">Bs. {formatCurrency(totals.balanceBs)}</span></div>
+                        </div>
+                        <div className="flex flex-col gap-1 text-center bg-white/5 p-8 rounded-[2rem] border border-white/5 shadow-inner">
+                            <span className="text-[10px] font-black uppercase text-primary tracking-widest">TOTAL NETO A PAGAR</span>
+                            <span className="text-4xl font-black text-white italic drop-shadow-2xl">Bs. {formatCurrency(totals.totalToPayBs)}</span>
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase mt-1">EQUIV: ${formatToTwoDecimals(totals.totalToPayBs / (activeRate || 1))}</span>
+                        </div>
                     </CardContent><CardFooter className="px-8 pb-8"><Button onClick={() => onReport({ owner: selectedOwner, totalBs: totals.totalToPayBs })} disabled={!selectedOwner || totals.totalToPayBs <= 0} className="w-full h-16 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">PROCEDER AL REPORTE <Receipt className="ml-2"/></Button></CardFooter>
                 </Card>
             </div>
@@ -584,23 +867,52 @@ function PaymentsPage() {
     const searchParams = useSearchParams();
     const condoId = useParams()?.condoId as string;
     const router = useRouter();
-    const activeTab = searchParams?.get('tab') ?? 'verify';
+    const activeTab = searchParams?.get('tab') ?? 'transit';
 
-    const handleCalcReport = (data: any) => router.push(`/${condoId}/admin/payments?tab=report`);
+    const handleCalcReport = (data: any) => {
+        router.push(`/${condoId}/admin/payments?tab=report`);
+    };
 
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic">
-            <div className="mb-10"><h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2><div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div><p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">Control de Ingresos y Liquidación Cronológica.</p></div>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
+                <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
+                <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">Centro de Validación y Liquidación Atómica de Ingresos.</p>
+            </div>
+
             <Tabs value={activeTab} onValueChange={(v) => router.push(`/${condoId}/admin/payments?tab=${v}`)}>
-                <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 h-16 rounded-2xl p-1 border border-white/5"><TabsTrigger value="verify" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Verificación</TabsTrigger><TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Reporte Manual</TabsTrigger><TabsTrigger value="calculator" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Calculadora</TabsTrigger></TabsList>
-                <TabsContent value="verify" className="mt-8"><VerificationComponent condoId={condoId} /></TabsContent>
-                <TabsContent value="report" className="mt-8"><ReportPaymentComponent condoId={condoId} /></TabsContent>
-                <TabsContent value="calculator" className="mt-8"><CalculatorComponent condoId={condoId} onReport={handleCalcReport} /></TabsContent>
+                <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 bg-slate-800/50 h-auto lg:h-16 rounded-2xl p-1 border border-white/5 mb-8">
+                    <TabsTrigger value="transit" className="rounded-xl font-black uppercase text-[10px] lg:text-xs tracking-widest italic py-4">En Tránsito</TabsTrigger>
+                    <TabsTrigger value="history" className="rounded-xl font-black uppercase text-[10px] lg:text-xs tracking-widest italic py-4">Historial</TabsTrigger>
+                    <TabsTrigger value="report" className="rounded-xl font-black uppercase text-[10px] lg:text-xs tracking-widest italic py-4">Reporte Manual</TabsTrigger>
+                    <TabsTrigger value="calculator" className="rounded-xl font-black uppercase text-[10px] lg:text-xs tracking-widest italic py-4">Calculadora</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="transit" className="animate-in fade-in slide-in-from-left-4">
+                    <TransitPaymentsComponent condoId={condoId} />
+                </TabsContent>
+
+                <TabsContent value="history" className="animate-in fade-in slide-in-from-left-4">
+                    <HistoryPaymentsComponent condoId={condoId} />
+                </TabsContent>
+
+                <TabsContent value="report" className="animate-in fade-in slide-in-from-left-4">
+                    <ReportManualComponent condoId={condoId} />
+                </TabsContent>
+
+                <TabsContent value="calculator" className="animate-in fade-in slide-in-from-left-4">
+                    <CalculatorComponent condoId={condoId} onReport={handleCalcReport} />
+                </TabsContent>
             </Tabs>
         </div>
     );
 }
 
 export default function PaymentsPageWrapper() {
-    return (<Suspense fallback={<div className="flex h-64 items-center justify-center bg-[#1A1D23]"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}><PaymentsPage /></Suspense>);
+    return (
+        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#1A1D23]"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+            <PaymentsPage />
+        </Suspense>
+    );
 }
