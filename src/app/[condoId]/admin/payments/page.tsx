@@ -1408,6 +1408,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
     const [selectedOwnerForDebts, setSelectedOwnerForDebts] = useState<string | null>(null);
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [isSubmittingDistribution, setIsSubmittingDistribution] = useState(false);
+    const [historicalRateForDisplay, setHistoricalRateForDisplay] = useState<number | null>(null);
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
 
@@ -1521,8 +1522,23 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
     // ============================================
     // CONCILIAR CON DISTRIBUCIÓN
     // ============================================
-    const handleOpenConciliateDialog = (transit: any) => {
+    const handleOpenConciliateDialog = async (transit: any) => {
         setSelectedTransit(transit);
+        
+        // Calcular tasa histórica para mostrar
+        let historicalRate = exchangeRate;
+        if (transit.fecha?.toDate) {
+            const transitDate = transit.fecha.toDate();
+            const transitDateStr = format(transitDate, 'yyyy-MM-dd');
+            const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
+            if (settingsSnap.exists()) {
+                const allRates = (settingsSnap.data().exchangeRates || []);
+                const applicable = allRates.filter((r: any) => r.date <= transitDateStr).sort((a: any, b: any) => b.date.localeCompare(a.date));
+                if (applicable.length > 0) historicalRate = applicable[0].rate;
+            }
+        }
+        setHistoricalRateForDisplay(historicalRate);
+        
         // Inicializar una fila de distribución para el formulario
         setDistributionRows([{
             id: Date.now().toString(),
@@ -1619,6 +1635,19 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
 
     const handleSubmitDistribution = async () => {
         if (!selectedTransit || !exchangeRate) return;
+        
+        // ✅ Obtener la tasa de cambio de la fecha del pago en transito
+        let transitExchangeRate = exchangeRate;
+        if (selectedTransit.fecha?.toDate) {
+            const transitDate = selectedTransit.fecha.toDate();
+            const transitDateStr = format(transitDate, 'yyyy-MM-dd');
+            const settingsSnap2 = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
+            if (settingsSnap2.exists()) {
+                const allRates = (settingsSnap2.data().exchangeRates || []);
+                const applicable = allRates.filter((r: any) => r.date <= transitDateStr).sort((a: any, b: any) => b.date.localeCompare(a.date));
+                if (applicable.length > 0) transitExchangeRate = applicable[0].rate;
+            }
+        }
 
         const totalAssigned = getTotalAssigned();
         if (Math.abs(totalAssigned - selectedTransit.monto) > 0.01) {
@@ -1655,7 +1684,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
                 beneficiaries,
                 beneficiaryIds: [...new Set(beneficiaries.map(b => b.ownerId))],
                 totalAmount: selectedTransit.monto,
-                exchangeRate,
+                exchangeRate: transitExchangeRate,
                 paymentMethod: selectedTransit.metodo,
                 bank: selectedTransit.banco,
                 reference: selectedTransit.referencia,
@@ -1684,7 +1713,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
                     const debtSnap = await getDoc(debtRef);
                     if (debtSnap.exists()) {
                         const debtData = debtSnap.data();
-                        const paidAmountUSD = beneficiary.amount / exchangeRate;
+                        const paidAmountUSD = beneficiary.amount / transitExchangeRate;
                         const totalAmountUSD = debtData.amountUSD;
                         const previouslyPaidUSD = debtData.amountPaidUSD || 0;
                         const totalPaidAfterThis = previouslyPaidUSD + paidAmountUSD;
@@ -1723,7 +1752,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
                     .sort((a, b) => a.year - b.year || a.month - b.month);
 
                 for (const debt of pendingDebts) {
-                    const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(exchangeRate));
+                    const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(transitExchangeRate));
                     if (funds.gte(debtAmountBs)) {
                         funds = funds.minus(debtAmountBs);
                         await updateDoc(debt.ref, {
@@ -1742,7 +1771,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
                     } else break;
                 }
 
-                const advanceAmountBs = new Decimal(currentFee).times(exchangeRate);
+                const advanceAmountBs = new Decimal(currentFee).times(transitExchangeRate);
                 if (funds.gte(advanceAmountBs)) {
                     let nextMonthDate = addMonths(new Date(), 1);
                     while (funds.gte(advanceAmountBs)) {
@@ -1770,7 +1799,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
                     liquidatedConcepts.push({
                         ownerId: beneficiary.ownerId,
                         description: `EXCEDENTE A SALDO A FAVOR (${beneficiary.street || ''} ${beneficiary.house || ''})`,
-                        amountUSD: funds.div(exchangeRate).toNumber(),
+                        amountUSD: funds.div(transitExchangeRate).toNumber(),
                         period: 'SALDO', type: 'abono'
                     });
                 }
@@ -1842,7 +1871,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
         <div class="summary"><div class="card"><label>Total Pagos</label><value>${filtered.length}</value></div><div class="card"><label>Monto Total</label><value>Bs. ${total.toLocaleString('es-VE', {minimumFractionDigits:2})}</value></div></div>
         <table><thead><tr><th>Fecha</th><th>Referencia</th><th>Banco</th><th>Método</th><th class="text-left">Descripción</th><th class="text-right">Monto</th><th>Estado</th><th>Propietario</th></tr></thead><tbody>
         ${filtered.map(t => `<tr><td>${t.fecha?.toDate ? format(t.fecha.toDate(), 'dd/MM/yy') : 'N/A'}</td><td>${t.referencia}</td><td>${t.banco}</td><td>${t.metodo}</td><td class="text-left">${t.descripcion || '-'}</td><td class="text-right">Bs. ${formatCurrency(t.monto)}</td><td>${t.status === 'conciliado' ? 'CONCILIADO' : 'PENDIENTE'}</td><td>${t.ownerName || '-'}</td></tr>`).join('')}
-        </tbody></table><div class="footer"><p>EFASCondoSys - Pagos en Tránsito</p></div></body></html>`;
+        </tbody>}</table><div class="footer"><p>EFASCondoSys - Pagos en Tránsito</p></div></body></html>`;
         downloadPDF(html, `Pagos_Transito_${type}_${format(new Date(), 'yyyy_MM_dd')}.pdf`);
     };
 
@@ -1941,7 +1970,7 @@ function TransitPaymentsComponent({ condoId }: { condoId: string }) {
                         <div className="bg-slate-800 p-4 rounded-xl">
                             <p className="text-[10px] text-slate-400">Referencia: <span className="text-white font-black">{selectedTransit?.referencia}</span></p>
                             <p className="text-[10px] text-slate-400">Monto a distribuir: <span className="text-amber-400 font-black">Bs. {formatCurrency(selectedTransit?.monto || 0)}</span></p>
-                            <p className="text-[10px] text-slate-400">Tasa: <span className="text-white">{exchangeRate ? `Bs. ${formatCurrency(exchangeRate)}` : 'Cargando...'}</span></p>
+                            <p className="text-[10px] text-slate-400">Tasa: <span className="text-white">{historicalRateForDisplay ? `Bs. ${formatCurrency(historicalRateForDisplay)}` : 'Cargando...'}</span></p>
                         </div>
 
                         {/* FORMULARIO DE DISTRIBUCIÓN */}
