@@ -1,6 +1,6 @@
 'use client';
 
-import jsPDF from 'jsPDF';
+import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
 
@@ -9,14 +9,9 @@ const formatCurrency = (num: number) => {
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const formatUSD = (num: number) => {
-    if (typeof num !== 'number' || isNaN(num)) return '0.00';
-    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
 /**
  * Motor de Generación de Recibos EFAS CondoSys
- * Actualizado para soportar Liquidación de Precisión.
+ * Optimizado para desglosar Saldo Anterior y Monto Recibido.
  */
 export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Promise<Blob | null> => {
   const doc = new jsPDF({
@@ -107,7 +102,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
     alternateRowStyles: { fillColor: [245, 248, 255] }
   });
 
-  // 6. Resumen de Saldos (Lógica Contable Nueva vs Vieja)
+  // 6. Resumen de Saldos
   let finalY = (doc as any).lastAutoTable.finalY + 10;
   const rightAlignX = 196;
   const labelX = 150;
@@ -115,14 +110,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   
-  const hasNewAccounting = paymentData.montoRecibido !== undefined;
-
-  const summary = hasNewAccounting ? [
-    { label: 'Saldo a Favor Anterior:', value: `${monedaSimbolo} ${paymentData.prevBalance}` },
-    { label: 'Monto del Pago Recibido:', value: `${monedaSimbolo} ${paymentData.receivedAmount}` },
-    { label: 'Total Abonado en Deudas:', value: `${monedaSimbolo} ${paymentData.totalDebtPaid}` },
-    { label: 'Saldo a Favor Actual:', value: `${monedaSimbolo} ${paymentData.currentBalance}` }
-  ] : [
+  const summary = [
     { label: 'Saldo a Favor Anterior:', value: `${monedaSimbolo} ${paymentData.prevBalance || '0,00'}` },
     { label: 'Monto del Pago Recibido:', value: `${monedaSimbolo} ${paymentData.receivedAmount || '0,00'}` },
     { label: 'Total Abonado en Deudas:', value: `${monedaSimbolo} ${paymentData.totalDebtPaid || '0,00'}` },
@@ -139,7 +127,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text(`TOTAL PAGADO:`, labelX, finalY, { align: 'right' });
-  doc.text(`${monedaSimbolo} ${paymentData.receivedAmount || paymentData.totalDebtPaid}`, rightAlignX, finalY, { align: 'right' });
+  doc.text(`${monedaSimbolo} ${paymentData.receivedAmount || paymentData.totalDebtPaid || '0,00'}`, rightAlignX, finalY, { align: 'right' });
 
   // 7. Pie de Página
   const footerY = 240;
@@ -179,95 +167,6 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
   } else {
     const safeName = (paymentData.ownerName || 'Beneficiario').replace(/[^a-z0-9]/gi, '_').toUpperCase();
     doc.save(`Recibo_Pago_${safeName}.pdf`);
-    return null;
-  }
-};
-
-// COMPROBANTE DE INGRESO EN EFECTIVO
-export interface CashReceiptData {
-  condoName: string;
-  rif: string;
-  receiptNumber: string;
-  ownerName: string;
-  property: string;
-  paymentDate: string;
-  amount: number;
-  exchangeRate: number;
-  reference?: string;
-  observations?: string;
-  concepts?: string[][];
-  isDolares?: boolean;
-}
-
-export const generateCashReceipt = async (data: CashReceiptData, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Promise<Blob | null> => {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 15;
-  const isDolares = data.isDolares || (data.reference || '').toUpperCase().includes('USD');
-
-  doc.setFillColor(isDolares ? 28 : 15, isDolares ? 35 : 23, isDolares ? 51 : 42);
-  doc.rect(0, 0, 210, 35, 'F');
-
-  if (condoLogoUrl) {
-    try {
-      doc.setFillColor(255, 255, 255);
-      doc.circle(22, 17, 11, 'F');
-      doc.addImage(condoLogoUrl, 'JPEG', 13, 8, 18, 18);
-    } catch (e) {
-      doc.setFontSize(28);
-      doc.setTextColor(255, 255, 255);
-      doc.text('🏢', 18, 24, { align: 'center' });
-    }
-  }
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text(data.condoName.toUpperCase(), 40, 18);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`RIF: ${data.rif}`, 40, 26);
-
-  doc.setFontSize(12);
-  doc.setTextColor(242, 135, 5);
-  doc.setFont('helvetica', 'bold');
-  doc.text('EFAS CondoSys', 195, 18, { align: 'right' });
-
-  doc.setTextColor(15, 23, 42);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text(isDolares ? 'COMPROBANTE DE INGRESO EN DÓLARES USD' : 'COMPROBANTE DE INGRESO EN EFECTIVO', 105, 55, { align: 'center' });
-
-  let currentY = 78;
-  const details = [
-    { label: 'Propietario:', value: data.ownerName },
-    { label: 'Propiedad:', value: data.property },
-    { label: 'Fecha de Pago:', value: data.paymentDate },
-    { label: isDolares ? 'Moneda:' : 'Tasa de Cambio:', value: isDolares ? 'DÓLARES ESTADOUNIDENSES (USD)' : `Bs. ${formatCurrency(data.exchangeRate)} por USD` },
-    { label: 'Referencia:', value: data.reference || (isDolares ? 'EFECTIVO USD' : 'EFECTIVO') }
-  ];
-
-  doc.setFontSize(9);
-  details.forEach(item => {
-    doc.setFont('helvetica', 'bold');
-    doc.text(item.label, margin, currentY);
-    doc.setFont('helvetica', 'normal');
-    doc.text(String(item.value), margin + 55, currentY);
-    currentY += 7;
-  });
-
-  doc.setFillColor(242, 135, 5);
-  doc.roundedRect(margin, currentY + 10, pageWidth - (margin * 2), 12, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('MONTO TOTAL RECIBIDO:', margin + 5, currentY + 18);
-  doc.text(isDolares ? `$ ${formatUSD(data.amount)} USD` : `Bs. ${formatCurrency(data.amount)}`, pageWidth - margin - 5, currentY + 18, { align: 'right' });
-
-  if (outputType === 'blob') {
-    return doc.output('blob');
-  } else {
-    doc.save(`Comprobante_Efectivo_${data.ownerName.replace(/ /g, '_')}.pdf`);
     return null;
   }
 };
