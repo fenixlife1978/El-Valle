@@ -60,6 +60,7 @@ import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { ExchangeOperationModal } from '@/components/exchange-operation-modal';
 
 interface Account {
     id: string;
@@ -126,6 +127,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
     const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
     const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+    const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
 
     // Estado para repartir egresos de fondos extraordinarios
     const [extraDistributions, setExtraDistributions] = useState<{ campaignId: string, amount: string }[]>([]);
@@ -592,6 +594,9 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <Button onClick={() => setIsTransferDialogOpen(true)} variant="secondary" className="bg-slate-800 hover:bg-slate-700 text-white font-black uppercase text-[10px] rounded-xl h-12 shadow-md">
                         <ArrowRightLeft className="mr-2 h-4 w-4" /> Trasladar
                     </Button>
+                    <Button onClick={() => setIsExchangeModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] rounded-xl h-12 shadow-md">
+                        <DollarSign className="mr-2 h-4 w-4" /> Cambio USD
+                    </Button>
                     <Button onClick={() => setIsTransactionDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] rounded-xl h-12 shadow-lg">
                         <PlusCircle className="mr-2 h-4 w-4" /> Nuevo Movimiento
                     </Button>
@@ -723,6 +728,13 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     </div>
                 </CardContent>
             </Card>
+
+            {/* MODAL DE OPERACIONES DE CAMBIO USD */}
+            <ExchangeOperationModal 
+                isOpen={isExchangeModalOpen}
+                onOpenChange={setIsExchangeModalOpen}
+                condoId={condoId}
+            />
 
             {/* DIÁLOGO NUEVA CUENTA */}
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
