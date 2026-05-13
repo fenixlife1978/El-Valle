@@ -1,71 +1,62 @@
-
 /**
- * Lógica de Liquidación Cronológica EFAS CondoSys
- * Regla de Oro: Precisión de 2 decimales exactos utilizando Decimal.js
+ * Lógica de Liquidación de Precisión EFAS CondoSys
+ * Regla de Oro: Manejo exacto de decimales para evitar discrepancias en saldos.
  */
 import { Decimal } from 'decimal.js';
 
-interface PendingDebt {
-    id: string;
-    monto: number; // The amount in Bs.
-    [key: string]: any; // To allow other properties from the original debt object
+interface CalculationInput {
+  monto_pago_recibido_bs: number;
+  tasa_cambio_bcv: number;
+  deuda_usd: number;
+  saldo_a_favor_anterior_bs: number;
 }
 
 /**
- * Procesa la liquidación de un pago, aplicando a deudas y adelantos.
- * @param montoRecibido El monto recibido en el pago (en Bs).
- * @param saldoAFavorPrevio El saldo a favor existente del propietario (en Bs).
- * @param cuotasPendientes Un array de deudas pendientes, ordenadas de la más antigua a la más reciente.
- * @param costoCuotaActualBs El costo de una cuota de condominio mensual estándar (en Bs).
- * @returns Un objeto con el plan de liquidación.
+ * Procesa la liquidación de un pago siguiendo el orden estricto de cálculo.
  */
-export const processPaymentLiquidation = (
-  montoRecibido: number,
-  saldoAFavorPrevio: number,
-  cuotasPendientes: PendingDebt[],
-  costoCuotaActualBs: number
-) => {
-  // 1. Convertir todo a objetos Decimal para evitar errores de coma flotante
-  let saldoDisponible = new Decimal(montoRecibido).plus(new Decimal(saldoAFavorPrevio));
-  const valorCuotaBs = new Decimal(costoCuotaActualBs);
-  
-  const cuotasLiquidadas: PendingDebt[] = [];
-  let totalAbonadoDeudas = new Decimal(0);
-  let cuotasAdelantadas = 0;
+export const processPaymentLiquidation = (input: CalculationInput) => {
+  const { 
+    monto_pago_recibido_bs, 
+    tasa_cambio_bcv, 
+    deuda_usd, 
+    saldo_a_favor_anterior_bs 
+  } = input;
 
-  // 2. LIQUIDAR DEUDAS PENDIENTES/VENCIDAS (Orden Cronológico)
-  for (const cuota of cuotasPendientes) {
-    const deudaBs = new Decimal(cuota.monto);
-    
-    if (saldoDisponible.gte(deudaBs)) {
-      saldoDisponible = saldoDisponible.minus(deudaBs);
-      totalAbonadoDeudas = totalAbonadoDeudas.plus(deudaBs);
-      cuotasLiquidadas.push({
-        ...cuota,
-        status: 'LIQUIDADA',
-        montoAplicado: cuota.monto
-      });
-    } else {
-      // Si no alcanza para cubrir la deuda pendiente completa, se detiene.
-      break; 
-    }
-  }
+  // 1. Conversión de Deuda a Bs (Redondeo a 2 decimales)
+  const deuda_en_bs = new Decimal(deuda_usd)
+    .mul(new Decimal(tasa_cambio_bcv))
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-  // 3. CALCULAR MESES POR ADELANTADO (Si aún hay saldo suficiente)
-  if (valorCuotaBs.greaterThan(0)) {
-      while (saldoDisponible.gte(valorCuotaBs)) {
-        saldoDisponible = saldoDisponible.minus(valorCuotaBs);
-        totalAbonadoDeudas = totalAbonadoDeudas.plus(valorCuotaBs);
-        cuotasAdelantadas++;
-      }
-  }
+  // 2. Fondo Total Disponible (Pago de hoy + Crédito previo)
+  const fondo_total_disponible = new Decimal(monto_pago_recibido_bs)
+    .add(new Decimal(saldo_a_favor_anterior_bs))
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-  // 4. RESULTADO FINAL (Convertir de nuevo a números estándar)
+  // 3. Aplicación del Pago
+  // Si el fondo total cubre o sobra, el abono a deudas es exactamente la deuda calculada.
+  // Si no alcanza, se abona todo lo que hay en el fondo.
+  const monto_pagado_bs = fondo_total_disponible.gte(deuda_en_bs)
+    ? deuda_en_bs
+    : fondo_total_disponible;
+
+  // 4. Cálculo de Remanente (Saldo a Favor Actual)
+  const saldo_a_favor_actual_bs = fondo_total_disponible
+    .sub(monto_pagado_bs)
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+  // 5. Diferencial del pago actual (lo que sobró estrictamente del pago de hoy)
+  // Esto es para fines informativos en el recibo
+  const diferencial_pago_hoy = new Decimal(monto_pago_recibido_bs)
+    .sub(monto_pagado_bs.sub(new Decimal(saldo_a_favor_anterior_bs)))
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
   return {
-    montoTotalProcesado: montoRecibido,
-    totalAplicadoADeudas: totalAbonadoDeudas.toDecimalPlaces(2).toNumber(),
-    cuotasLiquidadas,
-    cuotasAdelantadas,
-    nuevoSaldoAFavor: saldoDisponible.toDecimalPlaces(2).toNumber()
+    monto_pago_recibido_bs: new Decimal(monto_pago_recibido_bs).toNumber(),
+    deuda_en_bs: deuda_en_bs.toNumber(),
+    total_fondo_disponible: fondo_total_disponible.toNumber(),
+    monto_pagado_bs: monto_pagado_bs.toNumber(), // Este va a la tabla de conceptos
+    saldo_a_favor_anterior_bs: new Decimal(saldo_a_favor_anterior_bs).toNumber(),
+    saldo_a_favor_actual_bs: saldo_a_favor_actual_bs.toNumber(),
+    diferencial_pago_hoy: diferencial_pago_hoy.toNumber()
   };
 };
