@@ -16,7 +16,7 @@ import {
     Search, CheckCircle, XCircle, Eye, MoreHorizontal, 
     Download, Loader2, Calendar as CalendarIcon,
     UserPlus, WalletCards, Trash2, FileText, Save, Share2, FileDown,
-    Calculator, Receipt, Check, DollarSign, Plus
+    Calculator, Receipt, Check, DollarSign, Plus, Info
 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -38,11 +38,9 @@ import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { 
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
-    DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub,
-    DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal
+    DropdownMenuTrigger, DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
-import { generatePaymentReceipt, generateCashReceipt } from '@/lib/pdf-generator';
-import { downloadPDF } from '@/lib/print-pdf';
+import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import Decimal from 'decimal.js';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
@@ -63,16 +61,10 @@ const formatToTwoDecimals = (num: number) => {
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const formatUSD = (num: number) => {
-    if (typeof num !== 'number' || isNaN(num)) return '0.00';
-    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
-type DistributionLine = { id: string; category: 'ordinaria' | 'extraordinaria'; amount: number; extraordinaryDebtId?: string; isOwn?: boolean; };
-type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; selectedProperty: { street: string, house: string } | null; distributionLines: DistributionLine[]; };
+type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | '';
 type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string; type: 'deuda' | 'adelanto' | 'abono' | 'extraordinaria' | 'abono_extraordinaria'; };
 type Payment = { 
@@ -106,7 +98,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
     const [isVerifying, setIsVerifying] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
-    const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
     const [localCompanyInfo, setLocalCompanyInfo] = useState<any>(null);
     const [cuentasDolares, setCuentasDolares] = useState<any[]>([]);
 
@@ -158,7 +149,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const isDolares = method.includes('usd') || method.includes('dolares');
                 const isDigital = method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil');
                 
-                // Determinar cuenta de destino
                 let targetAccountId = "";
                 let targetAccountName = "";
                 
@@ -181,7 +171,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
 
-                // PRE-CARGA DE DATOS (READS)
                 const extraordinaryPreparedData: any[] = [];
                 const ordinaryPreparedData: any[] = [];
                 
@@ -198,19 +187,13 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             where('ownerId', '==', beneficiary.ownerId),
                             where('status', 'in', ['pending', 'vencida'])
                         ));
-                        const allDebtsSnap = await getDocs(query(
-                            collection(db, 'condominios', condoId, 'debts'),
-                            where('ownerId', '==', beneficiary.ownerId)
-                        ));
                         ordinaryPreparedData.push({
                             beneficiary,
-                            pendingDebts: debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any)).sort((a, b) => a.year - b.year || a.month - b.month),
-                            allDebtsSorted: allDebtsSnap.docs.map(d => d.data()).sort((a, b) => a.year - b.year || a.month - b.month)
+                            pendingDebts: debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any)).sort((a, b) => a.year - b.year || a.month - b.month)
                         });
                     }
                 }
 
-                // TRANSACCIÓN (WRITES)
                 await runTransaction(db, async (transaction) => {
                     const ownerRefs = payment.beneficiaryIds.map(id => doc(db, 'condominios', condoId, ownersCollectionName, id));
                     const ownerSnaps = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
@@ -226,11 +209,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                         if (!ownerSnap.exists()) continue;
 
-                        // GUARDAR SALDO ANTERIOR CRUCIAL PARA EL RECIBO
                         const saldoAnterior = ownerSnap.data().balance || 0;
                         previousBalances[beneficiary.ownerId] = saldoAnterior;
 
-                        // Lógica Cuota Extraordinaria
                         const extraData = extraordinaryPreparedData.find(d => d.beneficiary.ownerId === beneficiary.ownerId && d.beneficiary.extraordinaryDebtId === beneficiary.extraordinaryDebtId);
                         if (extraData) {
                             const { debtRef, debtData } = extraData;
@@ -275,7 +256,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             });
                             receiptNumbers[beneficiary.ownerId] = `REC-EXT-${Date.now().toString().slice(-6)}`;
                         } else {
-                            // Lógica Cuota Ordinaria (Fondo Total = Pago + Saldo Anterior)
                             const ordData = ordinaryPreparedData.find(d => d.beneficiary.ownerId === beneficiary.ownerId);
                             if (ordData) {
                                 let funds = new Decimal(beneficiary.amount).plus(new Decimal(saldoAnterior));
@@ -297,7 +277,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                                 const advanceBs = new Decimal(currentFee).times(payment.exchangeRate);
                                 while (funds.gte(advanceBs)) {
-                                    const nextDate = addMonths(new Date(), 1); // Simplificado para el ejemplo
+                                    const nextDate = addMonths(new Date(), 1);
                                     const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
                                     transaction.set(newDebtRef, {
                                         ownerId: beneficiary.ownerId,
@@ -361,7 +341,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     const handleExportPDF = async (payment: Payment, ownerId: string) => {
         try {
             if (!localCompanyInfo) return;
-            const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+            const beneficiary = payment.beneficiaries?.find(b => b.ownerId === ownerId);
             if (!beneficiary) return;
 
             const saldoAnterior = payment.previousBalances?.[ownerId] || 0;
@@ -426,7 +406,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 filteredPayments.map(p => (
                                     <TableRow key={p.id} className="hover:bg-white/5 border-white/5 transition-colors">
                                         <TableCell className="px-8 py-6">
-                                            <div className="font-black text-white text-xs uppercase">{p.beneficiaries.map(b => b.ownerName).join(", ")}</div>
+                                            <div className="font-black text-white text-xs uppercase">{p.beneficiaries?.map(b => b.ownerName).join(", ") || 'Sin beneficiarios'}</div>
                                             <div className="text-[9px] font-black text-primary uppercase">{p.paymentMethod} • {p.bank}</div>
                                         </TableCell>
                                         <TableCell className="text-slate-400 font-bold text-xs">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
@@ -439,9 +419,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                     {p.status === 'aprobado' && (
                                                         <>
                                                             <DropdownMenuSeparator className="bg-white/5" />
-                                                            {p.beneficiaryIds.map(id => (
-                                                                <DropdownMenuItem key={id} onClick={() => handleExportPDF(p, id)} className="font-black uppercase text-[9px] gap-2"><FileDown className="h-3 w-3 text-emerald-500" /> Recibo {p.beneficiaries.find(b=>b.ownerId===id)?.ownerName.split(' ')[0]}</DropdownMenuItem>
-                                                            ))}
+                                                            {p.beneficiaryIds?.map(id => (
+                                                                <DropdownMenuItem key={id} onClick={() => handleExportPDF(p, id)} className="font-black uppercase text-[9px] gap-2"><FileDown className="h-3 w-3 text-emerald-500" /> Recibo {p.beneficiaries?.find(b=>b.ownerId===id)?.ownerName?.split(' ')[0] || 'Doc'}</DropdownMenuItem>
+                                                            )) || null}
                                                         </>
                                                     )}
                                                     {p.status === 'pendiente' && (
@@ -469,7 +449,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         <div className="space-y-6">
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
                                 <p className="text-[10px] font-black uppercase text-slate-500 mb-4">Distribución de Ingreso</p>
-                                {selectedPayment?.beneficiaries.map((b, i) => (
+                                {selectedPayment?.beneficiaries?.map((b, i) => (
                                     <div key={i} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0">
                                         <div className="flex flex-col"><span className="font-black text-white text-xs uppercase">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500">{b.street} {b.house}</span></div>
                                         <span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span>
@@ -608,7 +588,7 @@ function ReportPaymentComponent() {
                                         {row.searchTerm.length >= 2 && (
                                             <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
                                                 <ScrollArea className="h-48">
-                                                    {getFilteredOwnersFn(row.searchTerm).map(o => (
+                                                    {allOwners.filter(o => o.name.toLowerCase().includes(row.searchTerm.toLowerCase())).map(o => (
                                                         <div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-sm uppercase text-white border-b border-white/5">{o.name}</div>
                                                     ))}
                                                 </ScrollArea>
