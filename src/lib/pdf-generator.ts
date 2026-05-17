@@ -1,3 +1,4 @@
+
 'use client';
 
 import jsPDF from 'jspdf';
@@ -14,9 +15,6 @@ const formatUSD = (num: number) => {
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// ============================================
-// 1. RECIBO DE PAGO NORMAL (LIQUIDACIÓN DE PRECISIÓN)
-// ============================================
 export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Promise<Blob | null> => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     
@@ -33,11 +31,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
             doc.setFillColor(255, 255, 255);
             doc.circle(23, 14, 9, 'F');
             doc.addImage(condoLogoUrl, 'JPEG', 16, 7, 14, 14);
-        } catch (e) {
-            doc.setFontSize(24);
-            doc.setTextColor(255, 255, 255);
-            doc.text('🏢', 20, 20);
-        }
+        } catch (e) {}
     }
 
     doc.setTextColor(255, 255, 255);
@@ -88,7 +82,7 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
     const rightAlignX = 196;
     const labelX = 150;
 
-    // Resumen Contable de Precisión
+    // Resumen Contable de Precisión EFAS
     doc.setFontSize(9);
     const summary = [
         { label: 'Saldo a Favor Anterior:', value: `${monedaSimbolo} ${paymentData.prevBalance || '0,00'}` },
@@ -129,18 +123,11 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
     doc.setFont('helvetica', 'bold');
     doc.text(`N° de recibo: ${barcodeValue}`, 105, footerY + 45, { align: 'center' });
 
-    if (outputType === 'blob') {
-        return doc.output('blob');
-    } else {
-        const safeName = (paymentData.ownerName || 'Beneficiario').replace(/[^a-z0-9]/gi, '_').toUpperCase();
-        doc.save(`Recibo_Pago_${safeName}.pdf`);
-        return null;
-    }
+    if (outputType === 'blob') return doc.output('blob');
+    doc.save(`Recibo_Pago_${(paymentData.ownerName || 'B').replace(/[^a-z0-9]/gi, '_').toUpperCase()}.pdf`);
+    return null;
 };
 
-// ============================================
-// 2. COMPROBANTE DE INGRESO EN EFECTIVO
-// ============================================
 export const generateCashReceipt = async (data: any, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Promise<Blob | null> => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const margin = 15;
@@ -196,17 +183,11 @@ export const generateCashReceipt = async (data: any, condoLogoUrl: string | null
     return null;
 };
 
-// ============================================
-// 3. COMPROBANTE DE OPERACIÓN CAMBIARIA (EXCHANGE)
-// ============================================
 export const generateExchangeReceipt = async (data: any, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Promise<Blob | null> => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const margin = 15;
-    
-    // Encabezado
     doc.setFillColor(28, 35, 51);
     doc.rect(0, 0, 210, 28, 'F');
-    
     if (condoLogoUrl) {
         try {
             doc.setFillColor(255, 255, 255);
@@ -214,7 +195,6 @@ export const generateExchangeReceipt = async (data: any, condoLogoUrl: string | 
             doc.addImage(condoLogoUrl, 'JPEG', 16, 7, 14, 14);
         } catch (e) {}
     }
-    
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(13);
     doc.setFont('helvetica', 'bold');
@@ -222,26 +202,20 @@ export const generateExchangeReceipt = async (data: any, condoLogoUrl: string | 
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.text(`RIF: ${data.rif || 'J-00000000-0'}`, 38, 19);
-    
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('COMPROBANTE DE OPERACIÓN CAMBIARIA', 105, 48, { align: 'center' });
-    
     doc.setFontSize(10);
     let currentY = 65;
-    
     const details = [
-        { label: 'Fecha:', value: data.date || new Date().toLocaleDateString() },
-        { label: 'Desde Cuenta:', value: data.fromAccount || 'N/A' },
-        { label: 'Hacia Cuenta:', value: data.toAccount || 'N/A' },
-        { label: 'Monto Origen:', value: data.fromAmount || '0' },
-        { label: 'Monto Destino:', value: data.toAmount || '0' },
-        { label: 'Tasa de Cambio:', value: data.exchangeRate || 'N/A' },
-        { label: 'Referencia:', value: data.reference || 'N/A' },
-        { label: 'Descripción:', value: data.description || 'Operación Cambiaria' }
+        { label: 'Fecha:', value: data.operationDate },
+        { label: 'Contraparte:', value: data.counterpartyName },
+        { label: 'Monto USD:', value: `$ ${formatUSD(data.usdAmount)}` },
+        { label: 'Tasa de Cambio:', value: `Bs. ${formatCurrency(data.exchangeRate)}` },
+        { label: 'Total Bolívares:', value: `Bs. ${formatCurrency(data.bsAmount)}` },
+        { label: 'Referencia:', value: data.receiptNumber }
     ];
-    
     details.forEach(item => {
         doc.setFont('helvetica', 'bold');
         doc.text(item.label, margin, currentY);
@@ -249,24 +223,6 @@ export const generateExchangeReceipt = async (data: any, condoLogoUrl: string | 
         doc.text(String(item.value), 55, currentY);
         currentY += 7;
     });
-    
-    // Total destacado
-    currentY += 10;
-    doc.setFillColor(240, 248, 255);
-    doc.rect(margin, currentY - 5, 180, 15, 'F');
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 100, 0);
-    doc.text(`TOTAL LIQUIDADO: ${data.totalAmount || data.toAmount || '0'}`, 105, currentY, { align: 'center' });
-    
-    // Pie de página
-    const footerY = 240;
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
-    doc.text(`Observaciones: ${data.observations || 'Operación cambiaria registrada en el sistema.'}`, 15, footerY);
-    doc.text(`Documento generado por EFASCondoSys. Los montos reflejados son definitivos.`, 15, footerY + 15);
-    
     const barcodeValue = data.receiptNumber || `EXC-${Date.now()}`;
     try {
         const canvas = document.createElement('canvas');
@@ -274,16 +230,10 @@ export const generateExchangeReceipt = async (data: any, condoLogoUrl: string | 
         const barcodeDataUrl = canvas.toDataURL("image/png");
         doc.addImage(barcodeDataUrl, 'PNG', 80, 210, 50, 10);
     } catch (e) {}
-    
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.text(`N° Comprobante: ${barcodeValue}`, 105, 225, { align: 'center' });
-    
-    if (outputType === 'blob') {
-        return doc.output('blob');
-    } else {
-        const safeName = `Operacion_Cambiaria_${data.reference || Date.now()}`;
-        doc.save(`${safeName}.pdf`);
-        return null;
-    }
+    if (outputType === 'blob') return doc.output('blob');
+    doc.save(`Comprobante_Cambio_${data.receiptNumber}.pdf`);
+    return null;
 };
