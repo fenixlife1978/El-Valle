@@ -1,4 +1,3 @@
-
 'use client';
 
 import jsPDF from 'jspdf';
@@ -82,17 +81,24 @@ export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: str
     const rightAlignX = 196;
     const labelX = 150;
 
-    // Resumen Contable de Precisión EFAS
+    // Resumen Contable - Con TOTAL DISPONIBLE
     doc.setFontSize(9);
     const summary = [
-        { label: 'Saldo a Favor Anterior:', value: `${monedaSimbolo} ${paymentData.prevBalance || '0,00'}` },
-        { label: 'Monto del Pago Recibido:', value: `${monedaSimbolo} ${paymentData.receivedAmount || '0,00'}` },
-        { label: 'Total Abonado en Deudas:', value: `${monedaSimbolo} ${paymentData.totalDebtPaid || '0,00'}` },
-        { label: 'Saldo a Favor Actual:', value: `${monedaSimbolo} ${paymentData.currentBalance || '0,00'}` }
+        { label: 'Saldo a Favor Anterior:', value: `${monedaSimbolo} ${paymentData.prevBalance || '0,00'}`, isBold: false },
+        { label: 'Monto del Pago Recibido:', value: `${monedaSimbolo} ${paymentData.receivedAmount || '0,00'}`, isBold: false },
+        { label: 'TOTAL DISPONIBLE:', value: `${monedaSimbolo} ${paymentData.totalAvailable || '0,00'}`, isBold: true },
+        { label: 'Total Abonado en Deudas:', value: `${monedaSimbolo} ${paymentData.totalDebtPaid || '0,00'}`, isBold: false },
+        { label: 'Saldo a Favor Actual:', value: `${monedaSimbolo} ${paymentData.currentBalance || '0,00'}`, isBold: true }
     ];
 
     summary.forEach(item => {
-        doc.setFont('helvetica', item.label.includes('Actual') ? 'bold' : 'normal');
+        if (item.isBold) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(item.label.includes('TOTAL') ? 10 : 9);
+        } else {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+        }
         doc.text(item.label, labelX, finalY, { align: 'right' });
         doc.text(item.value, rightAlignX, finalY, { align: 'right' });
         finalY += 6;
