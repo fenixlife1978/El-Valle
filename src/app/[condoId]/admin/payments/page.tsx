@@ -10,13 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { 
     Search, CheckCircle, XCircle, Eye, MoreHorizontal, 
     Download, Loader2, Calendar as CalendarIcon,
     UserPlus, WalletCards, Trash2, FileText, Save, Share2, FileDown,
-    Calculator, Receipt, Check, DollarSign, Plus, AlertCircle, CheckCircle2,
-    ArrowUp, ArrowDown, ArrowLeft
+    Calculator as CalculatorIcon, Receipt, Check, DollarSign, Plus, AlertCircle, CheckCircle2,
+    ArrowUp, ArrowDown, ArrowLeft, Info
 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -42,8 +44,6 @@ import {
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import { downloadPDF } from '@/lib/print-pdf';
 import Decimal from 'decimal.js';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
 import { uploadToImgbb } from '@/lib/imgbb';
 
 const monthsLocale: { [key: number]: string } = {
@@ -70,13 +70,14 @@ const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
-type DistributionLine = { id: string; category: 'ordinaria' | 'extraordinaria'; amount: number; extraordinaryDebtId?: string; isOwn?: boolean; };
 type BeneficiaryRow = { 
     id: string; 
     owner: Owner | null; 
     searchTerm: string; 
     amount: string;
-    selectedProperty: { street: string, house: string } | null; 
+    selectedProperty: { street: string, house: string } | null;
+    selectedExtraordinaryDebts?: string[];
+    extraordinaryTotalUSD?: number;
 };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | '';
 type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string; type: 'deuda' | 'adelanto' | 'abono' | 'extraordinaria' | 'abono_extraordinaria'; };
@@ -105,6 +106,18 @@ type Payment = {
     totalPagado?: number;
 };
 
+interface ExtraordinaryDebt {
+    id: string;
+    description: string;
+    amountUSD: number;
+    pendingUSD?: number;
+    status: 'pending' | 'partial' | 'paid';
+    ownerId: string;
+    ownerName?: string;
+    property?: string;
+    debtId?: string;
+}
+
 function VerificationComponent({ condoId }: { condoId: string }) {
     const { user } = useAuth();
     const { requestAuthorization } = useAuthorization();
@@ -112,7 +125,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
     const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
     const [isVerifying, setIsVerifying] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
@@ -200,13 +212,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             } else break;
                         }
 
-                        const advanceAmountBs = new Decimal(currentFee).times(new Decimal(payment.exchangeRate)).toDecimalPlaces(2);
-                        while (funds.gte(advanceAmountBs)) {
-                            // Lógica de adelanto simplificada para el proceso
-                            funds = funds.minus(advanceAmountBs);
-                            userAbonoTotalBs = userAbonoTotalBs.plus(advanceAmountBs);
-                        }
-
                         totalAbonadoDeudasGlobal = totalAbonadoDeudasGlobal.plus(userAbonoTotalBs);
                         const nuevoBalance = funds.toDecimalPlaces(2).toNumber();
                         currentBalances[beneficiary.ownerId] = nuevoBalance;
@@ -277,7 +282,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     <CardHeader className="bg-white/5 p-6 border-b border-white/5">
                         <div className="flex justify-between items-start">
                             <Badge className="bg-primary/20 text-primary border-none text-[8px] font-black uppercase tracking-widest">EN TRÁNSITO</Badge>
-                            <span className="text-[9px] font-bold text-white/20 uppercase italic">{p.paymentDate?.toDate ? format(p.paymentDate.toDate(), 'dd/MM HH:mm') : 'S/F'}</span>
+                            <span className="text-[9px] font-bold text-white/20 uppercase italic">
+                                {p.paymentDate?.toDate ? format(p.paymentDate.toDate(), 'dd/MM HH:mm') : 'S/F'}
+                            </span>
                         </div>
                         <CardTitle className="text-white font-black uppercase italic text-sm mt-3 leading-tight">
                             {p.beneficiaries.map(b => b.ownerName).join(", ")}
@@ -310,7 +317,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 ))}
                                 <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-white">Total Bruto:</span><span className="text-2xl font-black italic">{(selectedPayment?.paymentMethod || "").includes('usd') ? `$ ${formatUSD(selectedPayment?.totalAmount || 0)}` : `Bs. ${formatCurrency(selectedPayment?.totalAmount || 0)}`}</span></div>
                             </div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo Rechazo (Opcional)</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Motivo Rechazo (Opcional)</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
                         </div>
                         <div className="relative aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border border-white/5">
                             {selectedPayment?.receiptUrl ? <Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" /> : <div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen adjunta</div>}
@@ -331,8 +338,6 @@ function HistoryComponent({ condoId }: { condoId: string }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [localCompanyInfo, setLocalCompanyInfo] = useState<any>(null);
 
-    const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
-
     useEffect(() => {
         if (!condoId || condoId === "[condoId]") return;
         const q = query(collection(db, 'condominios', condoId, 'payments'), where('status', 'in', ['aprobado', 'rechazado']), orderBy('reportedAt', 'desc'));
@@ -342,7 +347,19 @@ function HistoryComponent({ condoId }: { condoId: string }) {
         });
     }, [condoId]);
 
-    const filtered = useMemo(() => payments.filter(p => !searchTerm || p.beneficiaries.some(b => b.ownerName.toLowerCase().includes(searchTerm.toLowerCase())) || p.reference?.includes(searchTerm)), [payments, searchTerm]);
+    useEffect(() => {
+        if (!condoId || condoId === "[condoId]") return;
+        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+        return onSnapshot(settingsRef, (snap) => {
+            if (snap.exists()) setLocalCompanyInfo(snap.data().companyInfo);
+        });
+    }, [condoId]);
+
+    const filtered = useMemo(() => payments.filter(p => 
+        !searchTerm || 
+        p.beneficiaries.some(b => b.ownerName.toLowerCase().includes(searchTerm.toLowerCase())) || 
+        p.reference?.includes(searchTerm)
+    ), [payments, searchTerm]);
 
     const handleExportPDF = async (payment: Payment, ownerId: string) => {
         try {
@@ -387,7 +404,14 @@ function HistoryComponent({ condoId }: { condoId: string }) {
             <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/20"/><Input placeholder="Buscar por nombre o referencia..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-12 h-14 rounded-2xl bg-slate-900 border-white/5 text-white font-black uppercase text-xs italic" /></div>
             <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                 <Table>
-                    <TableHeader className="bg-slate-800/30"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400">Residente</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Estado</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-slate-800/30">
+                        <TableRow className="border-white/5">
+                            <TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400">Residente</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-400">Monto</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-400">Estado</TableHead>
+                            <TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Acción</TableHead>
+                        </TableRow>
+                    </TableHeader>
                     <TableBody>
                         {filtered.map(p => (
                             <TableRow key={p.id} className="border-white/5 hover:bg-white/5 transition-colors">
@@ -400,8 +424,8 @@ function HistoryComponent({ condoId }: { condoId: string }) {
                                 <TableCell className="text-right pr-8">
                                     {p.status === 'aprobado' && (
                                         <div className="flex justify-end gap-2">
-                                            {p.beneficiaryIds.map(id => (
-                                                <Button key={id} size="sm" variant="ghost" onClick={() => handleExportPDF(p, id)} className="text-primary hover:bg-primary/10 h-8 px-3 rounded-lg font-black uppercase text-[8px] italic"><FileDown className="h-3 w-3 mr-1" /> PDF {p.beneficiaries.find(b=>b.ownerId===id)?.ownerName.split(' ')[0]}</Button>
+                                            {(p.beneficiaryIds || []).map(id => (
+                                                <Button key={id} size="sm" variant="ghost" onClick={() => handleExportPDF(p, id)} className="text-primary hover:bg-primary/10 h-8 px-3 rounded-lg font-black uppercase text-[8px] italic"><FileDown className="h-3 w-3 mr-1" /> PDF {(p.beneficiaries || []).find(b=>b.ownerId===id)?.ownerName.split(' ')[0]}</Button>
                                             ))}
                                         </div>
                                     )}
@@ -555,7 +579,7 @@ function ReportPaymentComponent() {
                                 {!row.owner ? (
                                     <div className="relative">
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-                                        <Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" value={row.searchTerm} onChange={(e) => setBeneficiaryRows(rows => rows.map(r => r.id === row.id ? { ...r, searchTerm: e.target.value } : r))} />
+                                        <Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-black uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />
                                         {row.searchTerm.length >= 2 && (
                                             <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden">
                                                 <ScrollArea className="h-48">
@@ -569,7 +593,7 @@ function ReportPaymentComponent() {
                                 ) : (
                                     <div className="flex justify-between items-center">
                                         <div className="flex flex-col"><span className="font-black text-primary text-xs uppercase">{row.owner.name}</span>{row.selectedProperty && <span className="text-[9px] font-bold text-slate-500 uppercase">{row.selectedProperty.street} - {row.selectedProperty.house}</span>}</div>
-                                        <Input type="number" value={row.amount} onChange={e => setBeneficiaryRows(rows => rows.map(r => r.id === row.id ? { ...r, amount: e.target.value } : r))} className="w-32 h-10 bg-slate-800 border-none text-white font-black text-right" />
+                                        <Input type="number" value={row.amount} onChange={e => updateBeneficiaryRow(row.id, { amount: e.target.value })} className="w-32 h-10 bg-slate-800 border-none text-white font-black text-right" />
                                         <Button type="button" variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500 h-10 w-10"><Trash2/></Button>
                                     </div>
                                 )}
@@ -757,7 +781,7 @@ function CalculatorComponent({ condoId }: { condoId: string }) {
 
             <div className="lg:sticky lg:top-24">
                 <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[3rem] border border-white/5">
-                    <CardHeader className="bg-primary text-slate-900 p-8 text-center"><CardTitle className="text-2xl font-black uppercase italic tracking-tighter flex items-center justify-center gap-3"><Calculator /> Liquidación</CardTitle></CardHeader>
+                    <CardHeader className="bg-primary text-slate-900 p-8 text-center"><CardTitle className="text-2xl font-black uppercase italic tracking-tighter flex items-center justify-center gap-3"><CalculatorIcon /> Liquidación</CardTitle></CardHeader>
                     <CardContent className="p-8 space-y-6">
                         <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-500">TASA BCV</span><Badge variant="outline" className="font-black text-primary border-primary/20">Bs. {formatCurrency(activeRate)}</Badge></div>
                         <Separator className="bg-white/5"/>
@@ -812,6 +836,8 @@ function PaymentsPage() {
         </div>
     );
 }
+
+const Separator = ({ className }: { className?: string }) => <div className={cn("h-px w-full bg-border", className)} />;
 
 export default function PaymentsPageWrapper() {
     return (<Suspense fallback={<div className="flex h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}><PaymentsPage /></Suspense>);
