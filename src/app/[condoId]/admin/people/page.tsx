@@ -18,7 +18,8 @@ import {
     where,
     getDocs,
     runTransaction,
-    Timestamp
+    Timestamp,
+    getDoc
 } from 'firebase/firestore';
 import { 
     createUserWithEmailAndPassword, 
@@ -36,7 +37,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home, Banknote, Plus, X, ArrowLeftRight, History, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home, Banknote, Plus, X, ArrowLeftRight, History, CheckCircle2, Download, FileText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -63,7 +64,7 @@ export default function OwnersManagement() {
     const params = useParams();
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
-    const { user: currentUser, activeCondoId, userProfile } = useAuth();
+    const { user: currentUser, activeCondoId, userProfile, companyInfo } = useAuth();
 
     const urlCondoId = params?.condoId as string;
     const workingCondoId = userProfile?.workingCondoId || userProfile?.condominioId || urlCondoId;
@@ -119,6 +120,46 @@ export default function OwnersManagement() {
         return (a.name || "").toLowerCase().includes(search) || 
                (a.email || "").toLowerCase().includes(search);
     }), [admins, searchTerm]);
+
+    const handleExportOwnersPDF = async () => {
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        
+        const doc = new jsPDF();
+        const info = companyInfo || { name: 'EFAS CondoSys', rif: 'J-00000000-0' };
+        
+        // Header
+        doc.setFillColor(26, 29, 35);
+        doc.rect(0, 0, 210, 30, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), 15, 15);
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(`RIF: ${info.rif}`, 15, 22);
+        doc.setFontSize(10).text("LISTADO DETALLADO DE PROPIETARIOS", 195, 18, { align: 'right' });
+        
+        const tableData = owners.map((o, index) => [
+            index + 1,
+            o.name.toUpperCase(),
+            o.email || 'SIN CORREO',
+            (o.properties || []).map(p => `${p.street}-${p.house}`).join(' / '),
+            `Bs. ${(o.balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+        ]);
+
+        autoTable(doc, {
+            startY: 40,
+            head: [['#', 'NOMBRE COMPLETO', 'EMAIL', 'PROPIEDADES', 'SALDO A FAVOR']],
+            body: tableData,
+            headStyles: { fillColor: [242, 135, 5], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 8, cellPadding: 3 },
+            columnStyles: {
+                0: { cellWidth: 10 },
+                1: { cellWidth: 50 },
+                4: { halign: 'right' }
+            }
+        });
+
+        doc.save(`Lista_Propietarios_${workingCondoId}_${new Date().getTime()}.pdf`);
+        toast({ title: "PDF Generado", description: "El listado de propietarios ha sido descargado." });
+    };
 
     const handleSaveOwner = async () => {
         if (!workingCondoId) return;
@@ -288,7 +329,10 @@ export default function OwnersManagement() {
                     </h2>
                     <p className="text-white/40 font-bold text-[10px] uppercase tracking-[0.3em] mt-3">Sincronización Atómica de Comunidad</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                    <Button onClick={handleExportOwnersPDF} variant="outline" className="border-emerald-500 text-emerald-500 font-black uppercase text-[10px] px-6 h-12 rounded-xl italic hover:bg-emerald-500/10">
+                        <Download className="mr-2 h-4 w-4" /> Exportar Propietarios
+                    </Button>
                     <Button onClick={() => setIsTransferDialogOpen(true)} variant="outline" className="border-primary text-primary font-black uppercase text-[10px] px-6 h-12 rounded-xl italic">
                         <ArrowLeftRight className="mr-2 h-4 w-4" /> Traspasar Propiedad
                     </Button>
