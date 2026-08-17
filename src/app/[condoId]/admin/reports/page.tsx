@@ -22,7 +22,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths, endOfMonth, isSameMonth } from 'date-fns';
-import { ScrollArea } from '@/components/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useRouter, useParams } from 'next/navigation';
@@ -1567,40 +1567,42 @@ export default function ReportsPage() {
 
                                 <div>
                                     <h3 className="text-lg font-semibold mb-2">Historial de Reportes Guardados</h3>
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Fecha de Creación</TableHead>
-                                                <TableHead>Estado</TableHead>
-                                                <TableHead className="text-right">Acciones</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {savedIntegralReports.map(report => {
-                                                const isPublished = publishedReports.some(p => p.sourceId === report.id);
-                                                return (
-                                                    <TableRow key={report.id}>
-                                                        <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
-                                                        <TableCell>
-                                                            <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Publicado" : "No Publicado"}</Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                                <DropdownMenuContent>
-                                                                    <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
-                                                                    <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
-                                                                    {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
-                                                                    {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
-                                                                    <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Fecha de Creación</TableHead>
+                                                    <TableHead>Estado</TableHead>
+                                                    <TableHead className="text-right">Acciones</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {savedIntegralReports.map(report => {
+                                                    const isPublished = publishedReports.some(p => p.sourceId === report.id);
+                                                    return (
+                                                        <TableRow key={report.id}>
+                                                            <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
+                                                            <TableCell>
+                                                                <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Publicado" : "No Publicado"}</Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                                    <DropdownMenuContent>
+                                                                        <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
+                                                                        {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
+                                                                        {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
+                                                                        <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -1690,24 +1692,26 @@ export default function ReportsPage() {
                                                                 <CollapsibleContent>
                                                                     <div className="p-2 border-t bg-background">
                                                                         {payment.liquidatedDebts.length > 0 ? (
-                                                                            <Table>
-                                                                                <TableHeader>
-                                                                                    <TableRow>
-                                                                                        <TableHead>Mes Liquidado</TableHead>
-                                                                                        <TableHead>Concepto</TableHead>
-                                                                                        <TableHead className="text-right">Monto Pagado ($)</TableHead>
-                                                                                    </TableRow>
-                                                                                </TableHeader>
-                                                                                <TableBody>
-                                                                                    {payment.liquidatedDebts.map(debt => (
-                                                                                        <TableRow key={debt.id}>
-                                                                                            <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                                                                            <TableCell>{debt.description}</TableCell>
-                                                                                            <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                                                            <div className="overflow-x-auto">
+                                                                                <Table>
+                                                                                    <TableHeader>
+                                                                                        <TableRow>
+                                                                                            <TableHead>Mes Liquidado</TableHead>
+                                                                                            <TableHead>Concepto</TableHead>
+                                                                                            <TableHead className="text-right">Monto Pagado ($)</TableHead>
                                                                                         </TableRow>
-                                                                                    ))}
-                                                                                </TableBody>
-                                                                            </Table>
+                                                                                    </TableHeader>
+                                                                                    <TableBody>
+                                                                                        {payment.liquidatedDebts.map(debt => (
+                                                                                            <TableRow key={debt.id}>
+                                                                                                <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                                                                <TableCell>{debt.description}</TableCell>
+                                                                                                <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                                                                            </TableRow>
+                                                                                        ))}
+                                                                                    </TableBody>
+                                                                                </Table>
+                                                                            </div>
                                                                         ) : (
                                                                             <p className="text-sm text-muted-foreground px-4 py-2">Este pago fue acreditado a saldo a favor.</p>
                                                                         )}
@@ -1774,62 +1778,66 @@ export default function ReportsPage() {
                                     <CardContent className="space-y-6">
                                         <div>
                                             <h3 className="font-bold mb-2">Resumen de Pagos</h3>
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                                                        <TableHead className="text-primary-foreground">Fecha</TableHead>
-                                                        <TableHead className="text-primary-foreground">Concepto</TableHead>
-                                                        <TableHead className="text-primary-foreground">Pagado por</TableHead>
-                                                        <TableHead className="text-primary-foreground text-right">Monto (Bs)</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {accountStatementData.payments.map(p => (
-                                                        <TableRow key={p.id}>
-                                                            <TableCell>{format(p.paymentDate.toDate(), 'dd-MM-yyyy')}</TableCell>
-                                                            <TableCell>Pago Cuota(s)</TableCell>
-                                                            <TableCell>Administrador</TableCell>
-                                                            <TableCell className="text-right">{formatToTwoDecimals(p.totalAmount)}</TableCell>
+                                            <div className="overflow-x-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                                            <TableHead className="text-primary-foreground">Fecha</TableHead>
+                                                            <TableHead className="text-primary-foreground">Concepto</TableHead>
+                                                            <TableHead className="text-primary-foreground">Pagado por</TableHead>
+                                                            <TableHead className="text-primary-foreground text-right">Monto (Bs)</TableHead>
                                                         </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                                <TableFooter>
-                                                     <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
-                                                        <TableCell colSpan={3}>Total Pagado</TableCell>
-                                                        <TableCell className="text-right">Bs. {formatToTwoDecimals(accountStatementData.totalPaidBs)}</TableCell>
-                                                    </TableRow>
-                                                </TableFooter>
-                                            </Table>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {accountStatementData.payments.map(p => (
+                                                            <TableRow key={p.id}>
+                                                                <TableCell>{format(p.paymentDate.toDate(), 'dd-MM-yyyy')}</TableCell>
+                                                                <TableCell>Pago Cuota(s)</TableCell>
+                                                                <TableCell>Administrador</TableCell>
+                                                                <TableCell className="text-right">{formatToTwoDecimals(p.totalAmount)}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                    <TableFooter>
+                                                        <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
+                                                            <TableCell colSpan={3}>Total Pagado</TableCell>
+                                                            <TableCell className="text-right">Bs. {formatToTwoDecimals(accountStatementData.totalPaidBs)}</TableCell>
+                                                        </TableRow>
+                                                    </TableFooter>
+                                                </Table>
+                                            </div>
                                         </div>
                                         <div>
                                             <h3 className="font-bold mb-2">Resumen de Deudas</h3>
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                                                        <TableHead className="text-primary-foreground">Periodo</TableHead>
-                                                        <TableHead className="text-primary-foreground">Concepto</TableHead>
-                                                        <TableHead className="text-primary-foreground text-right">Monto ($)</TableHead>
-                                                        <TableHead className="text-primary-foreground text-right">Estado</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                     {accountStatementData.debts.map(d => (
-                                                        <TableRow key={d.id}>
-                                                            <TableCell>{monthsLocale[d.month]} {d.year}</TableCell>
-                                                            <TableCell>{d.description}</TableCell>
-                                                            <TableCell className="text-right">${d.amountUSD.toFixed(2)}</TableCell>
-                                                            <TableCell className="text-right">{d.status === 'paid' ? 'Pagada' : 'Pendiente'}</TableCell>
+                                            <div className="overflow-x-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                                            <TableHead className="text-primary-foreground">Periodo</TableHead>
+                                                            <TableHead className="text-primary-foreground">Concepto</TableHead>
+                                                            <TableHead className="text-primary-foreground text-right">Monto ($)</TableHead>
+                                                            <TableHead className="text-primary-foreground text-right">Estado</TableHead>
                                                         </TableRow>
-                                                     ))}
-                                                </TableBody>
-                                                <TableFooter>
-                                                    <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
-                                                        <TableCell colSpan={2}>Total Adeudado</TableCell>
-                                                        <TableCell className="text-right">${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
-                                                        <TableCell></TableCell>
-                                                    </TableRow>
-                                                </TableFooter>
-                                            </Table>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {accountStatementData.debts.map(d => (
+                                                            <TableRow key={d.id}>
+                                                                <TableCell>{monthsLocale[d.month]} {d.year}</TableCell>
+                                                                <TableCell>{d.description}</TableCell>
+                                                                <TableCell className="text-right">${d.amountUSD.toFixed(2)}</TableCell>
+                                                                <TableCell className="text-right">{d.status === 'paid' ? 'Pagada' : 'Pendiente'}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                    <TableFooter>
+                                                        <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
+                                                            <TableCell colSpan={2}>Total Adeudado</TableCell>
+                                                            <TableCell className="text-right">${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
+                                                            <TableCell></TableCell>
+                                                        </TableRow>
+                                                    </TableFooter>
+                                                </Table>
+                                            </div>
                                         </div>
                                         <div className="text-right font-bold text-lg pt-4">
                                             Saldo a Favor Actual: Bs. {formatToTwoDecimals(accountStatementData.balance)}
@@ -1858,27 +1866,29 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Propietario</TableHead>
-                                        <TableHead>Propiedad</TableHead>
-                                        <TableHead className="text-center">Última Cuota Pagada</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {lastPaidReportData.map((row) => (
-                                        <TableRow key={row.ownerId}>
-                                            <TableCell className="font-medium uppercase text-xs">{row.name}</TableCell>
-                                            <TableCell className="text-muted-foreground text-xs">{row.properties}</TableCell>
-                                            <TableCell className="text-center font-black uppercase text-xs text-primary">{row.lastPaidMonth}</TableCell>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Propietario</TableHead>
+                                            <TableHead>Propiedad</TableHead>
+                                            <TableHead className="text-center">Última Cuota Pagada</TableHead>
                                         </TableRow>
-                                    ))}
-                                    {lastPaidReportData.length === 0 && (
-                                        <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground italic">No hay datos para mostrar</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {lastPaidReportData.map((row) => (
+                                            <TableRow key={row.ownerId}>
+                                                <TableCell className="font-medium uppercase text-xs">{row.name}</TableCell>
+                                                <TableCell className="text-muted-foreground text-xs">{row.properties}</TableCell>
+                                                <TableCell className="text-center font-black uppercase text-xs text-primary">{row.lastPaidMonth}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {lastPaidReportData.length === 0 && (
+                                            <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground italic">No hay datos para mostrar</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -1905,11 +1915,13 @@ export default function ReportsPage() {
                                     <div className="md:col-span-2 lg:col-span-1 grid grid-cols-2 gap-2 items-end">
                                         <div className="space-y-2">
                                             <Label>Desde (meses)</Label>
-                                            <Input type="number" value={customMonthRange.from} onChange={e => setCustomMonthRange(c => ({...c, from: e.target.value}))} />
+                                            <Label htmlFor="custom-month-from" className="sr-only">Desde meses</Label>
+                                            <Input id="custom-month-from" type="number" value={customMonthRange.from} onChange={e => setCustomMonthRange(c => ({...c, from: e.target.value}))} />
                                         </div>
                                         <div className="space-y-2">
                                             <Label>Hasta (meses)</Label>
-                                            <Input type="number" value={customMonthRange.to} onChange={e => setCustomMonthRange(c => ({...c, to: e.target.value}))} />
+                                            <Label htmlFor="custom-month-to" className="sr-only">Hasta meses</Label>
+                                            <Input id="custom-month-to" type="number" value={customMonthRange.to} onChange={e => setCustomMonthRange(c => ({...c, to: e.target.value}))} />
                                         </div>
                                     </div>
                                 )}
@@ -1939,63 +1951,65 @@ export default function ReportsPage() {
                                     <Button variant="outline" onClick={() => handleExportDelinquency('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel</Button>
                                 </div>
                             </div>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-[50px]">
-                                             <Checkbox 
-                                                checked={selectedDelinquentOwners.size === filteredAndSortedDelinquents.length && filteredAndSortedDelinquents.length > 0}
-                                                onCheckedChange={(checked) => setSelectedDelinquentOwners(new Set(Boolean(checked) ? filteredAndSortedDelinquents.map(o => o.id) : []))}
-                                            />
-                                        </TableHead>
-                                        <TableHead>
-                                            <Button variant="ghost" onClick={() => handleSortDelinquency('name')}>
-                                                Propietario {renderSortIcon('name')}
-                                            </Button>
-                                        </TableHead>
-                                        <TableHead>Propiedades</TableHead>
-                                        <TableHead>
-                                             <Button variant="ghost" onClick={() => handleSortDelinquency('monthsOwed')}>
-                                                Meses {renderSortIcon('monthsOwed')}
-                                            </Button>
-                                        </TableHead>
-                                        <TableHead className="text-right">
-                                             <Button variant="ghost" onClick={() => handleSortDelinquency('debtAmountUSD')}>
-                                                Deuda (USD) {renderSortIcon('debtAmountUSD')}
-                                            </Button>
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredAndSortedDelinquents.length > 0 ? (
-                                        filteredAndSortedDelinquents.map(owner => (
-                                            <TableRow key={owner.id} data-state={selectedDelinquentOwners.has(owner.id) ? 'selected' : undefined}>
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedDelinquentOwners.has(owner.id)}
-                                                        onCheckedChange={()=>{
-                                                            const newSelection = new Set(selectedDelinquentOwners);
-                                                            if (newSelection.has(owner.id)) newSelection.delete(owner.id);
-                                                            else newSelection.add(owner.id);
-                                                            setSelectedDelinquentOwners(newSelection);
-                                                        }}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="font-medium">{owner.name}</TableCell>
-                                                <TableCell>{owner.properties}</TableCell>
-                                                <TableCell>{owner.monthsOwed}</TableCell>
-                                                <TableCell className="text-right font-semibold">${owner.debtAmountUSD.toFixed(2)}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
                                         <TableRow>
-                                            <TableCell colSpan={5} className="h-24 text-center">
-                                                No se encontraron propietarios con los filtros seleccionados.
-                                            </TableCell>
+                                            <TableHead className="w-[50px]">
+                                                 <Checkbox 
+                                                    checked={selectedDelinquentOwners.size === filteredAndSortedDelinquents.length && filteredAndSortedDelinquents.length > 0}
+                                                    onCheckedChange={(checked) => setSelectedDelinquentOwners(new Set(Boolean(checked) ? filteredAndSortedDelinquents.map(o => o.id) : []))}
+                                                />
+                                            </TableHead>
+                                            <TableHead>
+                                                <Button variant="ghost" onClick={() => handleSortDelinquency('name')}>
+                                                    Propietario {renderSortIcon('name')}
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead>Propiedades</TableHead>
+                                            <TableHead>
+                                                 <Button variant="ghost" onClick={() => handleSortDelinquency('monthsOwed')}>
+                                                    Meses {renderSortIcon('monthsOwed')}
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="text-right">
+                                                 <Button variant="ghost" onClick={() => handleSortDelinquency('debtAmountUSD')}>
+                                                    Deuda (USD) {renderSortIcon('debtAmountUSD')}
+                                                </Button>
+                                            </TableHead>
                                         </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredAndSortedDelinquents.length > 0 ? (
+                                            filteredAndSortedDelinquents.map(owner => (
+                                                <TableRow key={owner.id} data-state={selectedDelinquentOwners.has(owner.id) ? 'selected' : undefined}>
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            checked={selectedDelinquentOwners.has(owner.id)}
+                                                            onCheckedChange={()=>{
+                                                                const newSelection = new Set(selectedDelinquentOwners);
+                                                                if (newSelection.has(owner.id)) newSelection.delete(owner.id);
+                                                                else newSelection.add(owner.id);
+                                                                setSelectedDelinquentOwners(newSelection);
+                                                            }}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">{owner.name}</TableCell>
+                                                    <TableCell>{owner.properties}</TableCell>
+                                                    <TableCell>{owner.monthsOwed}</TableCell>
+                                                    <TableCell className="text-right font-semibold">${owner.debtAmountUSD.toFixed(2)}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="h-24 text-center">
+                                                    No se encontraron propietarios con los filtros seleccionados.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                      </Card>
                  </TabsContent>
@@ -2017,28 +2031,30 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Propietario</TableHead>
-                                        <TableHead>Propiedades</TableHead>
-                                        <TableHead className="text-right">Saldo (Bs.)</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredBalanceOwners.length > 0 ? (
-                                        filteredBalanceOwners.map(owner => (
-                                            <TableRow key={owner.id}>
-                                                <TableCell className="font-medium">{owner.name}</TableCell>
-                                                <TableCell>{owner.properties}</TableCell>
-                                                <TableCell className="text-right font-bold text-primary">Bs. {formatToTwoDecimals(owner.balance)}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow><TableCell colSpan={3} className="h-24 text-center">No hay propietarios con saldo a favor.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Propietario</TableHead>
+                                            <TableHead>Propiedades</TableHead>
+                                            <TableHead className="text-right">Saldo (Bs.)</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredBalanceOwners.length > 0 ? (
+                                            filteredBalanceOwners.map(owner => (
+                                                <TableRow key={owner.id}>
+                                                    <TableCell className="font-medium">{owner.name}</TableCell>
+                                                    <TableCell>{owner.properties}</TableCell>
+                                                    <TableCell className="text-right font-bold text-primary">Bs. {formatToTwoDecimals(owner.balance)}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow><TableCell colSpan={3} className="h-24 text-center">No hay propietarios con saldo a favor.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                      </Card>
                  </TabsContent>
@@ -2069,45 +2085,47 @@ export default function ReportsPage() {
                                 <Button variant="outline" onClick={() => handleExportMonthlyReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                 <Button variant="outline" onClick={() => handleExportMonthlyReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                             </div>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Propietario</TableHead>
-                                        <TableHead>Propiedad</TableHead>
-                                        <TableHead>Fecha Pago</TableHead>
-                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
-                                        <TableHead>Referencia</TableHead>
-                                        <TableHead>Meses Pagados</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {monthlyReportData.length > 0 ? (
-                                        monthlyReportData.map(row => (
-                                            <TableRow key={row.paymentId}>
-                                                <TableCell>{row.ownerName}</TableCell>
-                                                <TableCell>{row.properties}</TableCell>
-                                                <TableCell>{row.paymentDate}</TableCell>
-                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
-                                                <TableCell>{row.reference}</TableCell>
-                                                <TableCell>{row.paidMonths}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No hay pagos aprobados en este período.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                                {monthlyReportData.length > 0 && (
-                                    <TableFooter>
-                                        <TableRow className="bg-muted/50 font-bold">
-                                            <TableCell colSpan={3} className="text-right uppercase text-[10px] tracking-widest">Total Ingresos del Mes</TableCell>
-                                            <TableCell className="text-right text-primary font-black">
-                                                Bs. {formatToTwoDecimals(monthlyReportData.reduce((acc, row) => acc + row.amount, 0))}
-                                            </TableCell>
-                                            <TableCell colSpan={2}></TableCell>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Propietario</TableHead>
+                                            <TableHead>Propiedad</TableHead>
+                                            <TableHead>Fecha Pago</TableHead>
+                                            <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                            <TableHead>Referencia</TableHead>
+                                            <TableHead>Meses Pagados</TableHead>
                                         </TableRow>
-                                    </TableFooter>
-                                )}
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {monthlyReportData.length > 0 ? (
+                                            monthlyReportData.map(row => (
+                                                <TableRow key={row.paymentId}>
+                                                    <TableCell>{row.ownerName}</TableCell>
+                                                    <TableCell>{row.properties}</TableCell>
+                                                    <TableCell>{row.paymentDate}</TableCell>
+                                                    <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
+                                                    <TableCell>{row.reference}</TableCell>
+                                                    <TableCell>{row.paidMonths}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow><TableCell colSpan={6} className="h-24 text-center">No hay pagos aprobados en este período.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                    {monthlyReportData.length > 0 && (
+                                        <TableFooter>
+                                            <TableRow className="bg-muted/50 font-bold">
+                                                <TableCell colSpan={3} className="text-right uppercase text-[10px] tracking-widest">Total Ingresos del Mes</TableCell>
+                                                <TableCell className="text-right text-primary font-black">
+                                                    Bs. {formatToTwoDecimals(monthlyReportData.reduce((acc, row) => acc + row.amount, 0))}
+                                                </TableCell>
+                                                <TableCell colSpan={2}></TableCell>
+                                            </TableRow>
+                                        </TableFooter>
+                                    )}
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                  </TabsContent>
@@ -2149,38 +2167,40 @@ export default function ReportsPage() {
                                 <Button variant="outline" onClick={() => handleExportIncomeReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                 <Button variant="outline" onClick={() => handleExportIncomeReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                             </div>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Período</TableHead>
-                                        <TableHead className="text-right">Ingresos (Bs)</TableHead>
-                                        <TableHead className="text-right">Ingresos (USD Aprox.)</TableHead>
-                                        <TableHead className="text-center">Nº de Pagos</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {incomeReportData.length > 0 ? (
-                                        incomeReportData.map(row => (
-                                            <TableRow key={row.period}>
-                                                <TableCell className="font-medium capitalize">{row.period}</TableCell>
-                                                <TableCell className="text-right">{formatToTwoDecimals(row.totalBs)}</TableCell>
-                                                <TableCell className="text-right">${formatToTwoDecimals(row.totalUsd)}</TableCell>
-                                                <TableCell className="text-center">{row.paymentCount}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow><TableCell colSpan={4} className="text-center py-20">No hay ingresos en el período seleccionado.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                                <TableFooter>
-                                    <TableRow>
-                                        <TableCell className="font-bold">TOTAL</TableCell>
-                                        <TableCell className="text-right font-bold">{formatToTwoDecimals(incomeReportData.reduce((acc, row) => acc + row.totalBs, 0))}</TableCell>
-                                        <TableCell className="text-right font-bold">${formatToTwoDecimals(incomeReportData.reduce((acc, row) => acc + row.totalUsd, 0))}</TableCell>
-                                        <TableCell></TableCell>
-                                    </TableRow>
-                                </TableFooter>
-                            </Table>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Período</TableHead>
+                                            <TableHead className="text-right">Ingresos (Bs)</TableHead>
+                                            <TableHead className="text-right">Ingresos (USD Aprox.)</TableHead>
+                                            <TableHead className="text-center">Nº de Pagos</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {incomeReportData.length > 0 ? (
+                                            incomeReportData.map(row => (
+                                                <TableRow key={row.period}>
+                                                    <TableCell className="font-medium capitalize">{row.period}</TableCell>
+                                                    <TableCell className="text-right">{formatToTwoDecimals(row.totalBs)}</TableCell>
+                                                    <TableCell className="text-right">${formatToTwoDecimals(row.totalUsd)}</TableCell>
+                                                    <TableCell className="text-center">{row.paymentCount}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow><TableCell colSpan={4} className="text-center py-20">No hay ingresos en el período seleccionado.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                    <TableFooter>
+                                        <TableRow>
+                                            <TableCell className="font-bold">TOTAL</TableCell>
+                                            <TableCell className="text-right font-bold">{formatToTwoDecimals(incomeReportData.reduce((acc, row) => acc + row.totalBs, 0))}</TableCell>
+                                            <TableCell className="text-right font-bold">${formatToTwoDecimals(incomeReportData.reduce((acc, row) => acc + row.totalUsd, 0))}</TableCell>
+                                            <TableCell></TableCell>
+                                        </TableRow>
+                                    </TableFooter>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -2196,32 +2216,34 @@ export default function ReportsPage() {
                             </DialogDescription>
                         </DialogHeader>
                         <div className="max-h-[70vh] overflow-y-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Propietario</TableHead>
-                                        <TableHead>Estado</TableHead>
-                                        <TableHead>Periodo Solvencia</TableHead>
-                                        <TableHead className="text-center">Meses Adeudados</TableHead>
-                                        <TableHead className="text-right">Saldo a Favor (Bs)</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {reportToPreview.data.map(row => (
-                                        <TableRow key={row.ownerId}>
-                                            <TableCell className="font-medium">{row.name}<br/><span className="text-xs text-muted-foreground">{row.properties}</span></TableCell>
-                                            <TableCell>
-                                                <Badge variant={row.status === 'Solvente' ? 'success' : 'destructive'}>{row.status}</Badge>
-                                            </TableCell>
-                                            <TableCell>{row.solvencyPeriod}</TableCell>
-                                            <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : '-'}</TableCell>
-                                            <TableCell className="text-right">
-                                                {row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}` : ''}
-                                            </TableCell>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Propietario</TableHead>
+                                            <TableHead>Estado</TableHead>
+                                            <TableHead>Periodo Solvencia</TableHead>
+                                            <TableHead className="text-center">Meses Adeudados</TableHead>
+                                            <TableHead className="text-right">Saldo a Favor (Bs)</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {reportToPreview.data.map(row => (
+                                            <TableRow key={row.ownerId}>
+                                                <TableCell className="font-medium">{row.name}<br/><span className="text-xs text-muted-foreground">{row.properties}</span></TableCell>
+                                                <TableCell>
+                                                    <Badge variant={row.status === 'Solvente' ? 'success' : 'destructive'}>{row.status}</Badge>
+                                                </TableCell>
+                                                <TableCell>{row.solvencyPeriod}</TableCell>
+                                                <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : '-'}</TableCell>
+                                                <TableCell className="text-right">
+                                                    {row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}` : ''}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     </DialogContent>
                 </Dialog>
@@ -2229,3 +2251,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
