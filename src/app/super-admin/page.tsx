@@ -106,18 +106,18 @@ export default function SuperAdminPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background p-8 font-sans">
-      <div className="max-w-6xl mx-auto flex justify-between items-start mb-8">
+    <div className="min-h-screen bg-background p-4 md:p-8 font-sans">
+      <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-start gap-4 mb-8">
         <div>
-            <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+            <h2 className="text-3xl md:text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
                 Panel <span className="text-primary">Maestro</span>
             </h2>
             <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-            <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+            <p className="text-muted-foreground font-bold mt-3 text-xs md:text-sm uppercase tracking-wide">
                 Control global de condominios y servicios.
             </p>
         </div>
-        <Button onClick={handleLogout} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold rounded-xl px-6 uppercase italic">
+        <Button onClick={handleLogout} className="w-full sm:w-auto bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold rounded-xl px-6 uppercase italic">
           <LogOut className="w-4 h-4 mr-2" /> Salir
         </Button>
       </div>
@@ -127,78 +127,87 @@ export default function SuperAdminPage() {
           <span className="text-primary font-bold ml-4">+</span>
           <span className="text-[11px] font-black uppercase tracking-wider">Activar Nuevo Condominio</span>
         </div>
-        <div className="bg-card p-8 rounded-b-3xl shadow-xl flex gap-4 items-center border border-border">
+        <div className="bg-card p-6 md:p-8 rounded-b-3xl shadow-xl flex flex-col md:flex-row gap-4 items-center border border-border">
           <Input 
             placeholder="Nombre del Condominio" 
             value={newCondoName}
             onChange={(e) => setNewCondoName(e.target.value)}
-            className="flex-1 bg-input border-border h-14 rounded-2xl px-6 font-bold"
+            className="flex-1 bg-input border-border h-12 md:h-14 rounded-2xl px-6 font-bold"
           />
-          <Button onClick={handleCreate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-14 px-12 rounded-2xl uppercase italic">
+          <Button onClick={handleCreate} className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black h-12 md:h-14 px-12 rounded-2xl uppercase italic">
             Activar Servicio
           </Button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto bg-card rounded-3xl shadow-2xl overflow-hidden border border-border">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-secondary/30 border-b border-border text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-              <th className="p-8">Cliente / ID</th>
-              <th className="p-8">Key de Acceso</th>
-              <th className="p-8">Estatus</th>
-              <th className="p-8">Control</th>
-              <th className="p-8 text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {condos.map((condo) => (
-              <tr key={condo.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
-                <td className="p-8">
-                  {editingId === condo.id ? (
-                    <Input value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="h-10 font-black uppercase" />
-                  ) : (
-                    <>
-                      <div className="font-black text-foreground uppercase italic leading-none">{condo.name || condo.nombre}</div>
-                      <div className="text-[10px] font-bold text-primary mt-1">{condo.id}</div>
-                    </>
-                  )}
-                </td>
-                <td className="p-8">
-                  {editingId === condo.id ? (
-                    <Input value={editForm.key} onChange={(e) => setEditForm({...editForm, key: e.target.value})} className="h-10 font-mono" />
-                  ) : (
-                    <span className="font-mono text-xs font-black text-muted-foreground bg-secondary/50 px-2 py-1 rounded">{condo.registrationKey}</span>
-                  )}
-                </td>
-                <td className="p-8">
-                  <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase ${condo.status === 'active' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                    {condo.status === 'active' ? '● Activo' : '● Suspendido'}
-                  </span>
-                </td>
-                <td className="p-8">
-                  <Switch 
-                      checked={condo.status === 'active'} 
-                      onCheckedChange={() => toggleStatus(condo.id, condo.status)}
-                  />
-                </td>
-                <td className="p-8 text-right flex justify-end gap-2">
-                  {editingId === condo.id ? (
-                    <Button onClick={() => handleUpdate(condo.id)} size="icon" className="bg-success h-10 w-10"><Check /></Button>
-                  ) : (
-                    <>
-                      <Button onClick={() => handleSupport(condo.id)} variant="outline" className="border-border font-black text-[10px] uppercase rounded-xl h-10">
-                        <Settings2 className="w-3 h-3 mr-2" /> Gestionar
-                      </Button>
-                      <Button onClick={() => { setEditingId(condo.id); setEditForm({ name: condo.name || condo.nombre, key: condo.registrationKey }); }} variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground"><Edit2 className="w-4 h-4" /></Button>
-                      <Button onClick={() => deleteDoc(doc(db, 'condominios', condo.id))} variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                    </>
-                  )}
-                </td>
+      <div className="max-w-6xl mx-auto bg-card rounded-3xl shadow-2xl border border-border overflow-hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left min-w-[800px]">
+            <thead>
+              <tr className="bg-secondary/30 border-b border-border text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                <th className="p-6 md:p-8">Cliente / ID</th>
+                <th className="p-6 md:p-8">Key de Acceso</th>
+                <th className="p-6 md:p-8">Estatus</th>
+                <th className="p-6 md:p-8">Control</th>
+                <th className="p-6 md:p-8 text-right">Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {condos.map((condo) => (
+                <tr key={condo.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
+                  <td className="p-6 md:p-8">
+                    {editingId === condo.id ? (
+                      <Input value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="h-10 font-black uppercase" />
+                    ) : (
+                      <>
+                        <div className="font-black text-foreground uppercase italic leading-none">{condo.name || condo.nombre}</div>
+                        <div className="text-[10px] font-bold text-primary mt-1">{condo.id}</div>
+                      </>
+                    )}
+                  </td>
+                  <td className="p-6 md:p-8">
+                    {editingId === condo.id ? (
+                      <Input value={editForm.key} onChange={(e) => setEditForm({...editForm, key: e.target.value})} className="h-10 font-mono" />
+                    ) : (
+                      <span className="font-mono text-xs font-black text-muted-foreground bg-secondary/50 px-2 py-1 rounded">{condo.registrationKey}</span>
+                    )}
+                  </td>
+                  <td className="p-6 md:p-8">
+                    <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase ${condo.status === 'active' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                      {condo.status === 'active' ? '● Activo' : '● Suspendido'}
+                    </span>
+                  </td>
+                  <td className="p-6 md:p-8">
+                    <Switch 
+                        checked={condo.status === 'active'} 
+                        onCheckedChange={() => toggleStatus(condo.id, condo.status)}
+                    />
+                  </td>
+                  <td className="p-6 md:p-8 text-right flex justify-end gap-2 items-center">
+                    {editingId === condo.id ? (
+                      <Button onClick={() => handleUpdate(condo.id)} size="icon" className="bg-success h-10 w-10"><Check /></Button>
+                    ) : (
+                      <>
+                        <Button onClick={() => handleSupport(condo.id)} variant="outline" className="border-border font-black text-[10px] uppercase rounded-xl h-10 px-3">
+                          <Settings2 className="w-3 h-3 mr-2" /> Gestionar
+                        </Button>
+                        <Button onClick={() => { setEditingId(condo.id); setEditForm({ name: condo.name || condo.nombre, key: condo.registrationKey }); }} variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground"><Edit2 className="w-4 h-4" /></Button>
+                        <Button onClick={() => deleteDoc(doc(db, 'condominios', condo.id))} variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {condos.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={5} className="p-20 text-center text-muted-foreground font-black uppercase italic tracking-widest text-xs">
+                    No se registran condominios activos.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
