@@ -22,7 +22,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths, endOfMonth, isSameMonth } from 'date-fns';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useRouter, useParams } from 'next/navigation';
@@ -105,12 +105,7 @@ type SavedIntegralReport = {
     id: string;
     createdAt: Timestamp;
     data: IntegralReportRow[];
-    filters: {
-        statusFilter: string;
-        ownerFilter: string;
-        dateRangeFrom?: string;
-        dateRangeTo?: string;
-    }
+    filters: any;
 };
 
 type PublishedReport = {
@@ -308,6 +303,14 @@ type DelinquentOwner = {
     monthsOwed: number;
 };
 
+type LastPaidReportRow = {
+    ownerId: string;
+    name: string;
+    properties: string;
+    lastPaidMonth: string;
+    sortKeys: { streetNum: number; houseNum: number; };
+};
+
 type BalanceOwner = {
     id: string;
     name: string;
@@ -385,6 +388,9 @@ export default function ReportsPage() {
     const [selectedDelinquentOwners, setSelectedDelinquentOwners] = useState<Set<string>>(new Set());
     const [includeDelinquencyAmounts, setIncludeDelinquencyAmounts] = useState(true);
     
+    // State for Last Paid Report
+    const [lastPaidSearchTerm, setLastPaidSearchTerm] = useState('');
+
     // State for Individual Report
     const [individualSearchTerm, setIndividualSearchTerm] = useState('');
     const [selectedIndividual, setSelectedIndividual] = useState<Owner | null>(null);
@@ -549,6 +555,49 @@ export default function ReportsPage() {
         });
     }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralOwnerFilter, integralStatusFilter]);
     
+    // --- Last Paid Report Logic ---
+    const lastPaidReportData = useMemo<LastPaidReportRow[]>(() => {
+        const sortedOwners = [...owners]
+            .filter(owner => owner.role === 'propietario')
+            .map(owner => {
+                const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
+                const sortKeys = getSortKeys({ properties: propertiesString });
+                return { ...owner, sortKeys, propertiesString };
+            })
+            .sort((a, b) => {
+                if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
+                return a.sortKeys.houseNum - b.sortKeys.houseNum;
+            });
+
+        return sortedOwners.map(owner => {
+            const ownerDebts = allDebts.filter(d => d.ownerId === owner.id && d.status === 'paid');
+            const ownerHistorical = allHistoricalPayments.filter(p => p.ownerId === owner.id);
+            
+            let lastPaidMonthStr = 'S/R';
+            
+            const allPaid = [
+                ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
+                ...ownerHistorical.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
+            ].sort((a, b) => b.year - a.year || b.month - a.month);
+
+            if (allPaid.length > 0) {
+                lastPaidMonthStr = `${monthsLocale[allPaid[0].month]} ${allPaid[0].year}`;
+            }
+
+            return {
+                ownerId: owner.id,
+                name: owner.name,
+                properties: owner.propertiesString,
+                lastPaidMonth: lastPaidMonthStr,
+                sortKeys: owner.sortKeys
+            };
+        }).filter(row => {
+            if (!lastPaidSearchTerm) return true;
+            const s = lastPaidSearchTerm.toLowerCase();
+            return row.name.toLowerCase().includes(s) || row.properties.toLowerCase().includes(s);
+        });
+    }, [owners, allDebts, allHistoricalPayments, lastPaidSearchTerm]);
+
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
         let ownersCopy = [...allDelinquentOwners].map(owner => {
@@ -932,6 +981,61 @@ export default function ReportsPage() {
         doc.save(`Reporte_Integral_${format(report.createdAt.toDate(), 'yyyy-MM-dd')}.pdf`);
     };
 
+    const handleExportLastPaid = async (formatType: 'pdf' | 'excel') => {
+        const data = lastPaidReportData;
+        if (data.length === 0) {
+            toast({ variant: "destructive", title: "Nada para exportar" });
+            return;
+        }
+
+        const filename = `reporte_ultima_cuota_${format(new Date(), 'yyyy_MM_dd')}`;
+        const head = [['#', 'PROPIETARIO', 'UBICACIÓN', 'ÚLTIMA CUOTA PAGADA']];
+        const body = data.map((row, idx) => [idx + 1, row.name.toUpperCase(), row.properties, row.lastPaidMonth.toUpperCase()]);
+
+        if (formatType === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const margin = 14;
+
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', margin, 15, 20, 20);
+            doc.setFontSize(10).setFont('helvetica', 'bold').text(companyInfo?.name || 'CONDOMINIO', margin + 25, 22);
+            doc.setFontSize(8).setFont('helvetica', 'normal').text(`RIF: ${companyInfo?.rif || ''}`, margin + 25, 27);
+            
+            doc.setFontSize(16).setFont('helvetica', 'black').text("ESTADO DE SOLVENCIA POR UBICACIÓN", pageWidth / 2, 50, { align: 'center' });
+            doc.setFontSize(9).text(`Emitido: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, pageWidth - margin, 57, { align: 'right' });
+
+            autoTable(doc, {
+                head: head,
+                body: body,
+                startY: 65,
+                theme: 'striped',
+                headStyles: { fillColor: [15, 23, 42], fontSize: 8 },
+                styles: { fontSize: 8, font: 'helvetica' },
+                columnStyles: { 0: { cellWidth: 10 }, 3: { halign: 'center', fontStyle: 'bold' } }
+            });
+            doc.save(`${filename}.pdf`);
+        } else {
+             const ExcelJS = await import('exceljs');
+             const workbook = new ExcelJS.Workbook();
+             const worksheet = workbook.addWorksheet("Solvencia");
+             worksheet.columns = [
+                 { header: '#', key: 'idx', width: 5 },
+                 { header: 'PROPIETARIO', key: 'name', width: 35 },
+                 { header: 'UBICACIÓN', key: 'properties', width: 35 },
+                 { header: 'ÚLTIMA CUOTA PAGADA', key: 'lastPaid', width: 25 },
+             ];
+             worksheet.addRows(data.map((r, i) => ({ idx: i+1, name: r.name, properties: r.properties, lastPaid: r.lastPaidMonth })));
+             const buffer = await workbook.xlsx.writeBuffer();
+             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+             const link = document.createElement('a');
+             link.href = URL.createObjectURL(blob);
+             link.download = `${filename}.xlsx`;
+             link.click();
+        }
+    };
+
 
     const handleExportDelinquency = async (formatType: 'pdf' | 'excel') => {
         const data = filteredAndSortedDelinquents.filter(o => selectedDelinquentOwners.has(o.id));
@@ -973,7 +1077,7 @@ export default function ReportsPage() {
                 }
             });
             doc.save(`reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
-        } else {
+        } else { // excel
              const ExcelJS = await import('exceljs');
              const workbook = new ExcelJS.Workbook();
              const worksheet = workbook.addWorksheet("Morosidad");
@@ -1405,10 +1509,11 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral-report" className="w-full">
-                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-7 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-8 h-auto flex-wrap">
                     <TabsTrigger value="integral-report">Reporte Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
+                    <TabsTrigger value="last-paid">Última Cuota</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="monthly">Reporte Mensual</TabsTrigger>
@@ -1734,6 +1839,48 @@ export default function ReportsPage() {
                             )}
                         </CardContent>
                      </Card>
+                </TabsContent>
+
+                <TabsContent value="last-paid">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Listado de Solvencia por Ubicación</CardTitle>
+                            <CardDescription>Muestra el último período pagado de cada propietario, organizado por calle y casa.</CardDescription>
+                            <div className="flex items-center justify-between mt-4">
+                                <div className="relative max-w-sm">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="Buscar por nombre o propiedad..." className="pl-9" value={lastPaidSearchTerm} onChange={e => setLastPaidSearchTerm(e.target.value)} />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" onClick={() => handleExportLastPaid('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button variant="outline" onClick={() => handleExportLastPaid('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedad</TableHead>
+                                        <TableHead className="text-center">Última Cuota Pagada</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {lastPaidReportData.map((row) => (
+                                        <TableRow key={row.ownerId}>
+                                            <TableCell className="font-medium uppercase text-xs">{row.name}</TableCell>
+                                            <TableCell className="text-muted-foreground text-xs">{row.properties}</TableCell>
+                                            <TableCell className="text-center font-black uppercase text-xs text-primary">{row.lastPaidMonth}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {lastPaidReportData.length === 0 && (
+                                        <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground italic">No hay datos para mostrar</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                  <TabsContent value="delinquency">
