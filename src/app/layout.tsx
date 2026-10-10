@@ -12,6 +12,7 @@ import { Loader2 } from 'lucide-react';
 import { Montserrat } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { COMPANY_NAME } from '@/lib/constants';
+import { OfflineSyncBridge } from '@/components/offline-sync-bridge';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -90,6 +91,7 @@ export default function RootLayout({
         montserrat.className
       )}>
         <AuthProvider>
+          <OfflineSyncBridge />
           <ThemeProvider 
             attribute="class" 
             defaultTheme="dark" 
