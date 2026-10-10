@@ -13,6 +13,7 @@ import { Montserrat } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { COMPANY_NAME } from '@/lib/constants';
 import { OfflineSyncBridge } from '@/components/offline-sync-bridge';
+import { ServiceWorkerRegister } from '@/components/service-worker-register';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -91,6 +92,7 @@ export default function RootLayout({
         montserrat.className
       )}>
         <AuthProvider>
+          <ServiceWorkerRegister />
           <OfflineSyncBridge />
           <ThemeProvider 
             attribute="class" 
