@@ -1,8 +1,14 @@
 import { decryptDatabaseToken } from '@/lib/turso/crypto';
 import { tursoExecute, type SqlValue } from '@/lib/turso/http';
 
-const registryUrl = () => process.env.TURSO_REGISTRY_DATABASE_URL || process.env.TURSO_DATABASE_URL || '';
-const registryToken = () => process.env.TURSO_REGISTRY_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '';
+function registryConfig() {
+  const url = process.env.TURSO_REGISTRY_DATABASE_URL?.trim() || '';
+  const token = process.env.TURSO_REGISTRY_AUTH_TOKEN?.trim() || '';
+  if (!url || !token) {
+    throw new Error('Configura TURSO_REGISTRY_DATABASE_URL y TURSO_REGISTRY_AUTH_TOKEN para una base central independiente.');
+  }
+  return { url, token };
+}
 
 export interface CondoDatabaseRecord {
   condoId: string;
@@ -12,12 +18,9 @@ export interface CondoDatabaseRecord {
   status: 'provisioning' | 'active' | 'suspended' | 'failed';
 }
 
-/** Run once against the central registry database; safe to repeat. */
+/** Inicializa exclusivamente el esquema del registro central; no corre al importar módulos. */
 export async function ensureTursoRegistrySchema(): Promise<void> {
-  const url = registryUrl();
-  const token = registryToken();
-  if (!url || !token) throw new Error('Configura TURSO_REGISTRY_DATABASE_URL y TURSO_REGISTRY_AUTH_TOKEN (o los nombres TURSO_DATABASE_URL/TURSO_AUTH_TOKEN).');
-
+  const { url, token } = registryConfig();
   await tursoExecute(url, token, `
     CREATE TABLE IF NOT EXISTS condo_registry (
       condo_id TEXT PRIMARY KEY,
@@ -29,24 +32,12 @@ export async function ensureTursoRegistrySchema(): Promise<void> {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  await tursoExecute(url, token, `
-    CREATE TABLE IF NOT EXISTS processed_operations (
-      idempotency_key TEXT PRIMARY KEY,
-      condo_id TEXT NOT NULL,
-      operation_id TEXT NOT NULL,
-      outcome_json TEXT NOT NULL,
-      processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
 }
 
 export async function findCondoDatabase(condoId: string): Promise<CondoDatabaseRecord | null> {
   const id = condoId.trim();
   if (!id || id.length > 128) return null;
-  const url = registryUrl();
-  const token = registryToken();
-  if (!url || !token) throw new Error('El registro central de Turso no está configurado.');
-
+  const { url, token } = registryConfig();
   const result = await tursoExecute(
     url,
     token,

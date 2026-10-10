@@ -1,25 +1,20 @@
 # Registro central Turso — fase de servidor
 
-Esta fase añade un cliente HTTP server-side para el protocolo Hrana v2 y el esquema del registro central. No modifica la autenticación actual ni habilita todavía la creación automática de bases.
+El cliente HTTP Hrana y el esquema del registro central están en `src/lib/turso`. Esta fase requiere una base central dedicada.
 
 ## Variables de entorno
 
-Configura en el entorno de servidor (nunca `NEXT_PUBLIC_*`):
-
 - `TURSO_REGISTRY_DATABASE_URL`: URL de la base central de registro.
 - `TURSO_REGISTRY_AUTH_TOKEN`: token de la base central.
-- `TURSO_CREDENTIALS_ENCRYPTION_KEY`: clave base64 de 32 bytes para cifrar tokens tenant en el registro central. Genera una clave criptográficamente aleatoria y guárdala solo como secreto de servidor.
-- `TURSO_API_TOKEN`, `TURSO_ORG` y `TURSO_GROUP` serán necesarios para aprovisionar nuevas bases usando la API de plataforma de Turso.
+- `TURSO_CREDENTIALS_ENCRYPTION_KEY`: clave base64 de 32 bytes para cifrar tokens tenant.
+- `TURSO_API_TOKEN`, `TURSO_ORG`, `TURSO_GROUP`: aprovisionamiento de bases.
 
-Como transición, el registro admite `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` como conexión central. Se recomienda separar las credenciales de registro de las credenciales de cada condominio antes de producción.
+No uses `TURSO_DATABASE_URL` ni `TURSO_AUTH_TOKEN` como fallback: podrían apuntar a la base de un condominio y mezclar el registro con datos tenant.
 
-## Inicializar esquema
+## Inicialización
 
-Invocar `ensureTursoRegistrySchema()` desde una tarea de administración autenticada y controlada. Crea las tablas `condo_registry` y `processed_operations` si no existen. La función no se ejecuta automáticamente al importar módulos.
+`ensureTursoRegistrySchema()` crea `condo_registry` bajo demanda. La tabla `processed_operations` se crea dentro de cada base de condominio, no en el registro central, para mantener la idempotencia junto a los datos de negocio.
 
-## Reglas importantes
+Los tokens tenant se guardan cifrados con AES-256-GCM y solo se descifran en servidor. Si se pierde la clave, no se recuperan.
 
-- `findCondoDatabase` devuelve solo condominios con estado `active`.
-- Los tokens de cada condominio deben guardarse cifrados con AES-256-GCM en el registro central; descifrarlos solo en servidor y nunca enviarlos al navegador. Si se pierde la clave de cifrado, los tokens guardados no podrán recuperarse.
-- Aún no se debe conectar la cola offline a una ruta de escritura hasta que la ruta valide la identidad, los permisos y el condominio contra una sesión verificada y use transacciones/idempotencia en la base de datos del condominio.
-- El cliente HTTP debe verificarse con una base de prueba y la versión actual del protocolo antes de operaciones reales. No hay cambios en producción.
+No hay ruta pública de aprovisionamiento todavía. No conectar la cola offline a una ruta de escritura hasta implementar autenticación verificada, permisos, transacción e idempotencia en Turso. No está desplegado en producción.
