@@ -34,37 +34,47 @@ self.addEventListener('activate', (event) => {
   return self.clients.claim();
 });
 
-// 3. FETCH: Estrategia Stale-While-Revalidate con filtros
+// 3. FETCH: no almacenar datos autenticados ni respuestas de API en Cache Storage.
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // NO CACHEAR: Peticiones que no sean GET, extensiones, o APIs de Firebase/Google
+  // Nunca cachear APIs, sesiones, datos privados, POST ni recursos de terceros.
   if (
-    request.method !== 'GET' || 
-    !url.protocol.startsWith('http') ||
-    url.hostname.includes('googleapis.com') ||
-    url.hostname.includes('firebase')
+    request.method !== 'GET' ||
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname === '/api'
   ) {
     return;
   }
 
+  // Las páginas dinámicas se consultan a la red; sin conexión se muestra el shell público.
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).catch(async () => {
+      const shell = await caches.match('/');
+      return shell || new Response('Sin conexión. Vuelve a conectarte para cargar esta pantalla.', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }));
+    return;
+  }
+
+  // Solo guardar recursos estáticos del mismo origen.
+  const isStaticAsset = /\\.(?:js|css|png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i.test(url.pathname) ||
+    url.pathname === '/manifest.json';
+  if (!isStaticAsset) return;
+
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request).then((networkResponse) => {
-        // Solo cachear respuestas válidas
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
         }
         return networkResponse;
-      }).catch(() => {
-        // Retorno silencioso si falla la red y no hay caché
-        return cachedResponse; 
       });
-
       return cachedResponse || fetchPromise;
     })
   );
