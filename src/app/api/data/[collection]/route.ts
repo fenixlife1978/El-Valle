@@ -187,10 +187,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ col
       if (result.rowsAffected !== 1) return NextResponse.json({ error: 'El documento cambió desde la última lectura. Recarga e inténtalo de nuevo.' }, { status: 409 });
       return NextResponse.json({ ok: true, id, version: body.expectedVersion + 1 });
     }
-    await tursoExecute(ctx.db.databaseUrl, ctx.db.databaseToken,
-      'INSERT INTO app_documents(collection_name,document_id,document_json,version) VALUES(?,?,?,1) ON CONFLICT(collection_name,document_id) DO UPDATE SET document_json=excluded.document_json,version=app_documents.version+1,updated_at=CURRENT_TIMESTAMP',
+    const saved = await tursoExecute(ctx.db.databaseUrl, ctx.db.databaseToken,
+      'INSERT INTO app_documents(collection_name,document_id,document_json,version) VALUES(?,?,?,1) ON CONFLICT(collection_name,document_id) DO UPDATE SET document_json=excluded.document_json,version=app_documents.version+1,updated_at=CURRENT_TIMESTAMP RETURNING version',
       [ctx.collection, id, json]);
-    return NextResponse.json({ ok: true, id }, { status: 201 });
+    return NextResponse.json({ ok: true, id, version: Number(saved.rows[0]?.[0] ?? 1) }, { status: 201 });
   } catch (error) {
     return fail(error);
   }
