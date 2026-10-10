@@ -167,7 +167,9 @@ export async function syncOfflineOperations(
     return { synced: 0, failed: 0, conflicts: 0 };
   }
 
-  const operations = (await listOfflineOperations(condoId, userId))
+  const queued = await listOfflineOperations(condoId, userId);
+  const firstConflict = queued.findIndex(item => item.status === 'conflict');
+  const operations = queued.slice(0, firstConflict < 0 ? queued.length : firstConflict)
     .filter(item => item.status === 'pending' || item.status === 'failed' || item.status === 'syncing');
   let synced = 0;
   let failed = 0;
