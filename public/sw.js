@@ -1,4 +1,4 @@
-const CACHE_NAME = 'efas-condosys-v1';
+const CACHE_NAME = 'efas-condosys-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
