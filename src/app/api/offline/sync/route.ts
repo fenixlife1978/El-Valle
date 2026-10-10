@@ -5,8 +5,8 @@ import { getSession } from '@/lib/turso/session';
 
 export const runtime = 'nodejs';
 const PATH = /^[a-zA-Z][a-zA-Z0-9_/-]{0,190}$/;
-const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','_storage_files','survey_responses','surveyResponses','notifications']);
-const ownerIdOf = (d: any) => d?.ownerId ?? d?.userId ?? d?.createdBy ?? d?.uid;
+const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','payments','_storage_files','survey_responses','surveyResponses','notifications']);
+const ownerIdOf = (d: any) => d?.ownerId ?? d?.userId ?? d?.createdBy ?? d?.uid ?? d?.reportedBy;
 
 async function ensureSchema(db: any) {
   await tursoExecute(db.databaseUrl, db.databaseToken, 'CREATE TABLE IF NOT EXISTS app_documents(collection_name TEXT NOT NULL,document_id TEXT NOT NULL,document_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(collection_name,document_id))');
@@ -37,16 +37,15 @@ async function writeStatements(ops: any[], session: any, condoId: string, db: an
       const leaf = op.collection.split('/').pop() || '';
       if (!op.collection.startsWith('condominios/' + session.condoId + '/') || op.action === 'delete' ||
           !OWNER_WRITABLE.has(leaf) || ownerIdOf(data) !== session.userId ||
-          (leaf === '_storage_files' && data?.shared === true)) {
+          (leaf === '_storage_files' && data?.shared === true) || (leaf === 'payments' && data?.status !== 'pendiente')) {
         throw new Error('Operación no autorizada para propietarios.');
       }
       const old = await tursoExecute(db.databaseUrl, db.databaseToken,
         'SELECT document_json,version FROM app_documents WHERE collection_name=? AND document_id=? LIMIT 1',
         [op.collection, op.id]);
       if (old.rows.length) {
-        if (ownerIdOf(JSON.parse(String(old.rows[0][0]))) !== session.userId) {
-          throw new Error('No puedes modificar un documento de otro usuario.');
-        }
+        const oldData = JSON.parse(String(old.rows[0][0]));
+        if (ownerIdOf(oldData) !== session.userId || (collection.split('/').pop() === 'payments' && oldData?.status !== 'pendiente')) throw new Error('No puedes modificar un documento de otro usuario o un pago ya procesado.');
         expected = Number(old.rows[0][1]);
       } else expected = 0;
     }
@@ -128,16 +127,15 @@ export async function POST(request: Request) {
             const leaf = collection.split('/').pop() || '';
             if (!collection.startsWith('condominios/' + session.condoId + '/') || !OWNER_WRITABLE.has(leaf) ||
                 op.action === 'delete' || ownerIdOf(data) !== session.userId ||
-                (leaf === '_storage_files' && data?.shared === true)) {
+                (leaf === '_storage_files' && data?.shared === true) || (leaf === 'payments' && data?.status !== 'pendiente')) {
               throw new Error('Operación no autorizada para propietarios.');
             }
             const old = await tursoExecute(db.databaseUrl, db.databaseToken,
               'SELECT document_json,version FROM app_documents WHERE collection_name=? AND document_id=? LIMIT 1',
               [collection, id]);
             if (old.rows.length) {
-              if (ownerIdOf(JSON.parse(String(old.rows[0][0]))) !== session.userId) {
-                throw new Error('No puedes modificar un documento de otro usuario.');
-              }
+              const oldData = JSON.parse(String(old.rows[0][0]));
+              if (ownerIdOf(oldData) !== session.userId || (leaf === 'payments' && oldData?.status !== 'pendiente')) throw new Error('No puedes modificar un documento de otro usuario o un pago ya procesado.');
               expected = Number(old.rows[0][1]);
             } else expected = 0;
           }

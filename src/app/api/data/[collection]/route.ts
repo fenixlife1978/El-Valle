@@ -6,7 +6,7 @@ import { getSession } from '@/lib/turso/session';
 
 export const runtime = 'nodejs';
 const VALID_PATH = /^[a-zA-Z][a-zA-Z0-9_/-]{0,190}$/;
-const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','_storage_files','survey_responses','surveyResponses','notifications']);
+const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','payments','_storage_files','survey_responses','surveyResponses','notifications']);
 const OWNER_SHARED_READ = new Set(['condominios','config','settings','extraordinary_campaigns','surveys','exchange_rates','company']);
 
 async function context(request: Request, routeCollection: string) {
@@ -38,12 +38,12 @@ function fail(error: unknown) {
 }
 
 function ownerIdOf(data: any) {
-  return data?.ownerId ?? data?.userId ?? data?.createdBy ?? data?.uid;
+  return data?.ownerId ?? data?.userId ?? data?.createdBy ?? data?.uid ?? data?.reportedBy;
 }
 
 function canOwnerWrite(collection: string, data: any, userId: string) {
   const leaf = collection.split('/').pop() || '';
-  return OWNER_WRITABLE.has(leaf) && ownerIdOf(data) === userId && (leaf !== '_storage_files' || data?.shared !== true);
+  return OWNER_WRITABLE.has(leaf) && ownerIdOf(data) === userId && (leaf !== '_storage_files' || data?.shared !== true) && (leaf !== 'payments' || data?.status === 'pendiente');
 }
 
 function versionGuard(collection: string, id: string, expected: number) {
@@ -83,9 +83,8 @@ async function handleBatch(request: Request) {
         const old = await tursoExecute(ctx.db.databaseUrl, ctx.db.databaseToken,
           'SELECT document_json,version FROM app_documents WHERE collection_name=? AND document_id=? LIMIT 1', [op.collection, op.id]);
         if (old.rows.length) {
-          if (ownerIdOf(JSON.parse(String(old.rows[0][0]))) !== ctx.session.userId) {
-            return NextResponse.json({ error: 'No puedes modificar un documento de otro usuario.' }, { status: 403 });
-          }
+          const oldData = JSON.parse(String(old.rows[0][0]));
+          if (ownerIdOf(oldData) !== ctx.session.userId || (op.collection.split('/').pop() === 'payments' && oldData?.status !== 'pendiente')) return NextResponse.json({ error: 'No puedes modificar un documento de otro usuario o un pago ya procesado.' }, { status: 403 });
           expected = Number(old.rows[0][1]);
         } else expected = 0;
       }
@@ -160,9 +159,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ col
       if (!canOwnerWrite(ctx.collection, body.data, ctx.session.userId)) return NextResponse.json({ error: 'Tu rol no puede modificar este tipo de documento.' }, { status: 403 });
       const old = await tursoExecute(ctx.db.databaseUrl, ctx.db.databaseToken,
         'SELECT document_json FROM app_documents WHERE collection_name=? AND document_id=? LIMIT 1', [ctx.collection, id]);
-      if (old.rows.length && ownerIdOf(JSON.parse(String(old.rows[0][0]))) !== ctx.session.userId) {
-        return NextResponse.json({ error: 'No puedes modificar un documento de otro usuario.' }, { status: 403 });
-      }
+      if (old.rows.length) { const oldData = JSON.parse(String(old.rows[0][0])); if (ownerIdOf(oldData) !== ctx.session.userId || (ctx.collection.split('/').pop() === 'payments' && oldData?.status !== 'pendiente')) return NextResponse.json({ error: 'No puedes modificar un documento de otro usuario o un pago ya procesado.' }, { status: 403 }); }
     }
     const json = JSON.stringify(body.data);
     if (json.length > 500000) return NextResponse.json({ error: 'Documento demasiado grande.' }, { status: 413 });
