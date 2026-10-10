@@ -1,5 +1,5 @@
 'use client';
-import { tursoRequest } from '@/lib/turso/client';
+import { tursoRequest, tursoBatchRequest } from '@/lib/turso/client';
 export type Firestore=any;
 export class Timestamp { seconds:number; nanoseconds:number; constructor(seconds:number,nanoseconds=0){this.seconds=seconds;this.nanoseconds=nanoseconds;} static now(){return Timestamp.fromDate(new Date());} static fromDate(d:Date){return new Timestamp(Math.floor(d.getTime()/1000),(d.getTime()%1000)*1e6);} static fromMillis(ms:number){return Timestamp.fromDate(new Date(ms));} toDate(){return new Date(this.seconds*1000+this.nanoseconds/1e6);} toMillis(){return this.seconds*1000+this.nanoseconds/1e6;} isEqual(o:Timestamp){return this.seconds===o.seconds&&this.nanoseconds===o.nanoseconds;} toJSON(){return {seconds:this.seconds,nanoseconds:this.nanoseconds,__tursoTimestamp:true};} }
 type Ref={kind:'doc'|'collection';path:string;id:string;db:Firestore}; type C={type:string;field?:string;op?:string;value?:any;direction?:string;count?:number}; type Q={kind:'query';path:string;db:Firestore;constraints:C[]};
