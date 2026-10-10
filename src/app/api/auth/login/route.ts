@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { clearLoginFailures, createSession, findAuthUser, loginLockoutSeconds, recordLoginFailure, verifyPassword } from '@/lib/turso/session';
+import { findCondoDatabase } from '@/lib/turso/registry';
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
   try {
@@ -13,6 +14,10 @@ export async function POST(request: Request) {
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
       await recordLoginFailure(email);
       return NextResponse.json({ error: 'Correo o contraseña incorrectos.' }, { status: 401 });
+    }
+    if (user.condoId) {
+      try { await findCondoDatabase(user.condoId); }
+      catch { return NextResponse.json({ error: 'El condominio está suspendido o no disponible.' }, { status: 403 }); }
     }
     await clearLoginFailures(email);
     await createSession({ userId: user.userId, email: user.email, role: user.role, condoId: user.condoId });
