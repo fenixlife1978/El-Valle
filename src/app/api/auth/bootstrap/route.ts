@@ -1,6 +1,6 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { ensureTursoRegistrySchema } from '@/lib/turso/registry';
+import { ensureTursoRegistrySchema, getTursoRegistryConfig } from '@/lib/turso/registry';
 import { tursoExecute } from '@/lib/turso/http';
 import { hashPassword } from '@/lib/turso/session';
 export const runtime = 'nodejs';
@@ -20,8 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
     }
     await ensureTursoRegistrySchema();
-    const url = process.env.TURSO_REGISTRY_DATABASE_URL!;
-    const token = process.env.TURSO_REGISTRY_AUTH_TOKEN!;
+    const { url, token } = getTursoRegistryConfig();
     const count = await tursoExecute(url, token, 'SELECT COUNT(*) FROM auth_users');
     if (Number(count.rows[0]?.[0] ?? 0) > 0) return NextResponse.json({ error: 'El bootstrap ya fue utilizado.' }, { status: 409 });
     const hash = await hashPassword(password);
