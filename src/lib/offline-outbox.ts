@@ -189,6 +189,7 @@ export async function syncOfflineOperations(
       } else {
         await updateOfflineOperation(operation.id, { status: 'conflict', lastError: 'El servidor requiere revisión de esta operación.' });
         conflicts += 1;
+        break;
       }
     } catch (error) {
       await updateOfflineOperation(operation.id, {
@@ -196,6 +197,7 @@ export async function syncOfflineOperations(
         lastError: error instanceof Error ? error.message.slice(0, 500) : 'Error de sincronización desconocido.',
       });
       failed += 1;
+      break;
     }
   }
 
