@@ -1,3 +1,4 @@
+import 'server-only';
 import { createHash } from 'node:crypto';
 import { encryptDatabaseToken } from '@/lib/turso/crypto';
 import { tursoExecute } from '@/lib/turso/http';

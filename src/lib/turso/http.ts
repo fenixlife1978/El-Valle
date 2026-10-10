@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Cliente mínimo del protocolo HTTP de Turso (Hrana v2).
  * Solo para servidor: no importar desde componentes "use client".

@@ -1,3 +1,4 @@
+import 'server-only';
 import { decryptDatabaseToken } from '@/lib/turso/crypto';
 import { tursoExecute, type SqlValue } from '@/lib/turso/http';
 
