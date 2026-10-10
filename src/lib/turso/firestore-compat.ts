@@ -20,5 +20,31 @@ export async function setDoc(r:Ref,data:any,options?:{merge?:boolean}){let n=cle
 export async function addDoc(r:Ref,data:any){const id=crypto.randomUUID();await setDoc(makeRef(r.db,r.path+'/'+id,'doc'),data);return makeRef(r.db,r.path+'/'+id,'doc');} export async function updateDoc(r:Ref,data:any){const s=await getDoc(r);if(!s.exists())throw new Error('No existe el documento.');return tursoRequest('POST',r.path.split('/').slice(0,-1).join('/'),{id:r.id,data:transform(s.data(),data),expectedVersion:s.version},'update');} export async function deleteDoc(r:Ref){return tursoRequest('DELETE',r.path.split('/').slice(0,-1).join('/'),{id:r.id});}
 export function onSnapshot(base:Ref|Q,next:any,error?:any){let stopped=false;let last:string|undefined;const run=async()=>{try{if(stopped)return;const value=base.kind==='doc'?await getDoc(base as Ref):await getDocs(base as Q);const signature=base.kind==='doc'?JSON.stringify({id:(value as any).id,version:(value as any).version,exists:(value as any).exists(),data:(value as any).data()}):JSON.stringify((value as any).docs.map((d:any)=>({id:d.id,version:d.version,data:d.data()})));if(signature!==last){last=signature;next(value);}}catch(e){if(error)error(e);}};void run();const t=setInterval(run,5000);return()=>{stopped=true;clearInterval(t);};}
 export function writeBatch(_db:Firestore){const ops:any[]=[];const b:any={set:(r:Ref,d:any,o?:any)=>{ops.push({collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,data:clean(d),action:'set',expectedVersion:null,merge:!!o?.merge});return b;},update:(r:Ref,d:any)=>{ops.push({collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,data:clean(d),action:'update',expectedVersion:null,merge:true,requireExisting:true});return b;},delete:(r:Ref)=>{ops.push({collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,action:'delete',expectedVersion:null,guardVersion:true});return b;},commit:async()=>{for(const op of ops)if(op.merge||op.guardVersion){const old=await getDoc(makeRef({__turso:true},op.collection+'/'+op.id,'doc'));if(op.requireExisting&&!old.exists())throw new Error('No existe el documento que intentas actualizar.');if(op.guardVersion){op.expectedVersion=old.exists()?old.version:0;delete op.guardVersion;}else{op.data=transform(old.data()||{},op.data);op.expectedVersion=old.exists()?old.version:0;}delete op.merge;delete op.requireExisting;}if(!ops.length)return {ok:true,empty:true};return tursoBatchRequest(ops);}};return b;}
-export async function runTransaction(_db:Firestore,callback:(tx:any)=>Promise<any>){const reads=new Map<string,any>();const ops:any[]=[];const key=(r:Ref)=>r.path;const tx:any={get:async(r:Ref)=>{const s=await getDoc(r);reads.set(key(r),s);return s;},set:(r:Ref,d:any,o?:any)=>{const s=reads.get(key(r));ops.push({collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,data:o?.merge&&s?transform(s.data()||{},d):clean(d),action:'set',expectedVersion:s?s.version:null,merge:!!o?.merge,needsRead:!s});return tx;},update:(r:Ref,d:any)=>{const s=reads.get(key(r));ops.push({collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,data:s?transform(s.data()||{},d):clean(d),action:'update',expectedVersion:s?s.version:null,merge:!s,needsRead:!s});return tx;},delete:(r:Ref)=>{const s=reads.get(key(r));ops.push({collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,action:'delete',expectedVersion:s?s.version:null,needsRead:!s});return tx;}};const result=await callback(tx);for(const op of ops){if(!op.needsRead)continue;const old=await getDoc(makeRef({__turso:true},op.collection+'/'+op.id,'doc'));if(op.action==='update'&&!old.exists())throw new Error('No existe el documento que intentas actualizar.');if(op.action==='delete'){op.expectedVersion=old.exists()?old.version:0;}else if(op.action==='update'||op.merge){op.data=transform(old.data()||{},op.data);op.expectedVersion=old.exists()?old.version:0;}else{op.expectedVersion=old.exists()?old.version:0;}delete op.needsRead;delete op.merge;}if(ops.length)await tursoBatchRequest(ops);return result;}
+export async function runTransaction(_db:Firestore,callback:(tx:any)=>Promise<any>){
+  const reads=new Map<string,any>();const ops:any[]=[];const key=(r:Ref)=>r.path;
+  const tx:any={
+    get:async(r:Ref)=>{const s=await getDoc(r);reads.set(key(r),s);return s;},
+    set:(r:Ref,d:any,o?:any)=>{ops.push({path:r.path,collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,data:clean(d),action:'set',merge:!!o?.merge});return tx;},
+    update:(r:Ref,d:any)=>{ops.push({path:r.path,collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,data:clean(d),action:'update',merge:true});return tx;},
+    delete:(r:Ref)=>{ops.push({path:r.path,collection:r.path.split('/').slice(0,-1).join('/'),id:r.id,action:'delete'});return tx;}
+  };
+  const result=await callback(tx);if(!ops.length)return result;
+  const groups=new Map<string,any[]>();
+  for(const op of ops){const k=op.collection+'|'+op.id;const group=groups.get(k)||[];group.push(op);groups.set(k,group);}
+  const committed:any[]=[];
+  for(const group of groups.values()){
+    const first=group[0];const snapshot=reads.get(first.path)||await getDoc(makeRef({__turso:true},first.path,'doc'));
+    const exists=snapshot.exists();const expectedVersion=exists?snapshot.version:0;
+    let data:any=snapshot.data()||{};let deleted=false;let finalAction:'set'|'delete'='set';
+    for(const op of group){
+      if(op.action==='delete'){deleted=true;finalAction='delete';data=undefined;continue;}
+      if(op.action==='set'&&!op.merge){data=clean(op.data);deleted=false;finalAction='set';continue;}
+      if(op.action==='update'&&!exists&&!data)throw new Error('No existe el documento que intentas actualizar.');
+      data=transform(deleted?{}:data,op.data);deleted=false;finalAction='set';
+    }
+    if(finalAction==='delete')committed.push({collection:first.collection,id:first.id,action:'delete',expectedVersion});
+    else committed.push({collection:first.collection,id:first.id,action:'set',data,expectedVersion});
+  }
+  await tursoBatchRequest(committed);return result;
+}
 export const getCountFromServer=async(q:any)=>{const s=await getDocs(q);return {data:()=>({count:s.size})};}; export const onSnapshotsInSync=(_db:any,cb:any)=>{const t=setInterval(cb,5000);return()=>clearInterval(t);}; export const terminate=async()=>undefined; export const enableNetwork=async()=>undefined; export const disableNetwork=async()=>undefined; export const connectFirestoreEmulator=()=>undefined; export const waitForPendingWrites=async()=>undefined;
