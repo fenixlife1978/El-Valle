@@ -1,110 +1,49 @@
-import { getDatabase, ref, set, push, onValue, off, query, orderByChild, limitToLast, get } from 'firebase/database';
+import { db } from '@/lib/firebase';
+import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
+import { memoryCache } from './memory-cache';
 
-let db: ReturnType<typeof getDatabase> | null = null;
+const tenant=(condoId:string)=>['condominios',condoId];
+const activeCondo=()=>typeof localStorage!=='undefined'?(localStorage.getItem('activeCondoId')||localStorage.getItem('workingCondoId')||''):'';
 
-export const initRealtimeDB = () => {
-    if (!db) {
-        db = getDatabase();
-    }
-    return db;
+export const saveAuditLog=async(condoId:string,logData:any)=>{
+  if(!condoId)throw new Error('Falta el condominio para registrar auditoría.');
+  return addDoc(collection(db,...tenant(condoId),'audit_logs'),{...logData,timestamp:Date.now()});
 };
 
-// ============================================
-// LOGS DE AUDITORÍA (mover de Firestore)
-// ============================================
-export const saveAuditLog = async (condoId: string, logData: any) => {
-    const database = initRealtimeDB();
-    const logsRef = ref(database, `condominios/${condoId}/audit_logs`);
-    const newLogRef = push(logsRef);
-    await set(newLogRef, {
-        ...logData,
-        timestamp: Date.now()
-    });
+export const saveNotification=async(condoId:string,userId:string,notification:any)=>{
+  if(!condoId||!userId)throw new Error('Falta el destinatario de la notificación.');
+  return addDoc(collection(db,...tenant(condoId),'notifications'),{...notification,ownerId:userId,userId,read:false,createdAt:Date.now()});
 };
 
-// ============================================
-// NOTIFICACIONES
-// ============================================
-export const saveNotification = async (condoId: string, userId: string, notification: any) => {
-    const database = initRealtimeDB();
-    const notifRef = ref(database, `condominios/${condoId}/notifications/${userId}`);
-    const newNotifRef = push(notifRef);
-    await set(newNotifRef, {
-        ...notification,
-        read: false,
-        createdAt: Date.now()
-    });
+export const getUserNotifications=(condoId:string,userId:string,callback:(notifications:any[])=>void)=>{
+  const q=query(collection(db,...tenant(condoId),'notifications'),where('ownerId','==',userId),orderBy('createdAt','desc'),limit(50));
+  return onSnapshot(q,(snapshot:any)=>{
+    const notifications=snapshot.docs.map((item:any)=>({id:item.id,...item.data()}));
+    callback(notifications);
+  },()=>callback([]));
 };
 
-export const getUserNotifications = (condoId: string, userId: string, callback: (notifications: any[]) => void) => {
-    const database = initRealtimeDB();
-    const notifRef = ref(database, `condominios/${condoId}/notifications/${userId}`);
-    const notificationsQuery = query(notifRef, orderByChild('createdAt'), limitToLast(50));
-    
-    const unsubscribe = onValue(notificationsQuery, (snapshot) => {
-        const data = snapshot.val();
-        const notifications = data ? Object.entries(data).map(([id, value]) => ({ id, ...value as any })) : [];
-        callback(notifications.reverse());
-    });
-    
-    return unsubscribe;
+export const archivePayment=async(condoId:string,payment:any)=>{
+  if(!condoId)throw new Error('Falta el condominio para archivar el pago.');
+  return addDoc(collection(db,...tenant(condoId),'archived_payments'),{...payment,archivedAt:Date.now()});
 };
 
-// ============================================
-// PAGOS ARCHIVADOS (pagos antiguos)
-// ============================================
-export const archivePayment = async (condoId: string, payment: any) => {
-    const database = initRealtimeDB();
-    const archiveRef = ref(database, `condominios/${condoId}/archived_payments`);
-    const newRef = push(archiveRef);
-    await set(newRef, {
-        ...payment,
-        archivedAt: Date.now()
-    });
+export const getArchivedPayments=async(condoId:string,maxItems:number=100)=>{
+  const q=query(collection(db,...tenant(condoId),'archived_payments'),orderBy('archivedAt','desc'),limit(Math.max(1,Math.min(1000,maxItems))));
+  const snapshot=await getDocs(q);
+  return snapshot.docs.map((item:any)=>({id:item.id,...item.data()}));
 };
 
-export const getArchivedPayments = async (condoId: string, limit: number = 100) => {
-    const database = initRealtimeDB();
-    const archiveRef = ref(database, `condominios/${condoId}/archived_payments`);
-    const paymentsQuery = query(archiveRef, orderByChild('archivedAt'), limitToLast(limit));
-    const snapshot = await get(paymentsQuery);
-    const data = snapshot.val();
-    return data ? Object.entries(data).map(([id, value]) => ({ id, ...value as any })) : [];
+export const saveUserSession=async(userId:string,sessionData:any)=>{
+  const condoId=activeCondo();
+  if(!condoId||!userId)return;
+  await setDoc(doc(db,...tenant(condoId),'sessions',userId),{...sessionData,lastActive:Date.now()});
 };
 
-// ============================================
-// SESIONES DE USUARIO
-// ============================================
-export const saveUserSession = async (userId: string, sessionData: any) => {
-    const database = initRealtimeDB();
-    const sessionRef = ref(database, `sessions/${userId}`);
-    await set(sessionRef, {
-        ...sessionData,
-        lastActive: Date.now()
-    });
+export const cacheQueryResult=async(cacheKey:string,data:any,ttlSeconds:number=300)=>{
+  memoryCache.set('query_'+cacheKey,data,Math.max(1,ttlSeconds));
 };
 
-// ============================================
-// CACHE DE CONSULTAS FRECUENTES
-// ============================================
-export const cacheQueryResult = async (cacheKey: string, data: any, ttlSeconds: number = 300) => {
-    const database = initRealtimeDB();
-    const cacheRef = ref(database, `cache/${cacheKey}`);
-    await set(cacheRef, {
-        data,
-        expiresAt: Date.now() + (ttlSeconds * 1000)
-    });
-};
-
-export const getCachedQueryResult = async (cacheKey: string) => {
-    const database = initRealtimeDB();
-    const cacheRef = ref(database, `cache/${cacheKey}`);
-    const snapshot = await get(cacheRef);
-    if (snapshot.exists()) {
-        const cached = snapshot.val();
-        if (cached.expiresAt > Date.now()) {
-            return cached.data;
-        }
-    }
-    return null;
+export const getCachedQueryResult=async(cacheKey:string)=>{
+  return memoryCache.get('query_'+cacheKey)??null;
 };

@@ -21,7 +21,7 @@ export const useGatekeeper = () => {
 
         // 2. Bypass para Super Admin
         // Si el usuario logueado es el administrador global, saltamos la verificación de suspensión
-        if (auth.currentUser?.email === 'vallecondo@gmail.com') {
+        if (localStorage.getItem('userRole') === 'super-admin') {
             return true;
         }
 

@@ -12,6 +12,8 @@ import { Loader2 } from 'lucide-react';
 import { Montserrat } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { COMPANY_NAME } from '@/lib/constants';
+import { OfflineSyncBridge } from '@/components/offline-sync-bridge';
+import { ServiceWorkerRegister } from '@/components/service-worker-register';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -23,7 +25,7 @@ const montserrat = Montserrat({
 const publicPaths = ['/', '/welcome', '/login', '/forgot-password', '/register', '/onboarding'];
 
 function AuthGuard({ children }: { children: ReactNode }) {
-  const { user, loading, activeCondoId } = useAuth();
+  const { user, loading, activeCondoId, role } = useAuth();
   const pathname = usePathname() ?? '';
   const router = useRouter();
 
@@ -41,15 +43,15 @@ function AuthGuard({ children }: { children: ReactNode }) {
     // Si hay usuario y está en ruta pública, redirigir a su dashboard
     if (user && isPublic) {
       // Redirigir según el email del usuario (super admin)
-      if (user.email === 'vallecondo@gmail.com') {
+      if (role === 'super-admin') {
         router.replace('/super-admin');
       } else if (activeCondoId) {
-        router.replace(`/${activeCondoId}/admin/dashboard`);
+        router.replace(`/${activeCondoId}/${role === 'owner' ? 'owner' : 'admin'}/dashboard`);
       } else {
         router.replace('/welcome');
       }
     }
-  }, [user, loading, pathname, router, activeCondoId]);
+  }, [user, loading, pathname, router, activeCondoId, role]);
 
   if (loading) {
     return (
@@ -90,6 +92,8 @@ export default function RootLayout({
         montserrat.className
       )}>
         <AuthProvider>
+          <ServiceWorkerRegister />
+          <OfflineSyncBridge />
           <ThemeProvider 
             attribute="class" 
             defaultTheme="dark" 

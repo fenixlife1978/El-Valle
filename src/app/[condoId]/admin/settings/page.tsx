@@ -120,34 +120,17 @@ export default function SettingsPage() {
         });
         setLoading(false);
       } else {
-        // Migración para condo_01
-        let migrated = false;
-        if (workingCondoId === 'condo_01') {
-          try {
-            const legacyConfigRef = doc(db, 'config', 'mainSettings');
-            const legacySnap = await getDoc(legacyConfigRef);
-            if (legacySnap.exists()) {
-              await setDoc(docRef, legacySnap.data(), { merge: true });
-              migrated = true;
-              toast({ title: 'EFAS: Migración Exitosa', description: 'Datos de condo_01 sincronizados en la nueva ruta.' });
-            }
-          } catch (e) {
-            console.error("Error migrando configuración antigua", e);
-          }
-        }
-  
-        if (!migrated) {
-          try {
-            await setDoc(docRef, defaultSettings);
-          } catch (e) {
-            console.error("Error creando configuración inicial", e);
-            toast({ variant: "destructive", title: "Error", description: "No se pudo inicializar la configuración." });
-            setLoading(false);
-          }
+        // Cada condominio empieza con su configuración propia; no se copian datos heredados.
+        try {
+          await setDoc(docRef, defaultSettings);
+        } catch (e) {
+          console.error("Error creando configuración inicial en Turso", e);
+          toast({ variant: "destructive", title: "Error", description: "No se pudo inicializar la configuración de este condominio." });
+          setLoading(false);
         }
       }
     }, (error) => {
-      console.error("Error de conexión con Firestore:", error);
+      console.error("Error de conexión con la base de datos del condominio:", error);
       toast({ variant: "destructive", title: "Error de carga", description: "Verifique permisos en la ruta de este condominio." });
       setLoading(false);
     });

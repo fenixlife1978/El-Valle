@@ -258,10 +258,12 @@ export default function OwnersManagement() {
     const handleConfirmDelete = async () => {
         if (!userToDelete || !workingCondoId) return;
         try {
-            await deleteDoc(doc(db, "condominios", workingCondoId, ownersCollectionName, userToDelete.id));
-            toast({ title: 'Perfil eliminado' });
+            const response = await fetch('/api/admin/users', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: userToDelete.id }) });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || 'No se pudo eliminar la cuenta.');
+            toast({ title: 'Cuenta y perfil eliminados' });
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Error al eliminar' });
+            toast({ variant: 'destructive', title: 'Error al eliminar', description: error instanceof Error ? error.message : 'Intenta nuevamente.' });
         } finally {
             setUserToDelete(null);
         }

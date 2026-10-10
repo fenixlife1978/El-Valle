@@ -1,33 +1,16 @@
-import { db as firestoreDB } from '@/lib/firebase';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
-import { getDatabase, ref, set, push } from 'firebase/database';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { subMonths } from 'date-fns';
 
-const getRTDB = () => getDatabase();
-
-export const archiveOldPayments = async (condoId: string, monthsOld: number = 3) => {
-    const cutoffDate = subMonths(new Date(), monthsOld);
-    const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
-    
-    const paymentsQuery = query(
-        collection(firestoreDB, 'condominios', condoId, 'payments'),
-        where('paymentDate', '<', cutoffTimestamp),
-        where('status', '==', 'aprobado')
-    );
-    
-    const snapshot = await getDocs(paymentsQuery);
-    const rtDb = getRTDB();
-    const archiveRef = ref(rtDb, `condominios/${condoId}/archived_payments`);
-    
-    for (const doc of snapshot.docs) {
-        const payment = { id: doc.id, ...doc.data() };
-        const newRef = push(archiveRef);
-        await set(newRef, {
-            ...payment,
-            archivedAt: Date.now()
-        });
-    }
-    
-    console.log(`Archivados ${snapshot.size} pagos antiguos`);
-    return snapshot.size;
+export const archiveOldPayments = async (condoId:string,monthsOld:number=3) => {
+  const cutoff=Timestamp.fromDate(subMonths(new Date(),monthsOld));
+  const paymentsQuery=query(collection(db,'condominios',condoId,'payments'),
+    where('paymentDate','<',cutoff),where('status','==','aprobado'));
+  const snapshot=await getDocs(paymentsQuery);
+  const archivedAt=new Date().toISOString();
+  for(const item of snapshot.docs) {
+    const payment={id:item.id,...item.data()};
+    await setDoc(doc(db,'condominios',condoId,'archived_payments',item.id),{...payment,archivedAt});
+  }
+  return snapshot.size;
 };
