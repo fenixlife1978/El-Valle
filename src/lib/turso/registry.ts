@@ -8,7 +8,7 @@ export interface TursoRegistryConfig {
   dedicatedRegistry: boolean;
 }
 
-/** Usa un registro dedicado si existe; de lo contrario reutiliza la base principal (condosys). */
+/** El registro central puede residir en condosys; los datos de cada condominio viven siempre en una base tenant independiente. */
 export function getTursoRegistryConfig(): TursoRegistryConfig {
   const registryUrl = process.env.TURSO_REGISTRY_DATABASE_URL?.trim() || '';
   const registryToken = process.env.TURSO_REGISTRY_AUTH_TOKEN?.trim() || '';
@@ -55,29 +55,8 @@ export async function findCondoDatabase(condoId: string): Promise<CondoDatabaseR
   const id = condoId.trim();
   if (!id || id.length > 128) return null;
   const config = getTursoRegistryConfig();
-  // Modo económico: los condominios comparten la base existente y se aíslan
-  // por colección/ruta; no requiere tabla de registro de bases ni cifrado de tokens.
-  if (!config.dedicatedRegistry) {
-    // Sin bases tenant aisladas, el modo compartido se limita deliberadamente a
-    // un solo condominio. Fallar cerrado evita mezclar datos de varios clientes.
-    const count = await tursoExecute(config.url, config.token, 'SELECT COUNT(*) FROM condo_registry');
-    if (Number(count.rows[0]?.[0] ?? 0) > 1) {
-      throw new Error('La base compartida contiene varios condominios; se requiere aislamiento por base antes de continuar.');
-    }
-    const statusResult = await tursoExecute(config.url, config.token,
-      'SELECT status, display_name FROM condo_registry WHERE condo_id = ? LIMIT 1', [id]);
-    const statusRow = statusResult.rows[0];
-    if (!statusRow) return null;
-    if (String(statusRow[0]) !== 'active') throw new Error('La base de datos de este condominio no está activa.');
-    return {
-      condoId: id,
-      displayName: String(statusRow[1]),
-      databaseUrl: config.url,
-      databaseToken: config.token,
-      status: 'active',
-      shared: true,
-    };
-  }
+  // No hay fallback a una base compartida: los registros antiguos sin credenciales
+  // cifradas fallan de forma cerrada y deben migrarse explícitamente.
   const { url, token } = config;
   const result = await tursoExecute(url, token,
     'SELECT condo_id, display_name, database_url, database_token, status FROM condo_registry WHERE condo_id = ? LIMIT 1', [id]);
