@@ -1,4 +1,4 @@
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL } from '@/lib/turso/storage-compat';
 import { compressImageAsBlob } from '@/lib/utils';
 
 // Nombre histórico conservado para no romper pantallas; los archivos ahora se guardan en la base Turso del condominio.
