@@ -157,7 +157,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ col
   try {
     const ctx = await context(request, route.collection);
     const body = await request.json();
-    const id = typeof body.id === 'string' && body.id.length <= 128 ? body.id : randomUUID();
+    const id = typeof body.id === 'string' && body.id.length <= 512 ? body.id : randomUUID();
     if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data)) {
       return NextResponse.json({ error: 'El documento debe ser un objeto JSON.' }, { status: 400 });
     }
