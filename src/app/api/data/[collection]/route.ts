@@ -142,6 +142,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
       if (ctx.collection === 'condominios') documents = documents.filter(d => d.id === ctx.session.condoId);
       else if (['owners','propietarios'].includes(leaf)) documents = documents.filter(d => d.id === ctx.session.userId);
       else if (leaf === 'notifications') documents = documents.filter(d => d.id === ctx.session.userId || ownerIdOf(d.data) === ctx.session.userId);
+      else if (leaf === 'config') documents = documents.filter(d => d.id !== 'authorization');
       else if (leaf === '_storage_files') documents = documents.filter(d => d.data?.shared === true || ownerIdOf(d.data) === ctx.session.userId);
       else if (!OWNER_SHARED_READ.has(leaf)) documents = documents.filter(d => ownerIdOf(d.data) === ctx.session.userId);
     }
