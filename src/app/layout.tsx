@@ -23,7 +23,7 @@ const montserrat = Montserrat({
 const publicPaths = ['/', '/welcome', '/login', '/forgot-password', '/register', '/onboarding'];
 
 function AuthGuard({ children }: { children: ReactNode }) {
-  const { user, loading, activeCondoId } = useAuth();
+  const { user, loading, activeCondoId, role } = useAuth();
   const pathname = usePathname() ?? '';
   const router = useRouter();
 
@@ -41,7 +41,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     // Si hay usuario y está en ruta pública, redirigir a su dashboard
     if (user && isPublic) {
       // Redirigir según el email del usuario (super admin)
-      if (user.email === 'vallecondo@gmail.com') {
+      if (role === 'super-admin') {
         router.replace('/super-admin');
       } else if (activeCondoId) {
         router.replace(`/${activeCondoId}/admin/dashboard`);
@@ -49,7 +49,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
         router.replace('/welcome');
       }
     }
-  }, [user, loading, pathname, router, activeCondoId]);
+  }, [user, loading, pathname, router, activeCondoId, role]);
 
   if (loading) {
     return (
