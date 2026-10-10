@@ -24,7 +24,7 @@ export interface OfflineSyncState {
  * the caller. The hook does not decide what is authorized or write to Turso;
  * the server remains responsible for tenant checks and idempotency.
  */
-export function useOfflineSync(condoId: string | null, send: OfflineSender): OfflineSyncState {
+export function useOfflineSync(condoId: string | null, userId: string | null, send: OfflineSender): OfflineSyncState {
   const { isOnline, reconnected } = useNetworkStatus();
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -38,24 +38,24 @@ export function useOfflineSync(condoId: string | null, send: OfflineSender): Off
   }, [send]);
 
   const refreshCount = useCallback(async () => {
-    if (!condoId) {
+    if (!condoId || !userId) {
       setPendingCount(0);
       return;
     }
     try {
-      setPendingCount(await countPendingOfflineOperations(condoId));
+      setPendingCount(await countPendingOfflineOperations(condoId, userId));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo leer la cola offline.');
     }
-  }, [condoId]);
+  }, [condoId, userId]);
 
   const syncNow = useCallback(async () => {
-    if (!condoId || !isOnline || running.current) return;
+    if (!condoId || !userId || !isOnline || running.current) return;
     running.current = true;
     setIsSyncing(true);
     setError(null);
     try {
-      const result = await syncOfflineOperations(condoId, operation => sendRef.current(operation));
+      const result = await syncOfflineOperations(condoId, userId, operation => sendRef.current(operation));
       setLastResult(result);
       await refreshCount();
     } catch (cause) {
@@ -64,7 +64,7 @@ export function useOfflineSync(condoId: string | null, send: OfflineSender): Off
       running.current = false;
       setIsSyncing(false);
     }
-  }, [condoId, isOnline, refreshCount]);
+  }, [condoId, userId, isOnline, refreshCount]);
 
   useEffect(() => {
     void refreshCount();

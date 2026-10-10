@@ -20,13 +20,13 @@ export async function tursoRequest(method:'GET'|'POST'|'DELETE',collection:strin
   return result;
  }catch(error:any){
   if(error?.status||method==='GET'||!who.condoId||typeof navigator!=='undefined'&&navigator.onLine)throw error;
-  if(method==='DELETE'){await enqueueOfflineOperation({condoId:who.condoId,entity:collection,action:'delete',payload:{id:body.id}});await cacheDelete(collection,body.id);return {ok:true,id:body.id,offline:true};}
-  if(method==='POST'){const id=body?.id;if(!id)throw error;await enqueueOfflineOperation({condoId:who.condoId,entity:collection,action:action,idempotencyKey:undefined,payload:{id,data:body.data}});await cachePut(collection,id,body.data);return {ok:true,id,offline:true};}
+  if(method==='DELETE'){await enqueueOfflineOperation({condoId:who.condoId,userId:who.userId,entity:collection,action:'delete',payload:{id:body.id}});await cacheDelete(collection,body.id);return {ok:true,id:body.id,offline:true};}
+  if(method==='POST'){const id=body?.id;if(!id)throw error;await enqueueOfflineOperation({condoId:who.condoId,userId:who.userId,entity:collection,action:action,payload:{id,data:body.data}});await cachePut(collection,id,body.data);return {ok:true,id,offline:true};}
   throw error;
  }
 }
 
 export async function tursoBatchRequest(operations:any[]) {
  const who=identity();const params=new URLSearchParams();if(who.condoId)params.set('condoId',who.condoId);
- try{const r=await fetch('/api/data/batch?'+params.toString(),{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({operations}),cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||'No se pudo confirmar el lote en Turso.'),{status:r.status});for(const op of operations){if(op.action==='delete')await cacheDelete(op.collection,op.id);else if(op.data)await cachePut(op.collection,op.id,op.data);}return d;}catch(error:any){if(error?.status||!who.condoId||typeof navigator!=='undefined'&&navigator.onLine)throw error;await enqueueOfflineOperation({condoId:who.condoId,entity:'batch',action:'batch',payload:{operations}});for(const op of operations){if(op.action==='delete')await cacheDelete(op.collection,op.id);else if(op.data)await cachePut(op.collection,op.id,op.data);}return {ok:true,offline:true};}
+ try{const r=await fetch('/api/data/batch?'+params.toString(),{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({operations}),cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||'No se pudo confirmar el lote en Turso.'),{status:r.status});for(const op of operations){if(op.action==='delete')await cacheDelete(op.collection,op.id);else if(op.data)await cachePut(op.collection,op.id,op.data);}return d;}catch(error:any){if(error?.status||!who.condoId||typeof navigator!=='undefined'&&navigator.onLine)throw error;await enqueueOfflineOperation({condoId:who.condoId,userId:who.userId,entity:'batch',action:'batch',payload:{operations}});for(const op of operations){if(op.action==='delete')await cacheDelete(op.collection,op.id);else if(op.data)await cachePut(op.collection,op.id,op.data);}return {ok:true,offline:true};}
 }

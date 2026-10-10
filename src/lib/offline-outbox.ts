@@ -11,6 +11,7 @@ export interface OfflineOperation<T = unknown> {
   id: string;
   idempotencyKey: string;
   condoId: string;
+  userId: string;
   entity: string;
   action: string;
   payload: T;
@@ -81,6 +82,7 @@ function newId(): string {
 /** Persiste una operación pendiente antes de informar al usuario que quedó guardada localmente. */
 export async function enqueueOfflineOperation<T>(input: {
   condoId: string;
+  userId?: string;
   entity: string;
   action: string;
   payload: T;
@@ -95,6 +97,7 @@ export async function enqueueOfflineOperation<T>(input: {
     id: newId(),
     idempotencyKey: input.idempotencyKey?.trim() || newId(),
     condoId: input.condoId,
+    userId: input.userId?.trim() || 'anonymous',
     entity: input.entity,
     action: input.action,
     payload: input.payload,
@@ -107,15 +110,15 @@ export async function enqueueOfflineOperation<T>(input: {
   return operation;
 }
 
-export async function listOfflineOperations(condoId: string): Promise<OfflineOperation[]> {
+export async function listOfflineOperations(condoId: string, userId?: string): Promise<OfflineOperation[]> {
   const all = await withStore<OfflineOperation[]>('readonly', store => store.getAll());
   return all
-    .filter(item => item.condoId === condoId)
+    .filter(item => item.condoId === condoId && (!userId || item.userId === userId))
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export async function countPendingOfflineOperations(condoId: string): Promise<number> {
-  const items = await listOfflineOperations(condoId);
+export async function countPendingOfflineOperations(condoId: string, userId?: string): Promise<number> {
+  const items = await listOfflineOperations(condoId, userId);
   return items.filter(item => item.status === 'pending' || item.status === 'failed' || item.status === 'syncing').length;
 }
 
@@ -151,14 +154,15 @@ export async function updateOfflineOperation(
  */
 export async function syncOfflineOperations(
   condoId: string,
+  userId: string,
   send: (operation: OfflineOperation) => Promise<'success' | 'conflict'>
 ): Promise<{ synced: number; failed: number; conflicts: number }> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { synced: 0, failed: 0, conflicts: 0 };
   }
 
-  const operations = (await listOfflineOperations(condoId))
-    .filter(item => item.status === 'pending' || item.status === 'failed');
+  const operations = (await listOfflineOperations(condoId, userId))
+    .filter(item => item.status === 'pending' || item.status === 'failed' || item.status === 'syncing');
   let synced = 0;
   let failed = 0;
   let conflicts = 0;
