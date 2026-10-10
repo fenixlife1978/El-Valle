@@ -23,6 +23,11 @@
 
 No poner secretos en `NEXT_PUBLIC_*` ni en el repositorio.
 
+## Avance de esta ejecución (2026-10-10)
+- Corregido `src/lib/imgbb.ts`: la subida de imágenes ahora importa la capa `src/lib/turso/storage-compat.ts`, en lugar de llamar directamente a Firebase Storage. Esto elimina ese camino explícito de subida a Firebase, pero no prueba todavía la lectura/escritura de imágenes en producción.
+- La rama sigue sin desplegarse a producción. No se han configurado ni inspeccionado valores secretos de Vercel.
+- Pendiente de validar con CI y de revisar las pantallas y módulos que aún importan directamente Firebase.
+
 ## Bloqueadores antes de producción
 La API documental y el endpoint de sincronización son una base técnica, no un reemplazo seguro de todas las colecciones Firebase ni un sistema contable. La sincronización genérica no es transaccional para operaciones financieras y su idempotencia requiere endurecimiento transaccional antes de procesar saldos, pagos o recibos. Las pantallas existentes siguen importando Firebase Auth, Firestore y Realtime Database; cada acceso debe migrarse y sus permisos/consultas probarse antes de quitar Firebase. La pantalla de inicio de sesión y el proveedor global de autenticación todavía usan Firebase. La API documental no sustituye las tablas relacionales de pagos, balances, recibos ni transacciones financieras. No conectar pagos, recibos o saldos al endpoint genérico.
 
