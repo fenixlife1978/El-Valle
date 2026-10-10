@@ -68,6 +68,9 @@ export function useOfflineSync(condoId: string | null, userId: string | null, se
 
   useEffect(() => {
     void refreshCount();
+    const changed = () => { void refreshCount(); };
+    window.addEventListener('efas-offline-queue-changed', changed);
+    return () => window.removeEventListener('efas-offline-queue-changed', changed);
   }, [refreshCount]);
 
   useEffect(() => {

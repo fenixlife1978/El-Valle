@@ -107,6 +107,7 @@ export async function enqueueOfflineOperation<T>(input: {
     status: 'pending',
   };
   await withStore('readwrite', store => store.add(operation));
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('efas-offline-queue-changed'));
   return operation;
 }
 
