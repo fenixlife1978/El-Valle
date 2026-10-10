@@ -3,35 +3,15 @@ import { doc, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writ
 import { db } from '@/lib/firebase';
 import { type User } from 'firebase/auth';
 
-const ADMIN_EMAIL = 'vallecondo@gmail.com';
-
 export const ensureAdminProfile = async (user?: User): Promise<boolean> => {
-    if (!user || user.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) return false;
-    // Super admin profile is not tied to a specific condo, it lives in a root collection.
-    const userRef = doc(db, "owners", user.uid);
+    if (!user) return false;
     try {
-        const snap = await getDoc(userRef);
-        if (!snap.exists()) {
-            await setDoc(userRef, {
-                uid: user.uid,
-                name: 'Super Administrador',
-                email: ADMIN_EMAIL,
-                role: 'super-admin',
-                condoId: 'master', // Special ID for the master admin
-                creadoPor: "sistema-saas",
-                fechaCreacion: Timestamp.now(),
-            });
-            return false;
-        } else {
-            const data = snap.data();
-            if (data.role !== 'super-admin') {
-                await updateDoc(userRef, { role: 'super-admin' });
-            }
-        }
-        return true;
-    } catch (error) {
-        console.error("Error sincronizando Super Admin:", error);
-        return true; 
+        const response = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store' });
+        const session = await response.json().catch(() => ({}));
+        return response.ok && session.authenticated === true &&
+            session.user?.userId === user.uid && session.user?.role === 'super-admin';
+    } catch {
+        return false;
     }
 };
 
