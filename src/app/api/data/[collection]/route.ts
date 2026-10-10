@@ -43,7 +43,8 @@ function ownerIdOf(data: any) {
 
 function canOwnerWrite(collection: string, data: any, userId: string) {
   const leaf = collection.split('/').pop() || '';
-  return OWNER_WRITABLE.has(leaf) && ownerIdOf(data) === userId && (leaf !== '_storage_files' || data?.shared !== true) && (leaf !== 'payments' || data?.status === 'pendiente');
+  const ownPayment = data?.status === 'pendiente' && (!Array.isArray(data?.beneficiaryIds) || data.beneficiaryIds.every((id: any) => id === userId)) && (!Array.isArray(data?.beneficiaries) || data.beneficiaries.every((item: any) => item?.ownerId === userId));
+  return OWNER_WRITABLE.has(leaf) && ownerIdOf(data) === userId && (leaf !== '_storage_files' || data?.shared !== true) && (leaf !== 'payments' || ownPayment);
 }
 
 function versionGuard(collection: string, id: string, expected: number) {

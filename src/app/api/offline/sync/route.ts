@@ -7,6 +7,7 @@ export const runtime = 'nodejs';
 const PATH = /^[a-zA-Z][a-zA-Z0-9_/-]{0,190}$/;
 const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','payments','_storage_files','survey_responses','surveyResponses','notifications']);
 const ownerIdOf = (d: any) => d?.ownerId ?? d?.userId ?? d?.createdBy ?? d?.uid ?? d?.reportedBy;
+const validOwnerPayment = (d: any, userId: string) => d?.status === 'pendiente' && (!Array.isArray(d?.beneficiaryIds) || d.beneficiaryIds.every((id: any) => id === userId)) && (!Array.isArray(d?.beneficiaries) || d.beneficiaries.every((item: any) => item?.ownerId === userId));
 
 async function ensureSchema(db: any) {
   await tursoExecute(db.databaseUrl, db.databaseToken, 'CREATE TABLE IF NOT EXISTS app_documents(collection_name TEXT NOT NULL,document_id TEXT NOT NULL,document_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(collection_name,document_id))');
@@ -37,7 +38,7 @@ async function writeStatements(ops: any[], session: any, condoId: string, db: an
       const leaf = op.collection.split('/').pop() || '';
       if (!op.collection.startsWith('condominios/' + session.condoId + '/') || op.action === 'delete' ||
           !OWNER_WRITABLE.has(leaf) || ownerIdOf(data) !== session.userId ||
-          (leaf === '_storage_files' && data?.shared === true) || (leaf === 'payments' && data?.status !== 'pendiente')) {
+          (leaf === '_storage_files' && data?.shared === true) || (leaf === 'payments' && !validOwnerPayment(data, session.userId))) {
         throw new Error('Operación no autorizada para propietarios.');
       }
       const old = await tursoExecute(db.databaseUrl, db.databaseToken,
