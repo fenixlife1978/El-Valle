@@ -21,7 +21,8 @@ async function context(request: Request, routeCollection: string) {
   const pathCondo = parts[0] === 'condominios' ? parts[1] : null;
   const requested = url.searchParams.get('condoId') || pathCondo;
   const condoId = session.role === 'super-admin' ? requested : session.condoId;
-  if (!condoId || (session.role !== 'super-admin' && requested && requested !== session.condoId)) throw new Error('FORBIDDEN');
+  if (!condoId || (session.role !== 'super-admin' && requested && requested !== session.condoId) ||
+      (pathCondo && pathCondo !== condoId)) throw new Error('FORBIDDEN');
   if (session.role === 'owner' && collection !== 'condominios' && !collection.startsWith('condominios/' + session.condoId + '/')) {
     throw new Error('FORBIDDEN');
   }
