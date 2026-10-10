@@ -1,3 +1,4 @@
+import { decryptDatabaseToken } from '@/lib/turso/crypto';
 import { tursoExecute, type SqlValue } from '@/lib/turso/http';
 
 const registryUrl = () => process.env.TURSO_REGISTRY_DATABASE_URL || process.env.TURSO_DATABASE_URL || '';
@@ -63,7 +64,7 @@ export async function findCondoDatabase(condoId: string): Promise<CondoDatabaseR
     condoId: String(storedId),
     displayName: String(displayName),
     databaseUrl,
-    databaseToken,
+    databaseToken: decryptDatabaseToken(databaseToken),
     status: 'active',
   };
 }

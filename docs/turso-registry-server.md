@@ -8,6 +8,7 @@ Configura en el entorno de servidor (nunca `NEXT_PUBLIC_*`):
 
 - `TURSO_REGISTRY_DATABASE_URL`: URL de la base central de registro.
 - `TURSO_REGISTRY_AUTH_TOKEN`: token de la base central.
+- `TURSO_CREDENTIALS_ENCRYPTION_KEY`: clave base64 de 32 bytes para cifrar tokens tenant en el registro central. Genera una clave criptográficamente aleatoria y guárdala solo como secreto de servidor.
 - `TURSO_API_TOKEN`, `TURSO_ORG` y `TURSO_GROUP` serán necesarios para aprovisionar nuevas bases usando la API de plataforma de Turso.
 
 Como transición, el registro admite `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` como conexión central. Se recomienda separar las credenciales de registro de las credenciales de cada condominio antes de producción.
@@ -19,6 +20,6 @@ Invocar `ensureTursoRegistrySchema()` desde una tarea de administración autenti
 ## Reglas importantes
 
 - `findCondoDatabase` devuelve solo condominios con estado `active`.
-- Las credenciales por condominio se guardan solo en el registro central server-side; nunca deben enviarse al navegador.
+- Los tokens de cada condominio deben guardarse cifrados con AES-256-GCM en el registro central; descifrarlos solo en servidor y nunca enviarlos al navegador. Si se pierde la clave de cifrado, los tokens guardados no podrán recuperarse.
 - Aún no se debe conectar la cola offline a una ruta de escritura hasta que la ruta valide la identidad, los permisos y el condominio contra una sesión verificada y use transacciones/idempotencia en la base de datos del condominio.
 - El cliente HTTP debe verificarse con una base de prueba y la versión actual del protocolo antes de operaciones reales. No hay cambios en producción.
