@@ -11,7 +11,7 @@ import {
   Edit2, Check, ShieldAlert, Building2, 
   Users, Activity, Lock, Search, 
   TrendingUp, LayoutDashboard, Database,
-  ArrowRight
+  ArrowRight, PlusCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -95,7 +95,7 @@ export default function SuperAdminERP() {
   };
 
   const handleSupport = (id: string) => {
-    localStorage.setItem('support_mode_id', id);
+    localStorage.setItem('support_condo_id', id);
     localStorage.setItem('activeCondoId', id);
     window.location.href = `/${id}/admin/dashboard`;
   };
