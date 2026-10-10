@@ -12,9 +12,6 @@ const OWNER_SHARED_READ = new Set(['condominios','config','settings','extraordin
 async function ensureDocuments(db: any) {
   await tursoExecute(db.databaseUrl, db.databaseToken,
     'CREATE TABLE IF NOT EXISTS app_documents(collection_name TEXT NOT NULL,document_id TEXT NOT NULL,document_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(collection_name,document_id))');
-  try {
-    await tursoExecute(db.databaseUrl, db.databaseToken, 'ALTER TABLE app_documents ADD COLUMN version INTEGER NOT NULL DEFAULT 1');
-  } catch {}
 }
 
 async function context(request: Request, routeCollection: string) {

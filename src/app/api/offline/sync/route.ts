@@ -10,9 +10,6 @@ const ownerIdOf = (d: any) => d?.ownerId ?? d?.userId ?? d?.createdBy ?? d?.uid;
 
 async function ensureSchema(db: any) {
   await tursoExecute(db.databaseUrl, db.databaseToken, 'CREATE TABLE IF NOT EXISTS app_documents(collection_name TEXT NOT NULL,document_id TEXT NOT NULL,document_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(collection_name,document_id))');
-  try {
-    await tursoExecute(db.databaseUrl, db.databaseToken, 'ALTER TABLE app_documents ADD COLUMN version INTEGER NOT NULL DEFAULT 1');
-  } catch {}
   await tursoExecute(db.databaseUrl, db.databaseToken, 'CREATE TABLE IF NOT EXISTS processed_operations(idempotency_key TEXT PRIMARY KEY,operation_id TEXT NOT NULL,outcome_json TEXT NOT NULL,processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
 }
 
