@@ -24,12 +24,14 @@ export const getCachedOwner = async (condoId: string, ownerId: string) => {
     let owner = memoryCache.get(cacheKey);
     
     if (!owner) {
-        const ownersCol = condoId === 'condo_01' ? 'owners' : 'propietarios';
-        const ownerRef = doc(db, 'condominios', condoId, ownersCol, ownerId);
-        const snap = await getDoc(ownerRef);
-        if (snap.exists()) {
-            owner = snap.data();
-            memoryCache.set(cacheKey, owner, 300); // 5 minutos
+        for (const ownersCol of ['owners', 'propietarios']) {
+            const ownerRef = doc(db, 'condominios', condoId, ownersCol, ownerId);
+            const snap = await getDoc(ownerRef);
+            if (snap.exists()) {
+                owner = snap.data();
+                memoryCache.set(cacheKey, owner, 300);
+                break;
+            }
         }
     }
     return owner;
