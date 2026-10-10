@@ -22,7 +22,7 @@ export async function tursoRequest(method:'GET'|'POST'|'DELETE',collection:strin
   if(method==='DELETE'){await cacheDelete(collection,body.id);return result;}
   return result;
  }catch(error:any){
-  if(error?.status)throw error;
+  if(error?.status&&!(method==='GET'&&error.status>=500&&error.status<600))throw error;
   if(method==='GET'){
    // navigator.onLine no detecta cortes de DNS, portal cautivo ni fallos del servidor.
    // Si la petición falló sin respuesta HTTP, servir la copia local disponible sin fingir frescura.
