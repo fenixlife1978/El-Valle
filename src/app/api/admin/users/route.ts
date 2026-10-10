@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { ensureTursoRegistrySchema } from '@/lib/turso/registry';
+import { ensureTursoRegistrySchema, findCondoDatabase } from '@/lib/turso/registry';
 import { tursoExecute } from '@/lib/turso/http';
 import { hashPassword, requireAdminSession } from '@/lib/turso/session';
 export const runtime = 'nodejs';
@@ -24,7 +24,21 @@ export async function POST(request: Request) {
     await tursoExecute(url, token,
       "INSERT INTO auth_users(user_id,email,password_hash,role,condo_id,active) VALUES(?,?,?,'owner',?,1)",
       [userId, email, passwordHash, session.condoId]);
-    return NextResponse.json({ ok: true, userId, email, role: 'owner' }, { status: 201 });
+    try {
+      const tenant = await findCondoDatabase(session.condoId);
+      if (!tenant) throw new Error('No se encontró la base del condominio.');
+      await tursoExecute(tenant.databaseUrl, tenant.databaseToken,
+        'CREATE TABLE IF NOT EXISTS app_documents(collection_name TEXT NOT NULL,document_id TEXT NOT NULL,document_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(collection_name,document_id))');
+      const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0,160) : email;
+      const profile = { uid:userId,userId,ownerId:userId,email,name,displayName:name,role:'propietario',condoId:session.condoId,balance:0,properties:Array.isArray(body.properties)?body.properties:[],createdAt:new Date().toISOString(),active:true };
+      await tursoExecute(tenant.databaseUrl, tenant.databaseToken,
+        'INSERT INTO app_documents(collection_name,document_id,document_json) VALUES(?,?,?)',
+        ['condominios/'+session.condoId+'/owners',userId,JSON.stringify(profile)]);
+    } catch (profileError) {
+      await tursoExecute(url, token, 'DELETE FROM auth_users WHERE user_id=?', [userId]).catch(() => undefined);
+      throw profileError;
+    }
+    return NextResponse.json({ ok: true, userId, email, role: 'owner', name: typeof body.name === 'string' ? body.name.trim() : email }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     return NextResponse.json({ error: message === 'UNAUTHORIZED' ? 'Debes iniciar sesión.' : 'No se pudo crear la cuenta.' }, { status: message === 'UNAUTHORIZED' ? 401 : 500 });
