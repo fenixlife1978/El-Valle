@@ -105,6 +105,10 @@ export async function getSession(): Promise<EfasSession | null> {
 export async function requireAdminSession(): Promise<EfasSession> {
   const session = await getSession();
   if (!session || !['super-admin', 'admin'].includes(session.role)) throw new Error('UNAUTHORIZED');
+  if (session.condoId) {
+    const { findCondoDatabase } = await import('@/lib/turso/registry');
+    await findCondoDatabase(session.condoId);
+  }
   return session;
 }
 export async function findAuthUser(email: string) {
