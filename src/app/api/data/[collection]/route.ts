@@ -128,11 +128,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
   try {
     const route = await params;
     const ctx = await context(request, route.collection);
-    const id = new URL(request.url).searchParams.get('id');
+    const search = new URL(request.url).searchParams;
+    const id = search.get('id');
+    const offsetValue = Number(search.get('offset') || 0);
+    const offset = Number.isSafeInteger(offsetValue) ? Math.max(0, Math.min(1000000, offsetValue)) : 0;
     const sql = id
       ? 'SELECT document_id,document_json,updated_at,version FROM app_documents WHERE collection_name=? AND document_id=? LIMIT 1'
-      : 'SELECT document_id,document_json,updated_at,version FROM app_documents WHERE collection_name=? ORDER BY updated_at DESC LIMIT 1000';
-    const result = await tursoExecute(ctx.db.databaseUrl, ctx.db.databaseToken, sql, id ? [ctx.collection, id] : [ctx.collection]);
+      : 'SELECT document_id,document_json,updated_at,version FROM app_documents WHERE collection_name=? ORDER BY updated_at DESC, document_id ASC LIMIT 1000 OFFSET ?';
+    const result = await tursoExecute(ctx.db.databaseUrl, ctx.db.databaseToken, sql, id ? [ctx.collection, id] : [ctx.collection, offset]);
     let documents = result.rows.map(row => ({ id: String(row[0]), data: JSON.parse(String(row[1])), updatedAt: row[2], version: Number(row[3] || 1) }));
     if (ctx.session.role === 'owner') {
       const leaf = ctx.collection.split('/').pop() || '';
@@ -143,7 +146,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
       else if (leaf === '_storage_files') documents = documents.filter(d => d.data?.shared === true || ownerIdOf(d.data) === ctx.session.userId);
       else if (!OWNER_SHARED_READ.has(leaf)) documents = documents.filter(d => ownerIdOf(d.data) === ctx.session.userId);
     }
-    return NextResponse.json({ documents });
+    return NextResponse.json({ documents, hasMore: !id && result.rows.length === 1000, nextOffset: !id && result.rows.length === 1000 ? offset + result.rows.length : null });
   } catch (error) {
     return fail(error);
   }
