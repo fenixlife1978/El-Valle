@@ -88,6 +88,17 @@ export async function provisionCondoDatabase(input: { condoId: string; displayNa
 
   try {
     await tursoExecute(databaseUrl, tokenResult.jwt, `
+      CREATE TABLE IF NOT EXISTS app_documents (
+        collection_name TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        document_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        version INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (collection_name, document_id)
+      )
+    `);
+    await tursoExecute(databaseUrl, tokenResult.jwt, `
       CREATE TABLE IF NOT EXISTS processed_operations (
         idempotency_key TEXT PRIMARY KEY,
         operation_id TEXT NOT NULL,
