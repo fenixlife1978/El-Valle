@@ -8,6 +8,9 @@ import { tursoExecute } from '@/lib/turso/http';
 const scrypt = promisify(scryptCallback);
 const COOKIE_NAME = 'efas_session';
 const SESSION_SECONDS = 60 * 60 * 12;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 8;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
 export interface EfasSession { userId: string; email: string; role: 'super-admin' | 'admin' | 'owner'; condoId: string | null; exp: number; }
 function secret(): string {
   const value = process.env.SESSION_SECRET;
@@ -15,6 +18,12 @@ function secret(): string {
   return value;
 }
 function sign(value: string): string { return createHmac('sha256', secret()).update(value).digest('base64url'); }
+function registryConfig() {
+  const url = process.env.TURSO_REGISTRY_DATABASE_URL?.trim();
+  const token = process.env.TURSO_REGISTRY_AUTH_TOKEN?.trim();
+  if (!url || !token) throw new Error('Falta configurar la base central de autenticación Turso.');
+  return { url, token };
+}
 export async function hashPassword(password: string): Promise<string> {
   if (password.length < 12 || password.length > 200) throw new Error('La contraseña debe tener entre 12 y 200 caracteres.');
   const salt = randomBytes(16).toString('base64url');
@@ -29,6 +38,43 @@ export async function verifyPassword(password: string, encoded: string): Promise
     const actual = await scrypt(password, salt, expected.length) as Buffer;
     return expected.length === actual.length && timingSafeEqual(expected, actual);
   } catch { return false; }
+}
+/** Rate limit persistente en la base central, compartido entre instancias serverless. */
+export async function loginLockoutSeconds(email: string): Promise<number> {
+  await ensureTursoRegistrySchema();
+  const { url, token } = registryConfig();
+  const result = await tursoExecute(url, token, 'SELECT attempts, window_started_at, locked_until FROM auth_login_attempts WHERE email = ? LIMIT 1', [email.trim().toLowerCase()]);
+  const row = result.rows[0];
+  if (!row) return 0;
+  const now = Date.now();
+  const attempts = Number(row[0]);
+  const windowStart = Number(row[1]);
+  const lockedUntil = Number(row[2]);
+  if (lockedUntil > now) return Math.ceil((lockedUntil - now) / 1000);
+  if (now - windowStart >= LOGIN_WINDOW_MS || attempts < LOGIN_MAX_FAILURES) return 0;
+  return Math.ceil((windowStart + LOGIN_WINDOW_MS - now) / 1000);
+}
+export async function recordLoginFailure(email: string): Promise<void> {
+  await ensureTursoRegistrySchema();
+  const { url, token } = registryConfig();
+  const normalized = email.trim().toLowerCase();
+  const now = Date.now();
+  const result = await tursoExecute(url, token, 'SELECT attempts, window_started_at FROM auth_login_attempts WHERE email = ? LIMIT 1', [normalized]);
+  const row = result.rows[0];
+  let attempts = row ? Number(row[0]) : 0;
+  let windowStart = row ? Number(row[1]) : now;
+  if (now - windowStart >= LOGIN_WINDOW_MS) { attempts = 0; windowStart = now; }
+  attempts += 1;
+  const lockedUntil = attempts >= LOGIN_MAX_FAILURES ? now + LOGIN_LOCK_MS : 0;
+  await tursoExecute(url, token, `INSERT INTO auth_login_attempts(email, attempts, window_started_at, locked_until, updated_at)
+    VALUES(?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(email) DO UPDATE SET attempts=excluded.attempts, window_started_at=excluded.window_started_at,
+    locked_until=excluded.locked_until, updated_at=CURRENT_TIMESTAMP`, [normalized, attempts, windowStart, lockedUntil]);
+}
+export async function clearLoginFailures(email: string): Promise<void> {
+  await ensureTursoRegistrySchema();
+  const { url, token } = registryConfig();
+  await tursoExecute(url, token, 'DELETE FROM auth_login_attempts WHERE email = ?', [email.trim().toLowerCase()]);
 }
 export async function createSession(session: Omit<EfasSession, 'exp'>): Promise<void> {
   const payload = Buffer.from(JSON.stringify({ ...session, exp: Math.floor(Date.now() / 1000) + SESSION_SECONDS })).toString('base64url');
@@ -64,9 +110,7 @@ export async function requireAdminSession(): Promise<EfasSession> {
 }
 export async function findAuthUser(email: string) {
   await ensureTursoRegistrySchema();
-  const url = process.env.TURSO_REGISTRY_DATABASE_URL?.trim();
-  const token = process.env.TURSO_REGISTRY_AUTH_TOKEN?.trim();
-  if (!url || !token) throw new Error('Falta configurar la base central de autenticación Turso.');
+  const { url, token } = registryConfig();
   const result = await tursoExecute(url, token, 'SELECT user_id, email, password_hash, role, condo_id, active FROM auth_users WHERE email = ? LIMIT 1', [email.trim().toLowerCase()]);
   const row = result.rows[0] as unknown[] | undefined;
   if (!row) return null;

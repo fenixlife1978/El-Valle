@@ -8,15 +8,10 @@ function registryConfig() {
   if (!url || !token) throw new Error('Configura TURSO_REGISTRY_DATABASE_URL y TURSO_REGISTRY_AUTH_TOKEN para una base central independiente.');
   return { url, token };
 }
-
 export interface CondoDatabaseRecord {
-  condoId: string;
-  displayName: string;
-  databaseUrl: string;
-  databaseToken: string;
+  condoId: string; displayName: string; databaseUrl: string; databaseToken: string;
   status: 'provisioning' | 'active' | 'suspended' | 'failed';
 }
-
 export async function ensureTursoRegistrySchema(): Promise<void> {
   const { url, token } = registryConfig();
   await tursoExecute(url, token, `
@@ -33,8 +28,13 @@ export async function ensureTursoRegistrySchema(): Promise<void> {
       condo_id TEXT, active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
+  await tursoExecute(url, token, `
+    CREATE TABLE IF NOT EXISTS auth_login_attempts (
+      email TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0,
+      window_started_at INTEGER NOT NULL, locked_until INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
 }
-
 export async function findCondoDatabase(condoId: string): Promise<CondoDatabaseRecord | null> {
   const id = condoId.trim();
   if (!id || id.length > 128) return null;
