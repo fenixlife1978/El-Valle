@@ -1,6 +1,6 @@
 'use client';
 export interface User {uid:string;email:string|null;displayName:string|null;isAnonymous:boolean;getIdToken:()=>Promise<string>;}
-export type Auth={__tursoAuth:true}; export const browserLocalPersistence={type:'LOCAL'}; export const browserSessionPersistence={type:'SESSION'}; export function getAuth(_app?:any):Auth{return {__tursoAuth:true};} export async function setPersistence(_a:any,_p:any){}
+export type Auth={__tursoAuth:true;currentUser:User|null}; export const browserLocalPersistence={type:'LOCAL'}; export const browserSessionPersistence={type:'SESSION'}; export function getAuth(_app?:any):Auth{return {__tursoAuth:true,currentUser:null};} export async function setPersistence(_a:any,_p:any){}
 function userFrom(v:any):User|null{return v?{uid:String(v.userId||v.uid),email:v.email||null,displayName:v.displayName||v.name||null,isAnonymous:false,getIdToken:async()=>''}:null;}
 export async function signInWithEmailAndPassword(_a:any,email:string,password:string){const r=await fetch('/api/auth/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});const d=await r.json().catch(()=>({}));if(!r.ok){const e:any=new Error(d.error||'Correo o contraseña incorrectos.');e.code=r.status===401?'auth/invalid-credential':'auth/unknown';throw e;}return {user:userFrom(d.user)!};}
 export async function signOut(_a:any){await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});}
