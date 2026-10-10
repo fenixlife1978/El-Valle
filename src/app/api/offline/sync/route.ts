@@ -5,7 +5,7 @@ import { getSession } from '@/lib/turso/session';
 
 export const runtime = 'nodejs';
 const PATH = /^[a-zA-Z][a-zA-Z0-9_/-]{0,190}$/;
-const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','payments','reports','_storage_files','survey_responses','surveyResponses','notifications']);
+const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','_storage_files','survey_responses','surveyResponses','notifications']);
 const ownerIdOf = (d: any) => d?.ownerId ?? d?.userId ?? d?.createdBy ?? d?.uid;
 
 async function ensureSchema(db: any) {
