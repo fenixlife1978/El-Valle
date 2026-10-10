@@ -12,7 +12,7 @@ export async function tursoRequest(method:'GET'|'POST'|'DELETE',collection:strin
  const who=identity();const params=new URLSearchParams({collection});if(who.condoId)params.set('condoId',who.condoId);if(method==='GET'&&body?.id)params.set('id',body.id);
  if(method==='GET'&&typeof navigator!=='undefined'&&!navigator.onLine)return {documents:await cacheRead(collection,body?.id)};
  try{
-  const response=await fetch('/api/data/documents?'+params.toString(),{method,credentials:'same-origin',headers:{'Content-Type':'application/json'},...(method==='GET'?{}:{body:JSON.stringify(body||{})}),cache:'no-store'});
+  const response=await fetch('/api/data/documents?'+params.toString(),{method,credentials:'same-origin',headers:{'Content-Type':'application/json'},...(method==='GET'?{}:{body:JSON.stringify(method==='POST'?{...(body||{}),action}:body||{})}),cache:'no-store'});
   const result=await response.json().catch(()=>({}));if(!response.ok)throw Object.assign(new Error(result.error||'No se pudo acceder a los datos de Turso.'),{status:response.status});
   if(method==='GET'){for(const d of result.documents||[])await cachePut(collection,d.id,d.data);return result;}
   if(method==='POST'){await cachePut(collection,result.id||body.id,body.data);return result;}
