@@ -35,12 +35,12 @@ export async function runTransaction(_db:Firestore,callback:(tx:any)=>Promise<an
   for(const group of groups.values()){
     const first=group[0];const snapshot=reads.get(first.path)||await getDoc(makeRef({__turso:true},first.path,'doc'));
     const exists=snapshot.exists();const expectedVersion=exists?snapshot.version:0;
-    let data:any=snapshot.data()||{};let deleted=false;let finalAction:'set'|'delete'='set';
+    let data:any=snapshot.data()||{};let deleted=false;let logicallyExists=exists;let finalAction:'set'|'delete'='set';
     for(const op of group){
-      if(op.action==='delete'){deleted=true;finalAction='delete';data=undefined;continue;}
-      if(op.action==='set'&&!op.merge){data=clean(op.data);deleted=false;finalAction='set';continue;}
-      if(op.action==='update'&&!exists&&!data)throw new Error('No existe el documento que intentas actualizar.');
-      data=transform(deleted?{}:data,op.data);deleted=false;finalAction='set';
+      if(op.action==='delete'){deleted=true;logicallyExists=false;finalAction='delete';data=undefined;continue;}
+      if(op.action==='set'&&!op.merge){data=clean(op.data);deleted=false;logicallyExists=true;finalAction='set';continue;}
+      if(op.action==='update'&&!logicallyExists)throw new Error('No existe el documento que intentas actualizar.');
+      data=transform(deleted?{}:data,op.data);deleted=false;logicallyExists=true;finalAction='set';
     }
     if(finalAction==='delete')committed.push({collection:first.collection,id:first.id,action:'delete',expectedVersion});
     else committed.push({collection:first.collection,id:first.id,action:'set',data,expectedVersion});
