@@ -122,6 +122,9 @@ export async function POST(request: Request) {
           const id = typeof payload.id === 'string' ? payload.id : op.id;
           const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
           const collection = op.entity;
+          const pathParts = collection.split('/');
+          const pathCondo = pathParts[0] === 'condominios' ? pathParts[1] : null;
+          if (pathCondo && pathCondo !== condoId) throw new Error('La operación offline intenta cruzar condominios.');
           let expected = Number.isInteger(payload.expectedVersion) && payload.expectedVersion >= 0 ? payload.expectedVersion : null;
 
           if (session.role === 'owner') {
