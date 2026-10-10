@@ -44,8 +44,14 @@ export async function POST(request: Request) {
       const provisioned = await provisionCondoDatabase({ condoId, displayName });
       databaseName = provisioned.databaseName;
     } else {
-      // Modo gratuito: registra el condominio, pero comparte la base condosys.
-      // No llama a la API de Turso ni crea otra base de datos.
+      // Modo gratuito: admite un solo condominio en la base compartida.
+      // Bloqueamos un segundo registro para no mezclar datos entre condominios.
+      const tenantCount = await tursoExecute(config.url, config.token, 'SELECT COUNT(*) FROM condo_registry');
+      if (Number(tenantCount.rows[0]?.[0] ?? 0) > 0) {
+        return NextResponse.json({
+          error: 'La base gratuita compartida solo admite un condominio. Para agregar otro se necesita una base tenant aislada; no se creó ningún registro.',
+        }, { status: 409 });
+      }
       await tursoExecute(config.url, config.token,
         "INSERT INTO condo_registry(condo_id,display_name,database_url,database_token,status) VALUES(?,?,?,'shared-database','active')",
         [condoId, displayName, config.url]);
