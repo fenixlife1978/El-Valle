@@ -96,3 +96,28 @@ export async function tursoExecute(
     lastInsertRowid: result.last_insert_rowid == null ? null : String(result.last_insert_rowid),
   };
 }
+
+export interface TursoBatchStatement { sql: string; args?: SqlValue[]; }
+/** Executes a group of statements in one Turso transaction; the batch is rolled back if a step fails. */
+export async function tursoBatch(databaseUrl: string, authToken: string, statements: TursoBatchStatement[]): Promise<void> {
+  if (!authToken?.trim()) throw new Error('Falta el token de acceso a Turso.');
+  if (!statements.length || statements.length > 100) throw new Error('Lote SQL inválido.');
+  const response = await fetch(pipelineUrl(databaseUrl), {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      requests: [
+        { type: 'batch', batch: { mode: 'write', steps: statements.map(s => ({ stmt: { sql: s.sql, args: (s.args || []).map(encodeValue) } })) } },
+        { type: 'close' }
+      ]
+    }),
+    cache: 'no-store'
+  });
+  if (!response.ok) throw new Error('Turso respondió HTTP ' + response.status + ' al procesar el lote.');
+  const body = await response.json();
+  const item = body?.results?.[0];
+  if (item?.type === 'error' || item?.response?.type === 'error') throw new Error(String(item.error?.message ?? item.response?.error?.message ?? 'Falló la transacción Turso.'));
+  const steps = item?.response?.result?.step_results ?? item?.response?.result?.results ?? [];
+  const failed = steps.find((s: any) => s?.type === 'error' || s?.response?.type === 'error');
+  if (failed) throw new Error(String(failed.error?.message ?? failed.response?.error?.message ?? 'Falló la transacción Turso.'));
+}
