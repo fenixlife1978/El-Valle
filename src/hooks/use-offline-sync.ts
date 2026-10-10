@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   countPendingOfflineOperations,
+  countConflictedOfflineOperations,
   syncOfflineOperations,
   type OfflineOperation,
 } from '@/lib/offline-outbox';
@@ -12,6 +13,8 @@ export type OfflineSender = (operation: OfflineOperation) => Promise<'success' |
 
 export interface OfflineSyncState {
   pendingCount: number;
+  conflictCount: number;
+  isOnline: boolean;
   isSyncing: boolean;
   lastResult: { synced: number; failed: number; conflicts: number } | null;
   error: string | null;
@@ -27,6 +30,7 @@ export interface OfflineSyncState {
 export function useOfflineSync(condoId: string | null, userId: string | null, send: OfflineSender): OfflineSyncState {
   const { isOnline, reconnected } = useNetworkStatus();
   const [pendingCount, setPendingCount] = useState(0);
+  const [conflictCount, setConflictCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastResult, setLastResult] = useState<OfflineSyncState['lastResult']>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +44,13 @@ export function useOfflineSync(condoId: string | null, userId: string | null, se
   const refreshCount = useCallback(async () => {
     if (!condoId || !userId) {
       setPendingCount(0);
+      setConflictCount(0);
       return;
     }
     try {
-      setPendingCount(await countPendingOfflineOperations(condoId, userId));
+      const [pending, conflicts] = await Promise.all([countPendingOfflineOperations(condoId, userId), countConflictedOfflineOperations(condoId, userId)]);
+      setPendingCount(pending);
+      setConflictCount(conflicts);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo leer la cola offline.');
     }
@@ -86,5 +93,5 @@ export function useOfflineSync(condoId: string | null, userId: string | null, se
     return () => window.removeEventListener('focus', onFocus);
   }, [refreshCount, syncNow]);
 
-  return { pendingCount, isSyncing, lastResult, error, syncNow, refreshCount };
+  return { pendingCount, conflictCount, isOnline, isSyncing, lastResult, error, syncNow, refreshCount };
 }
