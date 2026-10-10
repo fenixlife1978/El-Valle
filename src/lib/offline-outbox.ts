@@ -107,7 +107,17 @@ export async function enqueueOfflineOperation<T>(input: {
     status: 'pending',
   };
   await withStore('readwrite', store => store.add(operation));
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event('efas-offline-queue-changed'));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('efas-offline-queue-changed'));
+    // Background Sync existe en algunos navegadores Chromium; el hook foreground
+    // sigue siendo el fallback en plataformas que no lo implementan.
+    if ('serviceWorker' in navigator) {
+      void navigator.serviceWorker.ready.then(registration => {
+        const syncManager = (registration as ServiceWorkerRegistration & { sync?: { register: (tag: string) => Promise<void> } }).sync;
+        return syncManager?.register('efas-offline-sync');
+      }).catch(() => undefined);
+    }
+  }
   return operation;
 }
 
