@@ -113,8 +113,8 @@ export async function POST(request: Request) {
         let statements: any[] = [];
         if (op.action === 'batch') {
           if (op.entity !== 'batch' || !Array.isArray(op.payload?.operations) ||
-              op.payload.operations.length < 1 || op.payload.operations.length > 100) {
-            throw new Error('Lote offline inválido.');
+              op.payload.operations.length < 1 || op.payload.operations.length > 250 || JSON.stringify(op.payload.operations).length > 10000000) {
+            throw new Error('Lote offline inválido: máximo 250 operaciones y 10 MB.');
           }
           statements = await writeStatements(op.payload.operations, session, condoId, db);
         } else {

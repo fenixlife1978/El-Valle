@@ -101,7 +101,7 @@ export interface TursoBatchStatement { sql: string; args?: SqlValue[]; }
 /** Executes a group of statements in one Turso transaction; the batch is rolled back if a step fails. */
 export async function tursoBatch(databaseUrl: string, authToken: string, statements: TursoBatchStatement[]): Promise<void> {
   if (!authToken?.trim()) throw new Error('Falta el token de acceso a Turso.');
-  if (!statements.length || statements.length > 100) throw new Error('Lote SQL inválido.');
+  if (!statements.length || statements.length > 600) throw new Error('Lote SQL inválido: máximo 600 sentencias por transacción.');
   const response = await fetch(pipelineUrl(databaseUrl), {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + authToken, 'Content-Type': 'application/json' },

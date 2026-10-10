@@ -57,8 +57,8 @@ function versionGuard(collection: string, id: string, expected: number) {
 async function handleBatch(request: Request) {
   try {
     const body = await request.json();
-    if (!Array.isArray(body.operations) || body.operations.length < 1 || body.operations.length > 100) {
-      return NextResponse.json({ error: 'Lote inválido: se permiten de 1 a 100 operaciones.' }, { status: 400 });
+    if (!Array.isArray(body.operations) || body.operations.length < 1 || body.operations.length > 250 || JSON.stringify(body.operations).length > 10000000) {
+      return NextResponse.json({ error: 'Lote inválido: se permiten hasta 250 operaciones y 10 MB por solicitud.' }, { status: 400 });
     }
     const first = body.operations[0];
     if (!first || typeof first.collection !== 'string') return NextResponse.json({ error: 'Falta la colección de la operación.' }, { status: 400 });
