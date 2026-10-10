@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { ensureTursoRegistrySchema, findCondoDatabase } from '@/lib/turso/registry';
-import { tursoExecute } from '@/lib/turso/http';
+import { tursoExecute, tursoBatch } from '@/lib/turso/http';
 import { hashPassword, requireAdminSession } from '@/lib/turso/session';
 export const runtime = 'nodejs';
 
@@ -42,5 +42,36 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     return NextResponse.json({ error: message === 'UNAUTHORIZED' ? 'Debes iniciar sesión.' : 'No se pudo crear la cuenta.' }, { status: message === 'UNAUTHORIZED' ? 401 : 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await requireAdminSession();
+    if (session.role !== 'admin' || !session.condoId) return NextResponse.json({ error: 'Solo el administrador del condominio puede eliminar cuentas de propietario.' }, { status: 403 });
+    const body = await request.json().catch(() => ({}));
+    const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
+    if (!userId || userId.length > 128) return NextResponse.json({ error: 'Identificador de usuario inválido.' }, { status: 400 });
+    await ensureTursoRegistrySchema();
+    const url = process.env.TURSO_REGISTRY_DATABASE_URL!;
+    const token = process.env.TURSO_REGISTRY_AUTH_TOKEN!;
+    const account = await tursoExecute(url, token, 'SELECT role,condo_id FROM auth_users WHERE user_id=? LIMIT 1', [userId]);
+    if (account.rows.length) {
+      if (String(account.rows[0][0]) !== 'owner' || String(account.rows[0][1] || '') !== session.condoId) {
+        return NextResponse.json({ error: 'La cuenta no pertenece a este condominio o no es una cuenta de propietario.' }, { status: 403 });
+      }
+      await tursoExecute(url, token, 'UPDATE auth_users SET active=0,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND condo_id=?', [userId, session.condoId]);
+    }
+    const tenant = await findCondoDatabase(session.condoId);
+    if (!tenant) return NextResponse.json({ error: 'No se encontró la base del condominio.' }, { status: 404 });
+    await tursoBatch(tenant.databaseUrl, tenant.databaseToken, [{
+      sql: 'DELETE FROM app_documents WHERE document_id=? AND collection_name IN (?,?)',
+      args: [userId, 'condominios/' + session.condoId + '/owners', 'condominios/' + session.condoId + '/propietarios']
+    }]);
+    if (account.rows.length) await tursoExecute(url, token, 'DELETE FROM auth_users WHERE user_id=? AND condo_id=? AND role=\'owner\'', [userId, session.condoId]);
+    return NextResponse.json({ ok: true, userId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    return NextResponse.json({ error: message === 'UNAUTHORIZED' ? 'Debes iniciar sesión.' : 'No se pudo eliminar la cuenta del propietario.' }, { status: message === 'UNAUTHORIZED' ? 401 : 500 });
   }
 }
