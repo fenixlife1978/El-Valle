@@ -39,7 +39,6 @@ export async function verifyPassword(password: string, encoded: string): Promise
     return expected.length === actual.length && timingSafeEqual(expected, actual);
   } catch { return false; }
 }
-/** Rate limit persistente en la base central, compartido entre instancias serverless. */
 export async function loginLockoutSeconds(email: string): Promise<number> {
   await ensureTursoRegistrySchema();
   const { url, token } = registryConfig();
@@ -54,22 +53,22 @@ export async function loginLockoutSeconds(email: string): Promise<number> {
   if (now - windowStart >= LOGIN_WINDOW_MS || attempts < LOGIN_MAX_FAILURES) return 0;
   return Math.ceil((windowStart + LOGIN_WINDOW_MS - now) / 1000);
 }
+/** UPSERT atómico: intentos concurrentes no pueden sobrescribir el contador con un valor antiguo. */
 export async function recordLoginFailure(email: string): Promise<void> {
   await ensureTursoRegistrySchema();
   const { url, token } = registryConfig();
   const normalized = email.trim().toLowerCase();
   const now = Date.now();
-  const result = await tursoExecute(url, token, 'SELECT attempts, window_started_at FROM auth_login_attempts WHERE email = ? LIMIT 1', [normalized]);
-  const row = result.rows[0];
-  let attempts = row ? Number(row[0]) : 0;
-  let windowStart = row ? Number(row[1]) : now;
-  if (now - windowStart >= LOGIN_WINDOW_MS) { attempts = 0; windowStart = now; }
-  attempts += 1;
-  const lockedUntil = attempts >= LOGIN_MAX_FAILURES ? now + LOGIN_LOCK_MS : 0;
   await tursoExecute(url, token, `INSERT INTO auth_login_attempts(email, attempts, window_started_at, locked_until, updated_at)
-    VALUES(?,?,?,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(email) DO UPDATE SET attempts=excluded.attempts, window_started_at=excluded.window_started_at,
-    locked_until=excluded.locked_until, updated_at=CURRENT_TIMESTAMP`, [normalized, attempts, windowStart, lockedUntil]);
+    VALUES(?, 1, ?, 0, CURRENT_TIMESTAMP)
+    ON CONFLICT(email) DO UPDATE SET
+      attempts = CASE WHEN ? - auth_login_attempts.window_started_at >= ? THEN 1 ELSE auth_login_attempts.attempts + 1 END,
+      window_started_at = CASE WHEN ? - auth_login_attempts.window_started_at >= ? THEN ? ELSE auth_login_attempts.window_started_at END,
+      locked_until = CASE WHEN
+        (CASE WHEN ? - auth_login_attempts.window_started_at >= ? THEN 1 ELSE auth_login_attempts.attempts + 1 END) >= ?
+        THEN ? + ? ELSE 0 END,
+      updated_at = CURRENT_TIMESTAMP`,
+    [normalized, now, now, LOGIN_WINDOW_MS, now, LOGIN_WINDOW_MS, now, now, LOGIN_WINDOW_MS, LOGIN_MAX_FAILURES, now, LOGIN_LOCK_MS]);
 }
 export async function clearLoginFailures(email: string): Promise<void> {
   await ensureTursoRegistrySchema();
