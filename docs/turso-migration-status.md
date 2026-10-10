@@ -28,7 +28,8 @@ No poner secretos en `NEXT_PUBLIC_*` ni en el repositorio.
 - Verificado el puente global `OfflineSyncBridge`: la cola IndexedDB reintenta operaciones al recuperar conectividad, al iniciar y al volver al foco; el endpoint conserva idempotencia y marca conflictos para revisión. No garantiza sincronización con la app cerrada ni reemplaza las operaciones financieras transaccionales.
 - Limitada la sesión local offline a 12 horas, en línea con la duración de la sesión de servidor, para no conservar acceso indefinido con credenciales cacheadas.
 - Endurecido y registrado el service worker: ya no cachea rutas `/api/` ni HTML dinámico autenticado; se incrementó la versión del caché para eliminar respuestas antiguas potencialmente privadas. El caché offline se limita al shell público y recursos estáticos.
-- La rama sigue sin desplegarse a producción. No se han configurado ni inspeccionado valores secretos de Vercel.
+- Auditoría de solo lectura del proyecto Vercel `valle-condo` (producción): entre las variables Turso aparecen solo `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`; faltan las variables de registro central, aprovisionamiento, cifrado y `SESSION_SECRET` que requiere esta rama. No se leyeron valores secretos ni se modificó configuración.
+- La rama sigue sin desplegarse a producción. No se han configurado valores secretos de Vercel.
 - Pendiente de validar con CI y de revisar las pantallas y módulos que aún importan directamente Firebase.
 
 ## Bloqueadores antes de producción
