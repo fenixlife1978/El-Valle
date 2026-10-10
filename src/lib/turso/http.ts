@@ -117,7 +117,12 @@ export async function tursoBatch(databaseUrl: string, authToken: string, stateme
   const body = await response.json();
   const item = body?.results?.[0];
   if (item?.type === 'error' || item?.response?.type === 'error') throw new Error(String(item.error?.message ?? item.response?.error?.message ?? 'Falló la transacción Turso.'));
-  const steps = item?.response?.result?.step_results ?? item?.response?.result?.results ?? [];
+  const batchResult = item?.response?.result;
+  const stepErrors = batchResult?.step_errors ?? [];
+  const firstStepError = stepErrors.find((e: any) => e != null);
+  if (firstStepError) throw new Error(String(firstStepError.message ?? firstStepError.error?.message ?? 'Falló la transacción Turso.'));
+  const steps = batchResult?.step_results ?? batchResult?.results ?? [];
   const failed = steps.find((s: any) => s?.type === 'error' || s?.response?.type === 'error');
   if (failed) throw new Error(String(failed.error?.message ?? failed.response?.error?.message ?? 'Falló la transacción Turso.'));
+  if (batchResult?.step_errors && batchResult.step_errors.length && batchResult.step_errors.every((e: any) => e == null) === false) throw new Error('Falló una operación del lote Turso.');
 }
