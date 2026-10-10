@@ -27,11 +27,11 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   const [isVerifying, setIsVerifying] = useState(false);
   const { toast } = useToast();
   
-  const { user, activeCondoId, workingCondoId } = useAuth();
+  const { user, activeCondoId, workingCondoId, isSuperAdmin } = useAuth();
 
   const requestAuthorization = useCallback(async (actionToExecute: () => Promise<void>) => {
     // SUPER ADMIN BYPASS: Si el email es el del super admin, ejecutar directamente.
-    if (user?.email === 'vallecondo@gmail.com') {
+    if (isSuperAdmin) {
       try {
         await actionToExecute();
       } catch (error: any) {
@@ -48,7 +48,7 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
     // Flujo normal para otros administradores
     setAction(() => actionToExecute);
     setIsModalOpen(true);
-  }, [user, toast]);
+  }, [user, toast, isSuperAdmin]);
 
   const handleClose = () => {
     setIsModalOpen(false);
