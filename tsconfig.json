@@ -26,6 +26,18 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "firebase/firestore": [
+        "./src/lib/turso/firestore-compat.ts"
+      ],
+      "firebase/auth": [
+        "./src/lib/turso/auth-compat.ts"
+      ],
+      "firebase/storage": [
+        "./src/lib/turso/storage-compat.ts"
+      ],
+      "firebase/database": [
+        "./src/lib/turso/database-compat.ts"
       ]
     }
   },
