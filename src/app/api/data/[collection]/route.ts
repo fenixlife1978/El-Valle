@@ -9,11 +9,6 @@ const VALID_PATH = /^[a-zA-Z][a-zA-Z0-9_/-]{0,190}$/;
 const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','_storage_files','survey_responses','surveyResponses','notifications']);
 const OWNER_SHARED_READ = new Set(['condominios','config','settings','extraordinary_campaigns','surveys','exchange_rates','company']);
 
-async function ensureDocuments(db: any) {
-  await tursoExecute(db.databaseUrl, db.databaseToken,
-    'CREATE TABLE IF NOT EXISTS app_documents(collection_name TEXT NOT NULL,document_id TEXT NOT NULL,document_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(collection_name,document_id))');
-}
-
 async function context(request: Request, routeCollection: string) {
   const session = await getSession();
   if (!session) throw new Error('UNAUTHORIZED');
@@ -32,7 +27,6 @@ async function context(request: Request, routeCollection: string) {
   }
   const db = await findCondoDatabase(condoId);
   if (!db) throw new Error('CONDO_NOT_FOUND');
-  await ensureDocuments(db);
   return { db, collection, session, condoId };
 }
 
