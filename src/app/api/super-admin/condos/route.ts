@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const adminEmail = typeof body.adminEmail === 'string' ? body.adminEmail.trim().toLowerCase() : '';
     const adminPassword = typeof body.adminPassword === 'string' ? body.adminPassword : '';
     if (!displayName || displayName.length > 120) return NextResponse.json({ error: 'Nombre de condominio inválido.' }, { status: 400 });
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(adminEmail) || adminEmail.length > 254) return NextResponse.json({ error: 'Correo del administrador inválido.' }, { status: 400 });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail) || adminEmail.length > 254) return NextResponse.json({ error: 'Correo del administrador inválido.' }, { status: 400 });
     if (adminPassword.length < 12 || adminPassword.length > 200) return NextResponse.json({ error: 'La contraseña inicial debe tener al menos 12 caracteres.' }, { status: 400 });
 
     await ensureTursoRegistrySchema();
