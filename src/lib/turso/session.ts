@@ -2,7 +2,7 @@ import 'server-only';
 import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { cookies } from 'next/headers';
-import { ensureTursoRegistrySchema } from '@/lib/turso/registry';
+import { ensureTursoRegistrySchema, getTursoRegistryConfig } from '@/lib/turso/registry';
 import { tursoExecute } from '@/lib/turso/http';
 
 const scrypt = promisify(scryptCallback);
@@ -18,12 +18,6 @@ function secret(): string {
   return value;
 }
 function sign(value: string): string { return createHmac('sha256', secret()).update(value).digest('base64url'); }
-function registryConfig() {
-  const url = process.env.TURSO_REGISTRY_DATABASE_URL?.trim();
-  const token = process.env.TURSO_REGISTRY_AUTH_TOKEN?.trim();
-  if (!url || !token) throw new Error('Falta configurar la base central de autenticación Turso.');
-  return { url, token };
-}
 export async function hashPassword(password: string): Promise<string> {
   if (password.length < 12 || password.length > 200) throw new Error('La contraseña debe tener entre 12 y 200 caracteres.');
   const salt = randomBytes(16).toString('base64url');
@@ -41,7 +35,7 @@ export async function verifyPassword(password: string, encoded: string): Promise
 }
 export async function loginLockoutSeconds(email: string): Promise<number> {
   await ensureTursoRegistrySchema();
-  const { url, token } = registryConfig();
+  const { url, token } = getTursoRegistryConfig();
   const result = await tursoExecute(url, token, 'SELECT attempts, window_started_at, locked_until FROM auth_login_attempts WHERE email = ? LIMIT 1', [email.trim().toLowerCase()]);
   const row = result.rows[0];
   if (!row) return 0;
@@ -56,7 +50,7 @@ export async function loginLockoutSeconds(email: string): Promise<number> {
 /** UPSERT atómico: intentos concurrentes no pueden sobrescribir el contador con un valor antiguo. */
 export async function recordLoginFailure(email: string): Promise<void> {
   await ensureTursoRegistrySchema();
-  const { url, token } = registryConfig();
+  const { url, token } = getTursoRegistryConfig();
   const normalized = email.trim().toLowerCase();
   const now = Date.now();
   await tursoExecute(url, token, `INSERT INTO auth_login_attempts(email, attempts, window_started_at, locked_until, updated_at)
@@ -72,7 +66,7 @@ export async function recordLoginFailure(email: string): Promise<void> {
 }
 export async function clearLoginFailures(email: string): Promise<void> {
   await ensureTursoRegistrySchema();
-  const { url, token } = registryConfig();
+  const { url, token } = getTursoRegistryConfig();
   await tursoExecute(url, token, 'DELETE FROM auth_login_attempts WHERE email = ?', [email.trim().toLowerCase()]);
 }
 export async function createSession(session: Omit<EfasSession, 'exp'>): Promise<void> {
@@ -100,7 +94,7 @@ export async function getSession(): Promise<EfasSession | null> {
     if (!parsed.userId || !parsed.email || !parsed.exp || parsed.exp <= Math.floor(Date.now() / 1000)) return null;
     if (!['super-admin', 'admin', 'owner'].includes(parsed.role)) return null;
     // Revalidate every signed cookie against the central registry so disabled or changed accounts lose access immediately.
-    const { url, token } = registryConfig();
+    const { url, token } = getTursoRegistryConfig();
     const current = await tursoExecute(url, token, 'SELECT email, role, condo_id, active FROM auth_users WHERE user_id = ? LIMIT 1', [parsed.userId]);
     const row = current.rows[0];
     if (!row || (row[3] !== 1 && row[3] !== '1')) return null;
@@ -119,7 +113,7 @@ export async function requireAdminSession(): Promise<EfasSession> {
 }
 export async function findAuthUser(email: string) {
   await ensureTursoRegistrySchema();
-  const { url, token } = registryConfig();
+  const { url, token } = getTursoRegistryConfig();
   const result = await tursoExecute(url, token, 'SELECT user_id, email, password_hash, role, condo_id, active FROM auth_users WHERE email = ? LIMIT 1', [email.trim().toLowerCase()]);
   const row = result.rows[0] as unknown[] | undefined;
   if (!row) return null;
