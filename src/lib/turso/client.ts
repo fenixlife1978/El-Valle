@@ -23,7 +23,7 @@ export async function tursoRequest(method:'GET'|'POST'|'DELETE',collection:strin
   if(method==='GET'){const cached=await cacheRead(collection,body?.id);if(cached.length||typeof navigator!=='undefined'&&!navigator.onLine)return {documents:cached};throw error;}
   if(!who.condoId)throw error;
   if(method==='DELETE'){await enqueueOfflineOperation({condoId:who.condoId,userId:who.userId,entity:collection,action:'delete',payload:{id:body.id}});await cacheDelete(collection,body.id);return {ok:true,id:body.id,offline:true};}
-  if(method==='POST'){const id=body?.id;if(!id)throw error;await enqueueOfflineOperation({condoId:who.condoId,userId:who.userId,entity:collection,action:action,payload:{id,data:body.data}});await cachePut(collection,id,body.data);return {ok:true,id,offline:true};}
+  if(method==='POST'){const id=body?.id;if(!id)throw error;await enqueueOfflineOperation({condoId:who.condoId,userId:who.userId,entity:collection,action:action,payload:{id,data:body.data,expectedVersion:body.expectedVersion}});await cachePut(collection,id,body.data);return {ok:true,id,offline:true};}
   throw error;
  }
 }
