@@ -26,7 +26,7 @@ No poner secretos en `NEXT_PUBLIC_*` ni en el repositorio.
 ## Avance de esta ejecución (2026-10-10)
 - Corregido `src/lib/imgbb.ts`: la subida de imágenes ahora importa la capa `src/lib/turso/storage-compat.ts`, en lugar de llamar directamente a Firebase Storage. Esto elimina ese camino explícito de subida a Firebase, pero no prueba todavía la lectura/escritura de imágenes en producción.
 - Verificado el puente global `OfflineSyncBridge`: la cola IndexedDB reintenta operaciones al recuperar conectividad, al iniciar y al volver al foco; el endpoint conserva idempotencia y marca conflictos para revisión. No garantiza sincronización con la app cerrada ni reemplaza las operaciones financieras transaccionales.
-- Endurecido el service worker: ya no cachea rutas `/api/` ni HTML dinámico autenticado; se incrementó la versión del caché para eliminar respuestas antiguas potencialmente privadas.
+- Endurecido y registrado el service worker: ya no cachea rutas `/api/` ni HTML dinámico autenticado; se incrementó la versión del caché para eliminar respuestas antiguas potencialmente privadas. El caché offline se limita al shell público y recursos estáticos.
 - La rama sigue sin desplegarse a producción. No se han configurado ni inspeccionado valores secretos de Vercel.
 - Pendiente de validar con CI y de revisar las pantallas y módulos que aún importan directamente Firebase.
 
