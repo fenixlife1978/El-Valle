@@ -62,7 +62,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Solo guardar recursos estáticos del mismo origen.
-  const isStaticAsset = /\\.(?:js|css|png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i.test(url.pathname) ||
+  const isStaticAsset = /\.(?:js|css|png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i.test(url.pathname) ||
     url.pathname === '/manifest.json';
   if (!isStaticAsset) return;
 
