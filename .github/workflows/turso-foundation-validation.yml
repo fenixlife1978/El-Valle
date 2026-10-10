@@ -27,5 +27,7 @@ jobs:
         run: npm ci
       - name: TypeScript check
         run: npm run typecheck
+      - name: Service worker syntax check
+        run: node --check public/sw.js
       - name: Production build check (no deployment)
         run: npm run build
