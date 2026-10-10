@@ -75,7 +75,7 @@ export default function BillboardPage({ params }: { params: Promise<{ condoId: s
     reader.readAsDataURL(file);
     
     try {
-        const imageUrl = await uploadToImgbb(file);
+        const imageUrl = await uploadToImgbb(file, true);
         if (imageUrl) {
             setImagen(imageUrl);
             toast({ title: 'Imagen subida', description: 'La imagen se ha subido correctamente.' });

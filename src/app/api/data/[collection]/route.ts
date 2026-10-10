@@ -7,7 +7,7 @@ import { getSession } from '@/lib/turso/session';
 export const runtime = 'nodejs';
 const VALID_PATH = /^[a-zA-Z][a-zA-Z0-9_/-]{0,190}$/;
 const OWNER_WRITABLE = new Set(['payment_reports','paymentReports','payments_reported','reported_payments','payments','_storage_files','survey_responses','surveyResponses','notifications']);
-const OWNER_SHARED_READ = new Set(['condominios','config','settings','extraordinary_campaigns','surveys','exchange_rates','company']);
+const OWNER_SHARED_READ = new Set(['condominios','config','settings','extraordinary_campaigns','surveys','exchange_rates','company','billboard_announcements','announcements','community_updates','payment_methods','paymentMethods']);
 
 async function context(request: Request, routeCollection: string) {
   const session = await getSession();
