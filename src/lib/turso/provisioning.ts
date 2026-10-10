@@ -2,7 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { encryptDatabaseToken } from '@/lib/turso/crypto';
 import { tursoExecute } from '@/lib/turso/http';
-import { ensureTursoRegistrySchema } from '@/lib/turso/registry';
+import { ensureTursoRegistrySchema, getTursoRegistryConfig } from '@/lib/turso/registry';
 
 interface PlatformDatabaseResponse {
   database?: { Hostname?: string; hostname?: string; Name?: string; name?: string };
@@ -53,8 +53,9 @@ export async function provisionCondoDatabase(input: { condoId: string; displayNa
   if (!displayName || displayName.length > 120) throw new Error('Nombre de condominio inválido.');
 
   await ensureTursoRegistrySchema();
-  const registryUrl = requiredEnv('TURSO_REGISTRY_DATABASE_URL');
-  const registryToken = requiredEnv('TURSO_REGISTRY_AUTH_TOKEN');
+  const registry = getTursoRegistryConfig();
+  const registryUrl = registry.url;
+  const registryToken = registry.token;
 
   const existing = await tursoExecute(
     registryUrl, registryToken,
