@@ -123,6 +123,11 @@ export async function countPendingOfflineOperations(condoId: string, userId?: st
   return items.filter(item => item.status === 'pending' || item.status === 'failed' || item.status === 'syncing').length;
 }
 
+export async function countConflictedOfflineOperations(condoId: string, userId?: string): Promise<number> {
+  const items = await listOfflineOperations(condoId, userId);
+  return items.filter(item => item.status === 'conflict').length;
+}
+
 export async function removeOfflineOperation(id: string): Promise<void> {
   await withStore('readwrite', store => store.delete(id));
 }
