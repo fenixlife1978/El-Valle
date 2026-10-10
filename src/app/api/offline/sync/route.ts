@@ -128,7 +128,7 @@ export async function POST(request: Request) {
             const leaf = collection.split('/').pop() || '';
             if (!collection.startsWith('condominios/' + session.condoId + '/') || !OWNER_WRITABLE.has(leaf) ||
                 op.action === 'delete' || ownerIdOf(data) !== session.userId ||
-                (leaf === '_storage_files' && data?.shared === true) || (leaf === 'payments' && data?.status !== 'pendiente')) {
+                (leaf === '_storage_files' && data?.shared === true) || (leaf === 'payments' && !validOwnerPayment(data, session.userId))) {
               throw new Error('Operación no autorizada para propietarios.');
             }
             const old = await tursoExecute(db.databaseUrl, db.databaseToken,
