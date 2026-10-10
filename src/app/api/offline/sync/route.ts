@@ -45,7 +45,7 @@ async function writeStatements(ops: any[], session: any, condoId: string, db: an
         [op.collection, op.id]);
       if (old.rows.length) {
         const oldData = JSON.parse(String(old.rows[0][0]));
-        if (ownerIdOf(oldData) !== session.userId || (collection.split('/').pop() === 'payments' && oldData?.status !== 'pendiente')) throw new Error('No puedes modificar un documento de otro usuario o un pago ya procesado.');
+        if (ownerIdOf(oldData) !== session.userId || (op.collection.split('/').pop() === 'payments' && oldData?.status !== 'pendiente')) throw new Error('No puedes modificar un documento de otro usuario o un pago ya procesado.');
         expected = Number(old.rows[0][1]);
       } else expected = 0;
     }
