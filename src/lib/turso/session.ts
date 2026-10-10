@@ -99,6 +99,13 @@ export async function getSession(): Promise<EfasSession | null> {
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as EfasSession;
     if (!parsed.userId || !parsed.email || !parsed.exp || parsed.exp <= Math.floor(Date.now() / 1000)) return null;
     if (!['super-admin', 'admin', 'owner'].includes(parsed.role)) return null;
+    // Revalidate every signed cookie against the central registry so disabled or changed accounts lose access immediately.
+    await ensureTursoRegistrySchema();
+    const { url, token } = registryConfig();
+    const current = await tursoExecute(url, token, 'SELECT email, role, condo_id, active FROM auth_users WHERE user_id = ? LIMIT 1', [parsed.userId]);
+    const row = current.rows[0];
+    if (!row || (row[3] !== 1 && row[3] !== '1')) return null;
+    if (String(row[0]).toLowerCase() !== parsed.email.toLowerCase() || String(row[1]) !== parsed.role || (row[2] == null ? null : String(row[2])) !== parsed.condoId) return null;
     return parsed;
   } catch { return null; }
 }
