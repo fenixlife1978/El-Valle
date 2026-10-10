@@ -8,6 +8,6 @@ const db: Firestore = getFirestore(app);
 const auth: Auth = getAuth(app);
 const storage: FirebaseStorage = getStorage(app);
 // Kept for compatibility with legacy screens; account creation is server-authorized.
-const secondaryAuth: Auth = getAuth(app);
+const secondaryAuth = Object.assign({}, getAuth({ name: 'efas-turso-secondary' }), { __secondary: true }) as Auth;
 
 export { db, auth, storage, app, secondaryAuth };
