@@ -204,10 +204,10 @@ export default function ManageExtraordinaryFundPage() {
         let filteredDebts: { owner: Owner, debt: OwnerExtraordinaryDebt | null, index: number }[] = [];
         let counter = 1;
         for (const owner of sortedOwners) {
-            let debt = null;
-            if (type === 'pending') debt = campaignDebts.find(d => d.ownerId === owner.id && (d.status === 'pending' || d.status === 'partial'));
-            else if (type === 'paid') debt = campaignDebts.find(d => d.ownerId === owner.id && (d.status === 'paid' || d.status === 'partial'));
-            else debt = campaignDebts.find(d => d.ownerId === owner.id);
+            let debt: OwnerExtraordinaryDebt | null = null;
+            if (type === 'pending') debt = campaignDebts.find(d => d.ownerId === owner.id && (d.status === 'pending' || d.status === 'partial')) || null;
+            else if (type === 'paid') debt = campaignDebts.find(d => d.ownerId === owner.id && (d.status === 'paid' || d.status === 'partial')) || null;
+            else debt = campaignDebts.find(d => d.ownerId === owner.id) || null;
             if (debt) { filteredDebts.push({ owner, debt, index: counter }); counter++; }
         }
         const stats = getCampaignStats(campaign.id);
