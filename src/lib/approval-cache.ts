@@ -2,37 +2,35 @@ import { memoryCache } from './memory-cache';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
-// Cache para settings (tasa, cuota)
-export const getCachedSettings = async (condoId: string) => {
-    const cacheKey = `settings_${condoId}`;
-    let settings = memoryCache.get(cacheKey);
-    
-    if (!settings) {
-        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-        const snap = await getDoc(settingsRef);
-        if (snap.exists()) {
-            settings = snap.data();
-            memoryCache.set(cacheKey, settings, 600); // 10 minutos
-        }
-    }
+const offline=()=>typeof navigator!=='undefined'&&!navigator.onLine;
+
+export const getCachedSettings=async(condoId:string)=>{
+  const key='settings_'+condoId;
+  const cached=memoryCache.get(key);
+  if(offline()&&cached!==null)return cached;
+  try{
+    const snap=await getDoc(doc(db,'condominios',condoId,'config','mainSettings'));
+    if(!snap.exists()){memoryCache.delete(key);return undefined;}
+    const settings=snap.data();
+    memoryCache.set(key,settings,600);
     return settings;
+  }catch(error){if(cached!==null)return cached;throw error;}
 };
 
-// Cache para propietario
-export const getCachedOwner = async (condoId: string, ownerId: string) => {
-    const cacheKey = `owner_${condoId}_${ownerId}`;
-    let owner = memoryCache.get(cacheKey);
-    
-    if (!owner) {
-        for (const ownersCol of ['owners', 'propietarios']) {
-            const ownerRef = doc(db, 'condominios', condoId, ownersCol, ownerId);
-            const snap = await getDoc(ownerRef);
-            if (snap.exists()) {
-                owner = snap.data();
-                memoryCache.set(cacheKey, owner, 300);
-                break;
-            }
-        }
+export const getCachedOwner=async(condoId:string,ownerId:string)=>{
+  const key='owner_'+condoId+'_'+ownerId;
+  const cached=memoryCache.get(key);
+  if(offline()&&cached!==null)return cached;
+  try{
+    for(const ownersCol of ['owners','propietarios']){
+      const snap=await getDoc(doc(db,'condominios',condoId,ownersCol,ownerId));
+      if(snap.exists()){
+        const owner=snap.data();
+        memoryCache.set(key,owner,300);
+        return owner;
+      }
     }
-    return owner;
+    memoryCache.delete(key);
+    return undefined;
+  }catch(error){if(cached!==null)return cached;throw error;}
 };
