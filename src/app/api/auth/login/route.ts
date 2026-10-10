@@ -16,6 +16,6 @@ export async function POST(request: Request) {
     }
     await clearLoginFailures(email);
     await createSession({ userId: user.userId, email: user.email, role: user.role, condoId: user.condoId });
-    return NextResponse.json({ ok: true, user: { email: user.email, role: user.role, condoId: user.condoId } });
+    return NextResponse.json({ ok: true, user: { userId: user.userId, email: user.email, role: user.role, condoId: user.condoId } });
   } catch { return NextResponse.json({ error: 'No se pudo iniciar sesión. Verifica la configuración de autenticación Turso.' }, { status: 500 }); }
 }

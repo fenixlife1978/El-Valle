@@ -44,7 +44,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
       if (role === 'super-admin') {
         router.replace('/super-admin');
       } else if (activeCondoId) {
-        router.replace(`/${activeCondoId}/admin/dashboard`);
+        router.replace(`/${activeCondoId}/${role === 'owner' ? 'owner' : 'admin'}/dashboard`);
       } else {
         router.replace('/welcome');
       }

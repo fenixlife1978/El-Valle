@@ -19,11 +19,12 @@ export async function POST(request: Request) {
     const token = process.env.TURSO_REGISTRY_AUTH_TOKEN!;
     const existing = await tursoExecute(url, token, 'SELECT user_id FROM auth_users WHERE email=? LIMIT 1', [email]);
     if (existing.rows.length) return NextResponse.json({ error: 'Ese correo ya está registrado.' }, { status: 409 });
+    const userId = randomUUID();
     const passwordHash = await hashPassword(password);
     await tursoExecute(url, token,
       "INSERT INTO auth_users(user_id,email,password_hash,role,condo_id,active) VALUES(?,?,?,'owner',?,1)",
-      [randomUUID(), email, passwordHash, session.condoId]);
-    return NextResponse.json({ ok: true, email, role: 'owner' }, { status: 201 });
+      [userId, email, passwordHash, session.condoId]);
+    return NextResponse.json({ ok: true, userId, email, role: 'owner' }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     return NextResponse.json({ error: message === 'UNAUTHORIZED' ? 'Debes iniciar sesión.' : 'No se pudo crear la cuenta.' }, { status: message === 'UNAUTHORIZED' ? 401 : 500 });
