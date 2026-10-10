@@ -57,7 +57,19 @@ export async function findCondoDatabase(condoId: string): Promise<CondoDatabaseR
   // Modo económico: los condominios comparten la base existente y se aíslan
   // por colección/ruta; no requiere tabla de registro de bases ni cifrado de tokens.
   if (!config.dedicatedRegistry) {
-    return { condoId: id, displayName: id, databaseUrl: config.url, databaseToken: config.token, status: 'active' };
+    const statusResult = await tursoExecute(config.url, config.token,
+      'SELECT status, display_name FROM condo_registry WHERE condo_id = ? LIMIT 1', [id]);
+    const statusRow = statusResult.rows[0];
+    if (statusRow && String(statusRow[0]) !== 'active') {
+      throw new Error('La base de datos de este condominio no está activa.');
+    }
+    return {
+      condoId: id,
+      displayName: statusRow ? String(statusRow[1]) : id,
+      databaseUrl: config.url,
+      databaseToken: config.token,
+      status: 'active',
+    };
   }
   const { url, token } = config;
   const result = await tursoExecute(url, token,
