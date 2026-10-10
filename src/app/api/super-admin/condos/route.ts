@@ -39,24 +39,10 @@ export async function POST(request: Request) {
     if (exists.rows.length) return NextResponse.json({ error: 'Ese correo ya pertenece a una cuenta.' }, { status: 409 });
 
     const condoId = 'condo-' + randomUUID();
-    let databaseName: string;
-    if (config.dedicatedRegistry) {
-      const provisioned = await provisionCondoDatabase({ condoId, displayName });
-      databaseName = provisioned.databaseName;
-    } else {
-      // Modo gratuito: admite un solo condominio en la base compartida.
-      // Bloqueamos un segundo registro para no mezclar datos entre condominios.
-      const tenantCount = await tursoExecute(config.url, config.token, 'SELECT COUNT(*) FROM condo_registry');
-      if (Number(tenantCount.rows[0]?.[0] ?? 0) > 0) {
-        return NextResponse.json({
-          error: 'La base gratuita compartida solo admite un condominio. Para agregar otro se necesita una base tenant aislada; no se creó ningún registro.',
-        }, { status: 409 });
-      }
-      await tursoExecute(config.url, config.token,
-        "INSERT INTO condo_registry(condo_id,display_name,database_url,database_token,status) VALUES(?,?,?,'shared-database','active')",
-        [condoId, displayName, config.url]);
-      databaseName = 'compartida (condosys)';
-    }
+    // Siempre se crea una base independiente por condominio, aunque el registro central
+    // resida en condosys y se reutilicen las variables TURSO_DATABASE_URL/TURSO_AUTH_TOKEN.
+    const provisioned = await provisionCondoDatabase({ condoId, displayName });
+    const databaseName = provisioned.databaseName;
 
     const userId = randomUUID();
     const passwordHash = await hashPassword(adminPassword);
